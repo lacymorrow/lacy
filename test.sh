@@ -57,6 +57,25 @@ source lacy-shell.plugin.zsh
 lacy_shell_test_mcp
 "
 
+# Test mode persistence
+echo "📋 Testing mode persistence..."
+zsh -c "
+source lacy-shell.plugin.zsh
+echo 'Testing mode persistence...'
+lacy_shell_set_mode 'shell'
+echo 'Set to shell mode, checking persistence...'
+"
+
+zsh -c "
+source lacy-shell.plugin.zsh
+echo 'Mode in fresh shell:' \$LACY_SHELL_CURRENT_MODE
+if [[ \"\$LACY_SHELL_CURRENT_MODE\" == \"shell\" ]]; then
+    echo '✅ Mode persistence working'
+else
+    echo '❌ Mode persistence failed'
+fi
+"
+
 echo ""
 echo "🎉 All tests completed!"
 echo ""

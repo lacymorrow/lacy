@@ -93,11 +93,8 @@ lacy_shell_detect_mode() {
             echo "agent"
             ;;
         "auto")
-            if lacy_shell_should_use_agent "$input"; then
-                echo "agent"
-            else
-                echo "shell"
-            fi
+            # In auto mode, use smart auto execution
+            echo "auto"
             ;;
         *)
             echo "shell"  # Default fallback

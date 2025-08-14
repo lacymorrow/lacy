@@ -12,16 +12,39 @@ lacy_shell_smart_accept_line() {
         return
     fi
     
+    # Emergency bypass - if input starts with !, force shell execution
+    if [[ "$input" == !* ]]; then
+        BUFFER="${input#!}"
+        zle .accept-line
+        return
+    fi
+    
     # Determine which mode to use
     local execution_mode=$(lacy_shell_detect_mode "$input")
     
     # Handle based on mode
     case "$execution_mode" in
         "agent")
-            # Clear the line and execute via agent
+            # Check if we can actually use the agent
+            if ! lacy_shell_check_api_keys >/dev/null 2>&1; then
+                echo "⚠️  No API keys configured - executing as shell command instead"
+                echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
+                zle .accept-line
+                return
+            fi
+            
+            # Clear the line, accept to exit ZLE, then stream below a fresh line
             BUFFER=""
             zle .accept-line
+            print -r -- ""
             lacy_shell_execute_agent "$input"
+            ;;
+        "auto")
+            # Smart auto mode: try shell first, fallback to agent
+            BUFFER=""
+            zle .accept-line
+            print -r -- ""
+            lacy_shell_execute_smart_auto "$input"
             ;;
         *)
             # Normal shell execution
@@ -30,15 +53,133 @@ lacy_shell_smart_accept_line() {
     esac
 }
 
+# Disable input interception (emergency mode)
+lacy_shell_disable_interception() {
+    echo "🚨 Disabling Lacy Shell input interception"
+    zle -A .accept-line accept-line
+    echo "✅ Normal shell behavior restored"
+    echo "   Run 'lacy_shell_enable_interception' to re-enable"
+}
+
+# Re-enable input interception
+lacy_shell_enable_interception() {
+    echo "🔄 Re-enabling Lacy Shell input interception"
+    zle -N accept-line lacy_shell_smart_accept_line
+    echo "✅ Lacy Shell features restored"
+}
+
 # Execute command via AI agent
 lacy_shell_execute_agent() {
     local query="$1"
     
-    # Query the agent with minimal output
-    lacy_shell_query_agent "$query"
+    # Add timeout and error handling
+    echo "🤖 Sending to AI agent: $query"
     
-    # Reset the command line
-    zle && zle reset-prompt
+    # Query the agent with error handling
+    if ! lacy_shell_query_agent "$query"; then
+        echo "❌ Agent request failed or timed out. Try:"
+        echo "   - Check your API keys: lacy_shell_check_api_keys"
+        echo "   - Check internet connection"
+        echo "   - Switch to shell mode: mode shell"
+        echo "   - Run command directly: $query"
+    fi
+    
+    # Do not touch ZLE redraw here; we've already exited ZLE before streaming
+}
+
+# Smart auto execution: try shell first, fallback to agent
+lacy_shell_execute_smart_auto() {
+    local input="$1"
+    local first_word="${input%% *}"
+    
+    # Skip obvious natural language queries
+    if lacy_shell_is_obvious_natural_language "$input"; then
+        echo "🤖 Natural language detected, using AI agent"
+        lacy_shell_execute_agent "$input"
+        return
+    fi
+    
+    # Check if the first word is an executable command
+    if lacy_shell_command_exists "$first_word"; then
+        echo "💻 Command found, executing: $input"
+        eval "$input"
+        local exit_code=$?
+        
+        # If command failed with "command not found" type errors, try agent
+        if [[ $exit_code -eq 127 || $exit_code -eq 126 ]]; then
+            echo ""
+            echo "⚠️  Command execution failed, trying AI agent..."
+            lacy_shell_execute_agent "$input"
+        fi
+    else
+        # Command doesn't exist, check if agent is available
+        if lacy_shell_check_api_keys >/dev/null 2>&1; then
+            echo "❓ Command not found, trying AI agent: $input"
+            lacy_shell_execute_agent "$input"
+        else
+            echo "❌ Command not found and no AI agent available: $first_word"
+            echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
+            echo "   Or check if the command is spelled correctly"
+        fi
+    fi
+}
+
+# Check if a command exists in the system
+lacy_shell_command_exists() {
+    local cmd="$1"
+    
+    # Handle built-in commands and common shell constructs
+    case "$cmd" in
+        cd|pwd|echo|export|alias|unalias|which|type|help|history|jobs|fg|bg|source|.|exit|logout)
+            return 0
+            ;;
+        # Common system commands that should always be treated as commands
+        timeout|nohup|sudo|env|time|nice|ionice|taskset|strace|ltrace)
+            return 0
+            ;;
+    esac
+    
+    # Check using command -v (POSIX compliant)
+    command -v "$cmd" >/dev/null 2>&1
+}
+
+# Check if input is obvious natural language
+lacy_shell_is_obvious_natural_language() {
+    local input="$1"
+    local input_lower="${input:l}"
+    
+    # Question patterns
+    if [[ "$input_lower" == \?* || "$input_lower" == *\? ]]; then
+        return 0
+    fi
+    
+    # Natural language starters
+    local natural_starters=(
+        "what" "how" "why" "when" "where" "who" "which" "can you" "could you"
+        "would you" "please" "help me" "tell me" "show me" "explain" "describe"
+        "i want" "i need" "i would like" "find me" "search for" "look for"
+    )
+    
+    for starter in "${natural_starters[@]}"; do
+        if [[ "$input_lower" == "$starter"* ]]; then
+            return 0
+        fi
+    done
+    
+    # Only treat as natural language if it's a very long sentence (>10 words) 
+    # AND doesn't start with a command AND has natural language patterns
+    local word_count=$(echo "$input" | wc -w)
+    if [[ $word_count -gt 10 ]]; then
+        local first_word="${input%% *}"
+        if ! lacy_shell_command_exists "$first_word"; then
+            # Check if it has sentence-like patterns (articles, pronouns, etc.)
+            if [[ "$input_lower" =~ " (the|a|an|this|that|these|those|i|you|we|they|it) " ]]; then
+                return 0
+            fi
+        fi
+    fi
+    
+    return 1
 }
 
 # Precmd hook - called before each prompt
@@ -192,8 +333,11 @@ lacy_shell_mode() {
         "toggle"|"t")
             lacy_shell_toggle_mode
             ;;
+        "status")
+            lacy_shell_mode_status
+            ;;
         *)
-            echo "Usage: mode [shell|agent|auto|toggle] or [s|a|u|t]"
+            echo "Usage: mode [shell|agent|auto|toggle|status] or [s|a|u|t]"
             echo "Current mode: $LACY_SHELL_CURRENT_MODE"
             ;;
     esac
@@ -208,3 +352,59 @@ alias hisearch="lacy_shell_ai_history_search"
 alias clear_chat="lacy_shell_clear_conversation"
 alias show_chat="lacy_shell_show_conversation"
 alias mode="lacy_shell_mode"
+
+# MCP-related aliases
+alias mcp_test="lacy_shell_test_mcp"
+alias mcp_check="lacy_shell_check_mcp_packages"
+alias mcp_debug="lacy_shell_debug_mcp"
+alias mcp_restart="lacy_shell_restart_mcp_server"
+alias mcp_logs="lacy_shell_mcp_logs"
+alias mcp_start="lacy_shell_start_mcp_servers"
+alias mcp_stop="lacy_shell_stop_mcp_servers"
+
+# Emergency aliases for input issues
+alias disable_lacy="lacy_shell_disable_interception"
+alias enable_lacy="lacy_shell_enable_interception"
+
+# Testing aliases
+alias test_smart_auto="lacy_shell_test_smart_auto"
+
+# Test smart auto mode
+lacy_shell_test_smart_auto() {
+    echo "Testing Smart Auto Mode"
+    echo "======================"
+    echo
+    
+    local test_cases=(
+        "ls -la"                              # Should execute shell command
+        "nonexistentcommand123"               # Should try shell, fail, then try agent
+        "what files are in this directory?"   # Should go directly to agent (natural language)
+        "git status"                          # Should execute shell command
+        "how do I install python packages?"   # Should go directly to agent (natural language)
+        "pwd"                                 # Should execute shell command
+        "please help me with docker"          # Should go directly to agent (natural language)
+        "invalidcmd --help"                   # Should try shell first, then fallback
+    )
+    
+    echo "The following tests would demonstrate smart auto mode behavior:"
+    echo
+    
+    for test_case in "${test_cases[@]}"; do
+        echo "Input: '$test_case'"
+        
+        if lacy_shell_is_obvious_natural_language "$test_case"; then
+            echo "  → Would go directly to AI agent (natural language detected)"
+        else
+            local first_word="${test_case%% *}"
+            if lacy_shell_command_exists "$first_word"; then
+                echo "  → Would execute shell command (command exists)"
+            else
+                echo "  → Would try shell first, then fallback to AI agent (command not found)"
+            fi
+        fi
+        echo
+    done
+    
+    echo "To test for real, switch to auto mode with: mode auto"
+    echo "Then try typing any of the above commands."
+}

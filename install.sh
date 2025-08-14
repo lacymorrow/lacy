@@ -213,6 +213,14 @@ setup_mcp() {
             npm install -g @modelcontextprotocol/server-web
             echo -e "${GREEN}✅ MCP web server installed${NC}"
         fi
+        
+        # Test MCP installation
+        echo -e "${BLUE}🧪 Testing MCP server installation...${NC}"
+        if npx @modelcontextprotocol/server-filesystem --help >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ MCP filesystem server is working${NC}"
+        else
+            echo -e "${YELLOW}⚠️  MCP filesystem server test failed${NC}"
+        fi
     else
         echo -e "${YELLOW}⚠️  npm not found. MCP servers will need to be installed manually.${NC}"
         echo -e "${YELLOW}   Install with: npm install -g @modelcontextprotocol/server-filesystem${NC}"

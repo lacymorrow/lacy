@@ -10,7 +10,7 @@ LACY_SHELL_CURRENT_MODE="auto"
 typeset -A LACY_SHELL_MODE_DESCRIPTIONS
 LACY_SHELL_MODE_DESCRIPTIONS[shell]="Normal shell execution"
 LACY_SHELL_MODE_DESCRIPTIONS[agent]="AI agent assistance via MCP"
-LACY_SHELL_MODE_DESCRIPTIONS[auto]="Smart auto-detection"
+LACY_SHELL_MODE_DESCRIPTIONS[auto]="Try shell commands first, fallback to AI agent"
 
 # Set the current mode
 lacy_shell_set_mode() {
@@ -23,6 +23,9 @@ lacy_shell_set_mode() {
     fi
     
     LACY_SHELL_CURRENT_MODE="$new_mode"
+    
+    # Save mode to persistence file
+    lacy_shell_save_mode "$new_mode"
     
     # Update prompt if function exists
     if typeset -f lacy_shell_update_prompt > /dev/null; then
@@ -76,16 +79,77 @@ lacy_shell_auto_mode() {
 lacy_shell_get_mode_indicator() {
     case "$LACY_SHELL_CURRENT_MODE" in
         "shell")
-            echo "%F{green}$%f"
+            echo "%K{green}%F{black} $ %k%f"
             ;;
         "agent")
-            echo "%F{blue}?%f"
+            echo "%K{blue}%F{white} ? %k%f"
             ;;
         "auto")
-            echo "%F{yellow}~%f"
+            echo "%K{yellow}%F{black} ~ %k%f"
             ;;
         *)
-            echo "%F{red}!%f"
+            echo "%K{red}%F{white} ! %k%f"
             ;;
     esac
+}
+
+# Mode persistence functions
+LACY_SHELL_MODE_FILE="${HOME}/.lacy-shell/current_mode"
+
+# Save current mode to file
+lacy_shell_save_mode() {
+    local mode="$1"
+    
+    # Ensure directory exists
+    mkdir -p "$(dirname "$LACY_SHELL_MODE_FILE")"
+    
+    # Save mode to file
+    echo "$mode" > "$LACY_SHELL_MODE_FILE"
+}
+
+# Load saved mode from file
+lacy_shell_load_saved_mode() {
+    # Check if mode file exists
+    if [[ -f "$LACY_SHELL_MODE_FILE" ]]; then
+        local saved_mode=$(cat "$LACY_SHELL_MODE_FILE" 2>/dev/null)
+        
+        # Validate the saved mode
+        if [[ " ${LACY_SHELL_MODES[@]} " =~ " ${saved_mode} " ]]; then
+            echo "$saved_mode"
+            return 0
+        fi
+    fi
+    
+    # Return default mode if no valid saved mode
+    echo "${LACY_SHELL_DEFAULT_MODE:-auto}"
+}
+
+# Initialize mode on startup
+lacy_shell_init_mode() {
+    local saved_mode=$(lacy_shell_load_saved_mode)
+    local default_mode="${LACY_SHELL_DEFAULT_MODE:-auto}"
+    
+    LACY_SHELL_CURRENT_MODE="$saved_mode"
+    
+    # Show persistence info in debug mode only
+    if [[ -n "$LACY_SHELL_DEBUG" && "$saved_mode" != "$default_mode" ]]; then
+        echo "Restored mode: $saved_mode"
+    fi
+    
+    # Don't save on init to avoid overwriting with default
+    # The mode will be saved when user explicitly changes it
+}
+
+# Show mode persistence status
+lacy_shell_mode_status() {
+    echo "Current mode: $LACY_SHELL_CURRENT_MODE"
+    echo "Default mode: ${LACY_SHELL_DEFAULT_MODE:-auto}"
+    
+    if [[ -f "$LACY_SHELL_MODE_FILE" ]]; then
+        local saved_mode=$(cat "$LACY_SHELL_MODE_FILE" 2>/dev/null)
+        echo "Saved mode: $saved_mode"
+        echo "Mode file: $LACY_SHELL_MODE_FILE"
+    else
+        echo "No saved mode (using default)"
+    fi
 }

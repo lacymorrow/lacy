@@ -7,15 +7,17 @@ lacy_shell_setup_keybindings() {
     # Enable emacs mode (more compatible)
     bindkey -e
     
-    # Use Ctrl+X prefix for mode switching (like emacs)
-    bindkey '^X^M' lacy_shell_toggle_mode_widget    # Ctrl+X Ctrl+M: Toggle mode
+    # Primary mode toggle - Ctrl+Space (most universal)
+    bindkey '^@' lacy_shell_toggle_mode_widget      # Ctrl+Space: Toggle mode
+    
+    # Alternative keybindings
+    bindkey '^T' lacy_shell_toggle_mode_widget      # Ctrl+T: Toggle mode (backup)
+    
+    # Direct mode switches (Ctrl+X prefix)
     bindkey '^X^A' lacy_shell_agent_mode_widget     # Ctrl+X Ctrl+A: Agent mode
     bindkey '^X^S' lacy_shell_shell_mode_widget     # Ctrl+X Ctrl+S: Shell mode  
     bindkey '^X^U' lacy_shell_auto_mode_widget      # Ctrl+X Ctrl+U: Auto mode
     bindkey '^X^H' lacy_shell_help_widget           # Ctrl+X Ctrl+H: Help
-    
-    # Alternative single key bindings (less likely to conflict)
-    bindkey '^T' lacy_shell_toggle_mode_widget      # Ctrl+T: Toggle mode
 }
 
 # Widget to toggle mode
@@ -53,8 +55,8 @@ lacy_shell_help_widget() {
     echo "  Auto:  Smart detection (~)"
     echo ""
     echo "Keybindings:"
-    echo "  Ctrl+T:        Toggle mode"
-    echo "  Ctrl+X Ctrl+M: Toggle mode"
+    echo "  Ctrl+Space:    Toggle mode (primary)"
+    echo "  Ctrl+T:        Toggle mode (backup)"
     echo "  Ctrl+X Ctrl+A: Agent mode"
     echo "  Ctrl+X Ctrl+S: Shell mode"
     echo "  Ctrl+X Ctrl+U: Auto mode"

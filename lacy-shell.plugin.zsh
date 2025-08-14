@@ -20,6 +20,10 @@ lacy_shell_init() {
     # Load configuration
     lacy_shell_load_config
     
+    # Ensure variables are exported globally
+    export LACY_SHELL_MCP_SERVERS
+    export LACY_SHELL_MCP_SERVERS_JSON
+    
     # Set up keybindings
     lacy_shell_setup_keybindings
     
@@ -29,8 +33,8 @@ lacy_shell_init() {
     # Set up prompt modifications
     lacy_shell_setup_prompt
     
-    # Set default mode
-    lacy_shell_set_mode "${LACY_SHELL_DEFAULT_MODE:-auto}"
+    # Initialize mode (loads saved mode or uses default)
+    lacy_shell_init_mode
     
     # Quiet initialization - mode shows in prompt
 }
