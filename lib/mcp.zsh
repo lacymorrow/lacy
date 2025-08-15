@@ -336,12 +336,68 @@ lacy_shell_query_agent() {
     # Ensure conversation directory exists
     mkdir -p "$(dirname "$LACY_SHELL_CONVERSATION_FILE")"
     
-    # Create temporary file for the query
-    local temp_file=$(mktemp)
-    local response_file=$(mktemp)
+    # Check if we should use the enhanced coding agent
+    local use_coding_agent=false
+    local coding_keywords=("read" "write" "edit" "file" "code" "function" "class" "refactor" "analyze" "git" "implement" "fix" "bug" "create" "modify" "search")
     
-    # Prepare the query with context and conversation history
-    cat > "$temp_file" << EOF
+    for keyword in "${coding_keywords[@]}"; do
+        if [[ "$query" == *"$keyword"* ]]; then
+            use_coding_agent=true
+            break
+        fi
+    done
+    
+    if [[ "$use_coding_agent" == "true" ]]; then
+        # Use enhanced TypeScript coding agent
+        local provider="openai"
+        local api_key="$LACY_SHELL_API_OPENAI"
+        local model="gpt-4"
+        
+        if [[ -z "$api_key" ]] && [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
+            provider="anthropic"
+            api_key="$LACY_SHELL_API_ANTHROPIC"
+            model="claude-3-5-sonnet-20241022"
+        fi
+        
+        # Use the compiled TypeScript agent
+        local agent_path="$LACY_SHELL_DIR/agent/lacy-agent"
+        
+        # Check if agent exists and is executable
+        if [[ ! -f "$agent_path" ]]; then
+            # Try to build it if bun is available
+            if command -v bun >/dev/null 2>&1 && [[ -d "$LACY_SHELL_DIR/agent" ]]; then
+                echo "🔧 Building coding agent..."
+                (cd "$LACY_SHELL_DIR/agent" && bun install --silent && bun run build) >/dev/null 2>&1
+            fi
+        fi
+        
+        if [[ -f "$agent_path" ]]; then
+            # Make sure it's executable
+            chmod +x "$agent_path" 2>/dev/null
+            
+            # Execute the TypeScript agent
+            "$agent_path" --provider "$provider" --model "$model" --api-key "$api_key" "$query"
+        else
+            # Fallback to simple AI query if agent not available
+            echo "⚠️  Coding agent not available. Using simple AI mode."
+            echo "   To enable full coding features, install bun from https://bun.sh"
+            
+            # Use the fallback streaming query
+            lacy_shell_send_to_ai_streaming_fallback "$query"
+        fi
+        
+        # Save to conversation history
+        echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "Assistant: [Coding Agent Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
+    else
+        # Use original agent for general queries
+        # Create temporary file for the query
+        local temp_file=$(mktemp)
+        local response_file=$(mktemp)
+        
+        # Prepare the query with context and conversation history
+        cat > "$temp_file" << EOF
 System Context:
 - Current Directory: $(pwd)
 - Current Date: $(date)
@@ -350,38 +406,39 @@ System Context:
 
 EOF
 
-    # Add recent conversation history (last 10 exchanges)
-    if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
-        echo "Recent Conversation:" >> "$temp_file"
-        tail -20 "$LACY_SHELL_CONVERSATION_FILE" >> "$temp_file"
-        echo "" >> "$temp_file"
-    fi
+        # Add recent conversation history (last 10 exchanges)
+        if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
+            echo "Recent Conversation:" >> "$temp_file"
+            tail -20 "$LACY_SHELL_CONVERSATION_FILE" >> "$temp_file"
+            echo "" >> "$temp_file"
+        fi
 
-    # Add MCP context if available
-    if [[ "$use_mcp" == "true" ]] && [[ -n "$LACY_SHELL_MCP_SERVERS" ]]; then
-        echo "Available MCP Tools:" >> "$temp_file"
-        lacy_shell_list_mcp_tools >> "$temp_file"
-        echo "" >> "$temp_file"
+        # Add MCP context if available
+        if [[ "$use_mcp" == "true" ]] && [[ -n "$LACY_SHELL_MCP_SERVERS" ]]; then
+            echo "Available MCP Tools:" >> "$temp_file"
+            lacy_shell_list_mcp_tools >> "$temp_file"
+            echo "" >> "$temp_file"
+        fi
+        
+        echo "Current Query: $query" >> "$temp_file"
+        
+        # Send to AI service and stream response directly to stdout
+        lacy_shell_send_to_ai_streaming "$temp_file" "$query"
+        
+        # Save to conversation history
+        echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "Assistant: [AI Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
+        
+        # Cleanup
+        rm -f "$temp_file" "$response_file"
     fi
-    
-    echo "Current Query: $query" >> "$temp_file"
-    
-    # Send to AI service and stream response directly to stdout
-    lacy_shell_send_to_ai_streaming "$temp_file" "$query"
-    
-    # Save to conversation history
-    echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
-    echo "Assistant: [AI Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
-    echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
     
     # Keep conversation history manageable (last 100 exchanges)
     if [[ $(wc -l < "$LACY_SHELL_CONVERSATION_FILE") -gt 300 ]]; then
         tail -200 "$LACY_SHELL_CONVERSATION_FILE" > "${LACY_SHELL_CONVERSATION_FILE}.tmp"
         mv "${LACY_SHELL_CONVERSATION_FILE}.tmp" "$LACY_SHELL_CONVERSATION_FILE"
     fi
-    
-    # Cleanup
-    rm -f "$temp_file" "$response_file"
 }
 
 # Send query to AI service with streaming (OpenAI/Anthropic)
@@ -400,253 +457,197 @@ lacy_shell_send_to_ai_streaming() {
     fi
 }
 
-# Query OpenAI API
-lacy_shell_query_openai() {
-    local input_file="$1"
-    local output_file="$2"
-    local query="$3"
+# Fallback streaming query without Python or TypeScript
+lacy_shell_send_to_ai_streaming_fallback() {
+    local query="$1"
     
-    local content=$(cat "$input_file")
-    
-    # Properly escape content for JSON
-    local content_json=$(echo "$content" | python3 -c "
-import json
-import sys
-content = sys.stdin.read()
-print(json.dumps(content))
-")
-    
-    # Create JSON payload
-    local json_payload=$(python3 -c "
-import json
-import sys
-
-payload = {
-    'model': 'gpt-4',
-    'messages': [
-        {
-            'role': 'system',
-            'content': '''You are a smart shell assistant with MCP tool access. You can:
-- Read/write files and directories
-- Execute system commands
-- Search the web
-- Analyze git repositories
-- Maintain conversation context
-
-Provide concise, helpful responses. When suggesting commands, explain them briefly. Use your MCP tools when appropriate for file operations, system analysis, or web searches.'''
-        },
-        {
-            'role': 'user', 
-            'content': '$content_json'
-        }
-    ],
-    'max_tokens': 1500,
-    'temperature': 0.3
+    if [[ -n "$LACY_SHELL_API_OPENAI" ]]; then
+        # Use curl directly for OpenAI
+        local json_payload=$(cat <<EOF
+{
+  "model": "gpt-4",
+  "messages": [
+    {"role": "system", "content": "You are a helpful coding assistant. Be concise and practical."},
+    {"role": "user", "content": "$query"}
+  ],
+  "temperature": 0.3,
+  "max_tokens": 1500
+}
+EOF
+)
+        curl -s -H "Content-Type: application/json" \
+             -H "Authorization: Bearer $LACY_SHELL_API_OPENAI" \
+             -d "$json_payload" \
+             "https://api.openai.com/v1/chat/completions" | \
+        grep -o '"content":"[^"]*' | sed 's/"content":"//' | head -1
+        
+    elif [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
+        # Use curl directly for Anthropic
+        local json_payload=$(cat <<EOF
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 1500,
+  "messages": [
+    {"role": "user", "content": "$query"}
+  ]
+}
+EOF
+)
+        curl -s -H "Content-Type: application/json" \
+             -H "x-api-key: $LACY_SHELL_API_ANTHROPIC" \
+             -H "anthropic-version: 2023-06-01" \
+             -d "$json_payload" \
+             "https://api.anthropic.com/v1/messages" | \
+        grep -o '"text":"[^"]*' | sed 's/"text":"//' | head -1
+    else
+        echo "Error: No API keys configured"
+        return 1
+    fi
 }
 
-print(json.dumps(payload))
-")
-    
-    # Send request with streaming
-    curl -s -H "Content-Type: application/json" \
-         -H "Authorization: Bearer $LACY_SHELL_API_OPENAI" \
-         -d "$json_payload" \
-         "https://api.openai.com/v1/chat/completions" | \
-    python3 -c "
-import json
-import sys
-
-try:
-    response = json.load(sys.stdin)
-    if 'choices' in response and len(response['choices']) > 0:
-        content = response['choices'][0]['message']['content']
-        # Stream output character by character for effect
-        import time
-        for char in content:
-            print(char, end='', flush=True)
-            time.sleep(0.01)  # Small delay for streaming effect
-        print()  # Final newline
-    else:
-        error_msg = response.get('error', {}).get('message', 'API error')
-        print(f'Error: {error_msg}')
-except Exception as e:
-    print(f'Error: {e}')
-" > "$output_file"
-}
 
 # Query OpenAI API with streaming
 lacy_shell_query_openai_streaming() {
     local input_file="$1"
     local query="$2"
     
-    # Save input content to temp file
-    local content_file="/tmp/lacy-shell-content.txt"
-    cp "$input_file" "$content_file"
+    # Read and combine the input into a single line for the query
+    local content=$(cat "$input_file" | tr '\n' ' ' | sed 's/"/\\"/g')
     
-    # Get available MCP tools and save to temp file
-    local mcp_tools_file="/tmp/lacy-shell-mcp-tools.json"
-    lacy_shell_get_mcp_tools_json > "$mcp_tools_file"
+    # Create JSON payload - simpler version
+    local json_payload="{
+  \"model\": \"gpt-4\",
+  \"messages\": [
+    {
+      \"role\": \"system\",
+      \"content\": \"You are a helpful assistant. Provide concise, practical responses.\"
+    },
+    {
+      \"role\": \"user\",
+      \"content\": \"$content\"
+    }
+  ],
+  \"temperature\": 0.3,
+  \"max_tokens\": 1500
+}"
     
-    # Use the dedicated Python script
-    local script_dir="$(dirname "${(%):-%x}")/../lib"
-    if [[ -n "$LACY_SHELL_DIR" ]]; then
-        script_dir="$LACY_SHELL_DIR/lib"
+    # Send request and get response
+    local response=$(curl -s -H "Content-Type: application/json" \
+         -H "Authorization: Bearer $LACY_SHELL_API_OPENAI" \
+         -d "$json_payload" \
+         "https://api.openai.com/v1/chat/completions" 2>&1)
+    
+    # Check if response contains an error
+    if echo "$response" | grep -q '"error"'; then
+        echo "❌ API Error:"
+        echo "$response" | grep -o '"message":"[^"]*' | sed 's/"message":"/  /' | head -1
+        return 1
     fi
     
-    # Execute the Python script directly to stdout (no capture for streaming)
-    python3 "$script_dir/openai_query.py" "$content_file" "$mcp_tools_file" "$LACY_SHELL_API_OPENAI"
-    
-    # Clean up temp files
-    rm -f "$mcp_tools_file" "$content_file"
-}
-
-# Query Anthropic API
-lacy_shell_query_anthropic() {
-    local input_file="$1"
-    local output_file="$2" 
-    local query="$3"
-    
-    local content=$(cat "$input_file")
-    
-    # Properly escape content for JSON
-    local content_json=$(echo "$content" | python3 -c "
-import json
-import sys
-content = sys.stdin.read()
-print(json.dumps(content))
-")
-    
-    # Create JSON payload  
-    local json_payload=$(python3 -c "
-import json
-
-payload = {
-    'model': 'claude-3-5-sonnet-20241022',
-    'max_tokens': 1500,
-    'system': '''You are a smart shell assistant with MCP tool access. You can:
-- Read/write files and directories
-- Execute system commands  
-- Search the web
-- Analyze git repositories
-- Maintain conversation context
-
-Provide concise, helpful responses. When suggesting commands, explain them briefly. Use your MCP tools when appropriate for file operations, system analysis, or web searches.''',
-    'messages': [
-        {
-            'role': 'user',
-            'content': '''$content'''
-        }
-    ]
-}
-
-print(json.dumps(payload))
-")
-    
-    # Send request with streaming
-    curl -s -H "Content-Type: application/json" \
-         -H "x-api-key: $LACY_SHELL_API_ANTHROPIC" \
-         -H "anthropic-version: 2023-06-01" \
-         -d "$json_payload" \
-         "https://api.anthropic.com/v1/messages" | \
-    python3 -c "
-import json
-import sys
-
+    # Parse the JSON response to extract content
+    if command -v python3 >/dev/null 2>&1; then
+        # Use Python for robust JSON parsing
+        local content=$(echo "$response" | python3 -c "
+import sys, json
 try:
-    response = json.load(sys.stdin)
-    if 'content' in response and len(response['content']) > 0:
-        content = response['content'][0]['text']
-        # Stream output character by character for effect
-        import time
-        for char in content:
-            print(char, end='', flush=True)
-            time.sleep(0.01)  # Small delay for streaming effect
-        print()  # Final newline
-    else:
-        error_msg = response.get('error', {}).get('message', 'API error')
-        print(f'Error: {error_msg}')
+    data = json.load(sys.stdin)
+    if 'choices' in data and len(data['choices']) > 0:
+        content = data['choices'][0]['message']['content']
+        print(content)
 except Exception as e:
-    print(f'Error: {e}')
-" > "$output_file"
+    # If parsing fails, show raw response for debugging
+    print('Error parsing response:', e, file=sys.stderr)
+" 2>&1)
+        
+        if [[ -n "$content" ]]; then
+            echo "$content"
+        else
+            # If we didn't get content, try a simpler extraction
+            echo "$response" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+        fi
+    else
+        # Fallback to sed/grep if Python isn't available
+        echo "$response" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+    fi
 }
+
 
 # Query Anthropic API with streaming
 lacy_shell_query_anthropic_streaming() {
     local input_file="$1"
     local query="$2"
     
-    local content=$(cat "$input_file")
+    # Read and combine the input into a single line for the query
+    local content=$(cat "$input_file" | tr '\n' ' ' | sed 's/"/\\"/g')
     
-    # Properly escape content for JSON
-    local content_json=$(echo "$content" | python3 -c "
-import json
-import sys
-content = sys.stdin.read()
-print(json.dumps(content))
-")
+    # Create JSON payload - simpler version
+    local json_payload="{
+  \"model\": \"claude-3-5-sonnet-20241022\",
+  \"max_tokens\": 1500,
+  \"messages\": [
+    {
+      \"role\": \"user\",
+      \"content\": \"$content\"
+    }
+  ]
+}"
     
-    # Create JSON payload  
-    local json_payload=$(python3 -c "
-import json
-
-payload = {
-    'model': 'claude-3-5-sonnet-20241022',
-    'max_tokens': 1500,
-    'system': '''You are a smart shell assistant with MCP tool access. You can:
-- Read/write files and directories
-- Execute system commands  
-- Search the web
-- Analyze git repositories
-- Maintain conversation context
-
-Provide concise, helpful responses. When suggesting commands, explain them briefly. Use your MCP tools when appropriate for file operations, system analysis, or web searches.''',
-    'messages': [
-        {
-            'role': 'user',
-            'content': '''$content'''
-        }
-    ]
-}
-
-print(json.dumps(payload))
-")
-    
-    # Send request and stream response directly to stdout
-    curl -s -H "Content-Type: application/json" \
+    # Send request and extract response
+    local response=$(curl -s -H "Content-Type: application/json" \
          -H "x-api-key: $LACY_SHELL_API_ANTHROPIC" \
          -H "anthropic-version: 2023-06-01" \
          -d "$json_payload" \
-         "https://api.anthropic.com/v1/messages" | \
-    python3 -c "
-import json
-import sys
-import time
-
+         "https://api.anthropic.com/v1/messages" 2>&1)
+    
+    # Check if response contains an error
+    if echo "$response" | grep -q '"error"'; then
+        echo "❌ API Error:"
+        echo "$response" | grep -o '"message":"[^"]*' | sed 's/"message":"/  /' | head -1
+        return 1
+    fi
+    
+    # Parse the JSON response to extract content
+    if command -v python3 >/dev/null 2>&1; then
+        # Use Python for robust JSON parsing
+        local content=$(echo "$response" | python3 -c "
+import sys, json
 try:
-    response = json.load(sys.stdin)
-    if 'content' in response and len(response['content']) > 0:
-        content = response['content'][0]['text']
-        # Stream output with typewriter effect
-        for char in content:
-            print(char, end='', flush=True)
-            time.sleep(0.008)  # Faster streaming
-        print()  # Final newline
-        # Return content for history saving
-        print('###RESPONSE_END###' + content, file=sys.stderr)
-    else:
-        error_msg = response.get('error', {}).get('message', 'API error')
-        print(f'Error: {error_msg}')
-        print('###RESPONSE_END###Error: ' + error_msg, file=sys.stderr)
+    data = json.load(sys.stdin)
+    if 'content' in data and len(data['content']) > 0:
+        # Anthropic returns content as an array of blocks
+        for block in data['content']:
+            if block.get('type') == 'text':
+                print(block.get('text', ''))
 except Exception as e:
-    print(f'Error: {e}')
-    print('###RESPONSE_END###Error: ' + str(e), file=sys.stderr)
-" 2>&1
-    
-    # Extract the response for history saving (from stderr)
-    local response_content=$(echo "$response" | grep "###RESPONSE_END###" | sed 's/###RESPONSE_END###//' 2>/dev/null)
-    
-    # Return the response content for conversation history
-    echo "$response_content"
+    # If parsing fails, try simple extraction
+    import re
+    match = re.search(r'\"text\"\\s*:\\s*\"([^\"]*)', sys.stdin.read())
+    if match:
+        text = match.group(1)
+        # Unescape common sequences
+        text = text.replace('\\\\n', '\\n').replace('\\\\\"', '\"').replace('\\\\\\\\', '\\\\')
+        print(text)
+" 2>/dev/null)
+        
+        if [[ -n "$content" ]]; then
+            echo "$content"
+        else
+            # Fallback to simple extraction
+            echo "$response" | sed -n 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+        fi
+    else
+        # Fallback extraction without Python
+        local content=$(echo "$response" | sed -n 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        if [[ -n "$content" ]]; then
+            # Basic unescaping
+            echo "$content" | sed 's/\\n/\
+/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
+        else
+            echo "❌ No response from API. Raw response:"
+            echo "$response" | head -3
+            return 1
+        fi
+    fi
 }
 
 # List available MCP tools for AI context
