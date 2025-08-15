@@ -338,7 +338,7 @@ lacy_shell_query_agent() {
     
     # Check if we should use the enhanced coding agent
     local use_coding_agent=false
-    local coding_keywords=("read" "write" "edit" "file" "code" "function" "class" "refactor" "analyze" "git" "implement" "fix" "bug" "create" "modify" "search")
+    local coding_keywords=("read" "write" "edit" "file" "code" "function" "class" "refactor" "analyze" "git" "implement" "fix" "bug" "create" "modify" "search" "ping" "curl" "run" "execute" "command")
     
     for keyword in "${coding_keywords[@]}"; do
         if [[ "$query" == *"$keyword"* ]]; then
@@ -515,10 +515,10 @@ lacy_shell_query_openai_streaming() {
     local input_file="$1"
     local query="$2"
     
-    # Read and escape the input properly for JSON
-    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+    # Read and escape the input properly for JSON using pure shell
+    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g' | tr '\n' ' ')
     
-    # Create JSON payload - simpler version
+    # Create JSON payload with proper escaping
     local json_payload="{
   \"model\": \"gpt-4\",
   \"messages\": [
@@ -548,44 +548,17 @@ lacy_shell_query_openai_streaming() {
         return 1
     fi
     
-    # Parse the JSON response to extract content
-    if command -v python3 >/dev/null 2>&1; then
-        # Use Python for robust JSON parsing
-        local content=$(echo "$response" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    if 'choices' in data and len(data['choices']) > 0:
-        content = data['choices'][0]['message']['content']
-        print(content)
-    else:
-        print('No content in response', file=sys.stderr)
-except json.JSONDecodeError as e:
-    # If JSON is invalid, try to extract content with regex
-    import re
-    text = sys.stdin.read()
-    match = re.search(r'\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"', text)
-    if match:
-        content = match.group(1)
-        # Unescape common sequences
-        content = content.replace('\\\\n', '\\n').replace('\\\\t', '\\t')
-        content = content.replace('\\\\\"', '\"').replace('\\\\\\\\', '\\\\')
-        print(content)
-    else:
-        print(f'Error parsing JSON: {e}', file=sys.stderr)
-except Exception as e:
-    print(f'Unexpected error: {e}', file=sys.stderr)
-" 2>&1)
-        
-        if [[ -n "$content" ]]; then
-            echo "$content"
-        else
-            # If we didn't get content, try a simpler extraction
-            echo "$response" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
-        fi
+    # Parse the JSON response using pure shell tools
+    local content=$(echo "$response" | grep -o '"content"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    
+    if [[ -n "$content" ]]; then
+        # Unescape common JSON sequences
+        echo "$content" | sed 's/\\n/\
+/g' | sed 's/\\t/	/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
     else
-        # Fallback to sed/grep if Python isn't available
-        echo "$response" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+        echo "❌ No response from API. Raw response:"
+        echo "$response" | head -3
+        return 1
     fi
 }
 
@@ -595,10 +568,10 @@ lacy_shell_query_anthropic_streaming() {
     local input_file="$1"
     local query="$2"
     
-    # Read and escape the input properly for JSON
-    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+    # Read and escape the input properly for JSON using pure shell
+    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g' | tr '\n' ' ')
     
-    # Create JSON payload - simpler version
+    # Create JSON payload with proper escaping
     local json_payload="{
   \"model\": \"claude-3-5-sonnet-20241022\",
   \"max_tokens\": 1500,
@@ -624,50 +597,17 @@ lacy_shell_query_anthropic_streaming() {
         return 1
     fi
     
-    # Parse the JSON response to extract content
-    if command -v python3 >/dev/null 2>&1; then
-        # Use Python for robust JSON parsing
-        local content=$(echo "$response" | python3 -c "
-import sys, json, re
-try:
-    data = json.load(sys.stdin)
-    if 'content' in data and len(data['content']) > 0:
-        # Anthropic returns content as an array of blocks
-        for block in data['content']:
-            if block.get('type') == 'text':
-                print(block.get('text', ''))
-except json.JSONDecodeError as e:
-    # If JSON is invalid, try to extract content with regex
-    text = sys.stdin.read()
-    match = re.search(r'\"text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"', text)
-    if match:
-        text = match.group(1)
-        # Unescape common sequences
-        text = text.replace('\\\\n', '\\n').replace('\\\\t', '\\t')
-        text = text.replace('\\\\\"', '\"').replace('\\\\\\\\', '\\\\')
-        print(text)
-except Exception as e:
-    pass
-" 2>/dev/null)
-        
-        if [[ -n "$content" ]]; then
-            echo "$content"
-        else
-            # Fallback to simple extraction
-            echo "$response" | sed -n 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
-        fi
+    # Parse the JSON response using pure shell tools
+    local content=$(echo "$response" | grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    
+    if [[ -n "$content" ]]; then
+        # Unescape common JSON sequences
+        echo "$content" | sed 's/\\n/\
+/g' | sed 's/\\t/	/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
     else
-        # Fallback extraction without Python
-        local content=$(echo "$response" | sed -n 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-        if [[ -n "$content" ]]; then
-            # Basic unescaping
-            echo "$content" | sed 's/\\n/\
-/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
-        else
-            echo "❌ No response from API. Raw response:"
-            echo "$response" | head -3
-            return 1
-        fi
+        echo "❌ No response from API. Raw response:"
+        echo "$response" | head -3
+        return 1
     fi
 }
 
