@@ -375,8 +375,12 @@ lacy_shell_query_agent() {
             # Make sure it's executable
             chmod +x "$agent_path" 2>/dev/null
             
-            # Execute the TypeScript agent
-            "$agent_path" --provider "$provider" --model "$model" --api-key "$api_key" "$query"
+            # Execute the TypeScript agent with API key in environment
+            if [[ "$provider" == "openai" ]]; then
+                OPENAI_API_KEY="$api_key" "$agent_path" --provider "$provider" --model "$model" "$query"
+            else
+                ANTHROPIC_API_KEY="$api_key" "$agent_path" --provider "$provider" --model "$model" "$query"
+            fi
         else
             # Fallback to simple AI query if agent not available
             echo "⚠️  Coding agent not available. Using simple AI mode."
@@ -511,8 +515,8 @@ lacy_shell_query_openai_streaming() {
     local input_file="$1"
     local query="$2"
     
-    # Read and combine the input into a single line for the query
-    local content=$(cat "$input_file" | tr '\n' ' ' | sed 's/"/\\"/g')
+    # Read and escape the input properly for JSON
+    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
     
     # Create JSON payload - simpler version
     local json_payload="{
@@ -554,9 +558,23 @@ try:
     if 'choices' in data and len(data['choices']) > 0:
         content = data['choices'][0]['message']['content']
         print(content)
+    else:
+        print('No content in response', file=sys.stderr)
+except json.JSONDecodeError as e:
+    # If JSON is invalid, try to extract content with regex
+    import re
+    text = sys.stdin.read()
+    match = re.search(r'\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"', text)
+    if match:
+        content = match.group(1)
+        # Unescape common sequences
+        content = content.replace('\\\\n', '\\n').replace('\\\\t', '\\t')
+        content = content.replace('\\\\\"', '\"').replace('\\\\\\\\', '\\\\')
+        print(content)
+    else:
+        print(f'Error parsing JSON: {e}', file=sys.stderr)
 except Exception as e:
-    # If parsing fails, show raw response for debugging
-    print('Error parsing response:', e, file=sys.stderr)
+    print(f'Unexpected error: {e}', file=sys.stderr)
 " 2>&1)
         
         if [[ -n "$content" ]]; then
@@ -577,8 +595,8 @@ lacy_shell_query_anthropic_streaming() {
     local input_file="$1"
     local query="$2"
     
-    # Read and combine the input into a single line for the query
-    local content=$(cat "$input_file" | tr '\n' ' ' | sed 's/"/\\"/g')
+    # Read and escape the input properly for JSON
+    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
     
     # Create JSON payload - simpler version
     local json_payload="{
@@ -610,7 +628,7 @@ lacy_shell_query_anthropic_streaming() {
     if command -v python3 >/dev/null 2>&1; then
         # Use Python for robust JSON parsing
         local content=$(echo "$response" | python3 -c "
-import sys, json
+import sys, json, re
 try:
     data = json.load(sys.stdin)
     if 'content' in data and len(data['content']) > 0:
@@ -618,15 +636,18 @@ try:
         for block in data['content']:
             if block.get('type') == 'text':
                 print(block.get('text', ''))
-except Exception as e:
-    # If parsing fails, try simple extraction
-    import re
-    match = re.search(r'\"text\"\\s*:\\s*\"([^\"]*)', sys.stdin.read())
+except json.JSONDecodeError as e:
+    # If JSON is invalid, try to extract content with regex
+    text = sys.stdin.read()
+    match = re.search(r'\"text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"', text)
     if match:
         text = match.group(1)
         # Unescape common sequences
-        text = text.replace('\\\\n', '\\n').replace('\\\\\"', '\"').replace('\\\\\\\\', '\\\\')
+        text = text.replace('\\\\n', '\\n').replace('\\\\t', '\\t')
+        text = text.replace('\\\\\"', '\"').replace('\\\\\\\\', '\\\\')
         print(text)
+except Exception as e:
+    pass
 " 2>/dev/null)
         
         if [[ -n "$content" ]]; then
