@@ -1,0 +1,28 @@
+# General
+.DS_Store
+*.log
+
+# Node
+node_modules/
+**/node_modules/
+/agent/node_modules/
+
+# Envs
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# Others
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Bun build artifacts
+agent/*.bun-build
+agent/.*-bun-build
+# Built binaries
+agent/lacy-agent
