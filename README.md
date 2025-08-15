@@ -23,6 +23,27 @@ Lacy Shell is a **production-ready** zsh plugin that seamlessly integrates AI ca
 - ⚡ **Zero Configuration** - Works with existing zsh/starship/oh-my-zsh setups
 - 🔐 **Secure** - API keys stored locally, never transmitted unnecessarily
 
+### 🛠️ Coding Agent Features (with Bun)
+
+When Bun is installed, agent mode becomes a powerful coding assistant with:
+- **File Operations** - Read, write, and edit files directly
+- **Code Search** - Search patterns across your codebase using ripgrep/grep
+- **Directory Navigation** - List and explore project structure  
+- **Command Execution** - Run shell commands and see output
+- **Git Integration** - Check status, view diffs, manage changes
+- **Code Analysis** - Understand code structure and dependencies
+- **Smart Refactoring** - Rename identifiers across files
+
+## 📋 Requirements
+
+- **zsh** - Required for the shell plugin
+- **bun** - Optional but recommended for the enhanced coding agent
+  - Install from [https://bun.sh](https://bun.sh)
+  - Enables file operations, code search, and git integration
+- **curl** - Required for API calls
+- **git** - Required for installation
+- **npm** - Optional, for MCP server support
+
 ## 🚀 Quick Start
 
 ### Installation

@@ -28,12 +28,15 @@ check_prerequisites() {
     fi
     echo -e "${GREEN}✅ zsh found${NC}"
     
-    # Check for Python3
-    if ! command -v python3 >/dev/null 2>&1; then
-        echo -e "${RED}❌ python3 is required but not installed${NC}"
-        exit 1
+    # Check for Bun (optional, for TypeScript agent)
+    if command -v bun >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ bun found - TypeScript agent will be built${NC}"
+        HAS_BUN=true
+    else
+        echo -e "${YELLOW}⚠️  bun not found - coding agent will have limited features${NC}"
+        echo -e "${YELLOW}   Install from: https://bun.sh${NC}"
+        HAS_BUN=false
     fi
-    echo -e "${GREEN}✅ python3 found${NC}"
     
     # Check for curl
     if ! command -v curl >/dev/null 2>&1; then
@@ -50,27 +53,20 @@ check_prerequisites() {
     echo -e "${GREEN}✅ git found${NC}"
 }
 
-# Install Python dependencies
-install_dependencies() {
-    echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
+# Build TypeScript agent
+build_agent() {
+    echo -e "${BLUE}🔧 Building TypeScript agent...${NC}"
     
-    # Try different installation methods
-    if command -v brew >/dev/null 2>&1; then
-        echo -e "${BLUE}Using brew to install PyYAML...${NC}"
-        brew list python-yq >/dev/null 2>&1 || brew install python-yq
-        echo -e "${GREEN}✅ PyYAML available via brew${NC}"
-    elif command -v pip3 >/dev/null 2>&1; then
-        echo -e "${BLUE}Attempting pip3 installation...${NC}"
-        if pip3 install --user PyYAML requests 2>/dev/null; then
-            echo -e "${GREEN}✅ Python dependencies installed via pip3${NC}"
-        elif pip3 install --break-system-packages PyYAML requests 2>/dev/null; then
-            echo -e "${GREEN}✅ Python dependencies installed (system packages)${NC}"
+    if [[ "$HAS_BUN" == "true" ]] && [[ -d "${INSTALL_DIR}/agent" ]]; then
+        cd "${INSTALL_DIR}/agent"
+        if bun install --silent 2>/dev/null && bun run build 2>/dev/null; then
+            echo -e "${GREEN}✅ TypeScript agent built successfully${NC}"
         else
-            echo -e "${YELLOW}⚠️  Could not install via pip3. Plugin will use fallback YAML parser.${NC}"
+            echo -e "${YELLOW}⚠️  Failed to build agent, but installation will continue${NC}"
         fi
-    else
-        echo -e "${YELLOW}⚠️  No package manager found. Plugin will use fallback YAML parser.${NC}"
-        echo -e "${YELLOW}   For better YAML support, install PyYAML manually${NC}"
+        cd - >/dev/null
+    elif [[ "$HAS_BUN" == "false" ]]; then
+        echo -e "${YELLOW}⚠️  Skipping agent build (bun not installed)${NC}"
     fi
 }
 
@@ -253,7 +249,7 @@ show_instructions() {
 # Main installation flow
 main() {
     check_prerequisites
-    install_dependencies
+    build_agent
     
     # Choose installation method
     if [[ "$1" == "--local" ]]; then

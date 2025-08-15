@@ -6,6 +6,15 @@
 typeset -A LACY_SHELL_CONFIG
 LACY_SHELL_CONFIG_FILE="${HOME}/.lacy-shell/config.yaml"
 
+# Simple YAML parser for shell (handles basic key: value)
+lacy_shell_parse_yaml_value() {
+    local file="$1"
+    local key="$2"
+    
+    # Extract value for a simple key: value pair
+    grep "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'"
+}
+
 # Load configuration from file
 lacy_shell_load_config() {
     # Set defaults
@@ -22,70 +31,50 @@ lacy_shell_load_config() {
         lacy_shell_create_default_config
     fi
     
-    # Try to load config using Python with YAML, fallback to basic parsing
-    if command -v python3 >/dev/null 2>&1; then
+    # Parse configuration using simple shell parsing
+    if [[ -f "$LACY_SHELL_CONFIG_FILE" ]]; then
         # Load default mode
-        local default_mode=$(python3 -c "
-import sys
-import os
-try:
-    import yaml
-    with open('$LACY_SHELL_CONFIG_FILE', 'r') as f:
-        config = yaml.safe_load(f)
-    if 'modes' in config and 'default' in config['modes']:
-        print(config['modes']['default'])
-    else:
-        print('auto')
-except:
-    print('auto')
-" 2>/dev/null)
-        LACY_SHELL_DEFAULT_MODE="${default_mode:-auto}"
-        
-        # Load API keys
-        local api_exports=$(python3 -c "
-import sys
-import os
-try:
-    import yaml
-    with open('$LACY_SHELL_CONFIG_FILE', 'r') as f:
-        config = yaml.safe_load(f)
-    if 'api_keys' in config:
-        for key, value in config['api_keys'].items():
-            if value and not str(value).startswith('#'):
-                print(f'export LACY_SHELL_API_{key.upper()}=\"{value}\"')
-except:
-    pass
-" 2>/dev/null)
-        if [[ -n "$api_exports" ]]; then
-            eval "$api_exports"
-            # Ensure API keys are exported globally
-            export LACY_SHELL_API_OPENAI
-            export LACY_SHELL_API_ANTHROPIC
+        local mode_line=$(grep -A 1 "^modes:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null | grep "default:" | head -1)
+        if [[ -n "$mode_line" ]]; then
+            local default_mode=$(echo "$mode_line" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'")
+            LACY_SHELL_DEFAULT_MODE="${default_mode:-auto}"
         fi
         
-        # Load MCP configuration
-        # First check if MCP servers are configured
-        if python3 -c "import yaml; config=yaml.safe_load(open('$LACY_SHELL_CONFIG_FILE')); exit(0 if 'mcp' in config and 'servers' in config['mcp'] and config['mcp']['servers'] else 1)" 2>/dev/null; then
-            LACY_SHELL_MCP_SERVERS="configured"
-            
-            # Save MCP servers JSON to temp file
-            python3 -c "
-import yaml
-import json
-with open('$LACY_SHELL_CONFIG_FILE', 'r') as f:
-    config = yaml.safe_load(f)
-servers_json = json.dumps(config['mcp']['servers'])
-with open('/tmp/lacy-shell-mcp-servers.json', 'w') as f:
-    f.write(servers_json)
-" 2>/dev/null
-            
-            # Load JSON from temp file
-            if [[ -f "/tmp/lacy-shell-mcp-servers.json" ]]; then
-                LACY_SHELL_MCP_SERVERS_JSON=$(cat /tmp/lacy-shell-mcp-servers.json)
-                rm -f /tmp/lacy-shell-mcp-servers.json
-            else
-                LACY_SHELL_MCP_SERVERS_JSON=""
+        # Load API keys
+        local in_api_section=false
+        while IFS= read -r line; do
+            # Check if we're in the api_keys section
+            if [[ "$line" =~ ^api_keys: ]]; then
+                in_api_section=true
+                continue
+            elif [[ "$line" =~ ^[^[:space:]] ]] && [[ ! "$line" =~ ^# ]]; then
+                # New section started, exit api_keys
+                in_api_section=false
             fi
+            
+            # Parse API keys
+            if [[ "$in_api_section" == true ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
+                local key="${match[1]}"
+                local value="${match[2]}"
+                # Remove quotes and comments
+                value=$(echo "$value" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs)
+                
+                if [[ -n "$value" ]] && [[ "$value" != "null" ]]; then
+                    if [[ "$key" == "openai" ]]; then
+                        export LACY_SHELL_API_OPENAI="$value"
+                    elif [[ "$key" == "anthropic" ]]; then
+                        export LACY_SHELL_API_ANTHROPIC="$value"
+                    fi
+                fi
+            fi
+        done < "$LACY_SHELL_CONFIG_FILE"
+        
+        # Check for MCP configuration (simplified)
+        if grep -q "^mcp:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null && \
+           grep -q "^[[:space:]]*servers:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null; then
+            LACY_SHELL_MCP_SERVERS="configured"
+            # For now, we'll use basic MCP config
+            LACY_SHELL_MCP_SERVERS_JSON='[{"name":"filesystem","command":"npx","args":["@modelcontextprotocol/server-filesystem"]}]'
         else
             LACY_SHELL_MCP_SERVERS=""
             LACY_SHELL_MCP_SERVERS_JSON=""
@@ -94,94 +83,89 @@ with open('/tmp/lacy-shell-mcp-servers.json', 'w') as f:
         # Export variables for global access
         export LACY_SHELL_MCP_SERVERS
         export LACY_SHELL_MCP_SERVERS_JSON
-    else
-        echo "Warning: Python3 not found. Using default configuration."
-        LACY_SHELL_DEFAULT_MODE="auto"
-        LACY_SHELL_MCP_SERVERS=""
-        LACY_SHELL_MCP_SERVERS_JSON=""
     fi
+    
+    # Also check environment variables as fallback
+    if [[ -z "$LACY_SHELL_API_OPENAI" ]] && [[ -n "$OPENAI_API_KEY" ]]; then
+        export LACY_SHELL_API_OPENAI="$OPENAI_API_KEY"
+    fi
+    if [[ -z "$LACY_SHELL_API_ANTHROPIC" ]] && [[ -n "$ANTHROPIC_API_KEY" ]]; then
+        export LACY_SHELL_API_ANTHROPIC="$ANTHROPIC_API_KEY"
+    fi
+    
+    # Load persisted mode if exists
+    if [[ -f "${HOME}/.lacy_shell_mode" ]]; then
+        LACY_SHELL_CURRENT_MODE=$(cat "${HOME}/.lacy_shell_mode")
+    else
+        LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
+    fi
+    
+    # Export the configuration
+    export LACY_SHELL_DEFAULT_MODE
+    export LACY_SHELL_CURRENT_MODE
 }
 
 # Create default configuration file
 lacy_shell_create_default_config() {
     cat > "$LACY_SHELL_CONFIG_FILE" << 'EOF'
 # Lacy Shell Configuration
+# Edit this file to customize your settings
 
+# API Keys for AI providers
 api_keys:
-  # openai: "your-openai-api-key"
-  # anthropic: "your-anthropic-api-key"
+  openai: # Add your OpenAI API key here
+  anthropic: # Add your Anthropic API key here
 
-mcp:
-  servers:
-    - name: "filesystem"
-      command: "npx"
-      args: ["@modelcontextprotocol/server-filesystem", "/tmp"]
-    # - name: "web"
-    #   command: "npx"  
-    #   args: ["@modelcontextprotocol/server-web"]
-
+# Operating modes
 modes:
-  default: "auto"  # shell, agent, auto
+  default: auto  # Options: shell, agent, auto
 
-keybindings:
-  toggle_mode: "^[^M"     # Alt+Enter
-  agent_mode: "^A"       # Ctrl+A  
-  shell_mode: "^S"       # Ctrl+S
+# Smart auto-detection settings
+auto_detection:
+  enabled: true
+  confidence_threshold: 0.7
 
-# Auto-detection settings
-detection:
-  # Keywords that suggest agent mode
-  agent_keywords:
-    - "help"
-    - "how"
-    - "what"
-    - "why"
-    - "explain"
-    - "show me"
-    - "find"
-    - "search"
-  
-  # Commands that should always use shell mode
-  shell_commands:
-    - "ls"
-    - "cd"
-    - "pwd"
-    - "cp"
-    - "mv"
-    - "rm"
-    - "mkdir"
-    - "rmdir"
-    - "chmod"
-    - "chown"
-    - "ps"
-    - "kill"
-    - "top"
-    - "htop"
-    - "grep"
-    - "sed"
-    - "awk"
-    - "git"
-    - "npm"
-    - "yarn"
-    - "pip"
-    - "cargo"
+# MCP (Model Context Protocol) configuration
+mcp:
+  enabled: false
+  servers:
+    - name: filesystem
+      command: npx
+      args: ["@modelcontextprotocol/server-filesystem", "/"]
+    - name: web
+      command: npx  
+      args: ["@modelcontextprotocol/server-web"]
+
+# Appearance
+appearance:
+  show_mode_indicator: true
+  mode_colors:
+    shell: green
+    agent: blue
+    auto: yellow
 EOF
     
-    # Quiet config creation - user can edit later if needed
+    echo "Created default configuration at: $LACY_SHELL_CONFIG_FILE"
 }
 
-# Get configuration value
-lacy_shell_get_config() {
-    local key="$1"
-    echo "${LACY_SHELL_CONFIG[$key]:-}"
-}
-
-# Check if API keys are configured
+# Check if API keys are available
 lacy_shell_check_api_keys() {
-    if [[ -z "$LACY_SHELL_API_OPENAI" && -z "$LACY_SHELL_API_ANTHROPIC" ]]; then
-        echo "Warning: No API keys configured. Agent mode will not work."
-        echo "Please add API keys to $LACY_SHELL_CONFIG_FILE"
+    if [[ -n "$LACY_SHELL_API_OPENAI" ]] || [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
+        return 0
+    else
         return 1
     fi
-    return 0
 }
+
+# Get active API provider
+lacy_shell_get_api_provider() {
+    if [[ -n "$LACY_SHELL_API_OPENAI" ]]; then
+        echo "openai"
+    elif [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
+        echo "anthropic"
+    else
+        echo "none"
+    fi
+}
+
+# Export config functions (quietly)
