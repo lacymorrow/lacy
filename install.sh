@@ -17,7 +17,7 @@ REPO_URL="https://github.com/username/lacy-shell.git"
 
 echo -e "${BLUE}🚀 Installing Lacy Shell...${NC}"
 
-# Check prerequisites
+# Check prerequisites (minimal)
 check_prerequisites() {
     echo -e "${BLUE}📋 Checking prerequisites...${NC}"
     
@@ -27,16 +27,6 @@ check_prerequisites() {
         exit 1
     fi
     echo -e "${GREEN}✅ zsh found${NC}"
-    
-    # Check for Bun (optional, for TypeScript agent)
-    if command -v bun >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ bun found - TypeScript agent will be built${NC}"
-        HAS_BUN=true
-    else
-        echo -e "${YELLOW}⚠️  bun not found - coding agent will have limited features${NC}"
-        echo -e "${YELLOW}   Install from: https://bun.sh${NC}"
-        HAS_BUN=false
-    fi
     
     # Check for curl
     if ! command -v curl >/dev/null 2>&1; then
@@ -51,23 +41,6 @@ check_prerequisites() {
         exit 1
     fi
     echo -e "${GREEN}✅ git found${NC}"
-}
-
-# Build TypeScript agent
-build_agent() {
-    echo -e "${BLUE}🔧 Building TypeScript agent...${NC}"
-    
-    if [[ "$HAS_BUN" == "true" ]] && [[ -d "${INSTALL_DIR}/agent" ]]; then
-        cd "${INSTALL_DIR}/agent"
-        if bun install --silent 2>/dev/null && bun run build 2>/dev/null; then
-            echo -e "${GREEN}✅ TypeScript agent built successfully${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Failed to build agent, but installation will continue${NC}"
-        fi
-        cd - >/dev/null
-    elif [[ "$HAS_BUN" == "false" ]]; then
-        echo -e "${YELLOW}⚠️  Skipping agent build (bun not installed)${NC}"
-    fi
 }
 
 # Clone or update repository
@@ -187,42 +160,6 @@ EOF
     fi
 }
 
-# Setup MCP servers
-setup_mcp() {
-    echo -e "${BLUE}🔧 Setting up MCP servers...${NC}"
-    
-    # Check if npm is available for MCP servers
-    if command -v npm >/dev/null 2>&1; then
-        echo -e "${BLUE}📦 Installing MCP server packages...${NC}"
-        
-        # Install MCP filesystem server
-        if ! npm list -g @modelcontextprotocol/server-filesystem >/dev/null 2>&1; then
-            npm install -g @modelcontextprotocol/server-filesystem
-            echo -e "${GREEN}✅ MCP filesystem server installed${NC}"
-        else
-            echo -e "${YELLOW}⚠️  MCP filesystem server already installed${NC}"
-        fi
-        
-        # Install MCP web server (optional)
-        read -p "Install MCP web server? (y/N): " install_web
-        if [[ "$install_web" == "y" || "$install_web" == "Y" ]]; then
-            npm install -g @modelcontextprotocol/server-web
-            echo -e "${GREEN}✅ MCP web server installed${NC}"
-        fi
-        
-        # Test MCP installation
-        echo -e "${BLUE}🧪 Testing MCP server installation...${NC}"
-        if npx @modelcontextprotocol/server-filesystem --help >/dev/null 2>&1; then
-            echo -e "${GREEN}✅ MCP filesystem server is working${NC}"
-        else
-            echo -e "${YELLOW}⚠️  MCP filesystem server test failed${NC}"
-        fi
-    else
-        echo -e "${YELLOW}⚠️  npm not found. MCP servers will need to be installed manually.${NC}"
-        echo -e "${YELLOW}   Install with: npm install -g @modelcontextprotocol/server-filesystem${NC}"
-    fi
-}
-
 # Final setup instructions
 show_instructions() {
     echo ""
@@ -231,8 +168,8 @@ show_instructions() {
     echo -e "${BLUE}📋 Next steps:${NC}"
     echo "1. Restart your terminal or run: source ~/.zshrc"
     echo "2. Edit your configuration: ${HOME}/.lacy-shell/config.yaml"
-    echo "3. Add your API keys (OpenAI or Anthropic)"
-    echo "4. Try it out with: ask \"what files are in this directory?\""
+    echo "3. (Optional) Install Lash: brew tap lacymorrow/tap && brew install lacymorrow/tap/lash"
+    echo "4. Try it: ask \"what files are in this directory?\""
     echo ""
     echo -e "${BLUE}🔧 Configuration file:${NC} ${HOME}/.lacy-shell/config.yaml"
     echo -e "${BLUE}📖 Documentation:${NC} ${INSTALL_DIR}/README.md"
@@ -249,8 +186,6 @@ show_instructions() {
 # Main installation flow
 main() {
     check_prerequisites
-    build_agent
-    
     # Choose installation method
     if [[ "$1" == "--local" ]]; then
         setup_local
@@ -260,7 +195,6 @@ main() {
     
     configure_zsh
     create_config
-    setup_mcp
     show_instructions
 }
 

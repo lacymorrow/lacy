@@ -4,9 +4,7 @@
   "description": "A smart shell plugin with AI agent integration via MCP",
   "main": "lacy-shell.plugin.zsh",
   "scripts": {
-    "install": "./install.sh",
-    "test": "zsh -c 'source lacy-shell.plugin.zsh && lacy_shell_test_detection && echo && ./test-smart-auto.sh'",
-    "setup-mcp": "npm install -g @modelcontextprotocol/server-filesystem @modelcontextprotocol/server-web"
+    "install": "./install.sh"
   },
   "keywords": [
     "shell",
@@ -19,13 +17,8 @@
   ],
   "author": "Lacy Shell Team",
   "license": "MIT",
-  "dependencies": {
-    "@modelcontextprotocol/server-filesystem": "latest",
-    "@modelcontextprotocol/server-web": "latest"
-  },
-  "devDependencies": {
-    "@types/node": "latest"
-  },
+  "dependencies": {},
+  "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
   },

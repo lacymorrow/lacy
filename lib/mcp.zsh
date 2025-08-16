@@ -19,6 +19,11 @@ lacy_shell_init_mcp() {
     # Create MCP directory
     mkdir -p "$LACY_SHELL_MCP_DIR"
     
+    # If Lash is available, let Lash manage MCP. Nothing to start here.
+    if command -v lash >/dev/null 2>&1; then
+        return 0
+    fi
+
     # Only initialize if we have servers configured
     if [[ "$LACY_SHELL_MCP_SERVERS" == "configured" && -n "$LACY_SHELL_MCP_SERVERS_JSON" ]]; then
         lacy_shell_start_mcp_servers
@@ -333,74 +338,15 @@ lacy_shell_query_agent() {
         return 1
     fi
     
-    # Ensure conversation directory exists
-    mkdir -p "$(dirname "$LACY_SHELL_CONVERSATION_FILE")"
-    
-    # Check if we should use the enhanced coding agent
-    local use_coding_agent=false
-    local coding_keywords=("read" "write" "edit" "file" "code" "function" "class" "refactor" "analyze" "git" "implement" "fix" "bug" "create" "modify" "search" "ping" "curl" "run" "execute" "command")
-    
-    for keyword in "${coding_keywords[@]}"; do
-        if [[ "$query" == *"$keyword"* ]]; then
-            use_coding_agent=true
-            break
-        fi
-    done
-    
-    if [[ "$use_coding_agent" == "true" ]]; then
-        # Use enhanced TypeScript coding agent
-        local provider="openai"
-        local api_key="$LACY_SHELL_API_OPENAI"
-        local model="gpt-4"
-        
-        if [[ -z "$api_key" ]] && [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
-            provider="anthropic"
-            api_key="$LACY_SHELL_API_ANTHROPIC"
-            model="claude-3-5-sonnet-20241022"
-        fi
-        
-        # Use the compiled TypeScript agent
-        local agent_path="$LACY_SHELL_DIR/agent/lacy-agent"
-        
-        # Check if agent exists and is executable
-        if [[ ! -f "$agent_path" ]]; then
-            # Try to build it if bun is available
-            if command -v bun >/dev/null 2>&1 && [[ -d "$LACY_SHELL_DIR/agent" ]]; then
-                echo "🔧 Building coding agent..."
-                (cd "$LACY_SHELL_DIR/agent" && bun install --silent && bun run build) >/dev/null 2>&1
-            fi
-        fi
-        
-        if [[ -f "$agent_path" ]]; then
-            # Make sure it's executable
-            chmod +x "$agent_path" 2>/dev/null
-            
-            # Execute the TypeScript agent with API key in environment
-            if [[ "$provider" == "openai" ]]; then
-                OPENAI_API_KEY="$api_key" "$agent_path" --provider "$provider" --model "$model" "$query"
-            else
-                ANTHROPIC_API_KEY="$api_key" "$agent_path" --provider "$provider" --model "$model" "$query"
-            fi
-        else
-            # Fallback to simple AI query if agent not available
-            echo "⚠️  Coding agent not available. Using simple AI mode."
-            echo "   To enable full coding features, install bun from https://bun.sh"
-            
-            # Use the fallback streaming query
-            lacy_shell_send_to_ai_streaming_fallback "$query"
-        fi
-        
-        # Save to conversation history
-        echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
-        echo "Assistant: [Coding Agent Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
-        echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
-    else
-        # Use original agent for general queries
-        # Create temporary file for the query
+    # If Lash CLI is available, prefer delegating to Lash for models + MCP.
+    if command -v lash >/dev/null 2>&1; then
+        # Ensure conversation directory exists
+        mkdir -p "$(dirname "$LACY_SHELL_CONVERSATION_FILE")"
+
+        # Prepare minimal context and recent conversation; pipe into lash run (it prepends stdin to prompt)
         local temp_file=$(mktemp)
         local response_file=$(mktemp)
-        
-        # Prepare the query with context and conversation history
+
         cat > "$temp_file" << EOF
 System Context:
 - Current Directory: $(pwd)
@@ -410,33 +356,74 @@ System Context:
 
 EOF
 
-        # Add recent conversation history (last 10 exchanges)
         if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
             echo "Recent Conversation:" >> "$temp_file"
             tail -20 "$LACY_SHELL_CONVERSATION_FILE" >> "$temp_file"
             echo "" >> "$temp_file"
         fi
 
-        # Add MCP context if available
-        if [[ "$use_mcp" == "true" ]] && [[ -n "$LACY_SHELL_MCP_SERVERS" ]]; then
-            echo "Available MCP Tools:" >> "$temp_file"
-            lacy_shell_list_mcp_tools >> "$temp_file"
-            echo "" >> "$temp_file"
-        fi
-        
-        echo "Current Query: $query" >> "$temp_file"
-        
-        # Send to AI service and stream response directly to stdout
-        lacy_shell_send_to_ai_streaming "$temp_file" "$query"
-        
+        # Run non-interactively through Lash. Lash handles MCP per its own config.
+        # We pass our context via stdin and the current query as args.
+        cat "$temp_file" | lash run -q -- "$query"
+
         # Save to conversation history
         echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
-        echo "Assistant: [AI Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "Assistant: [Lash Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
         echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
-        
+
         # Cleanup
         rm -f "$temp_file" "$response_file"
+
+        # Maintain history size
+        if [[ $(wc -l < "$LACY_SHELL_CONVERSATION_FILE") -gt 300 ]]; then
+            tail -200 "$LACY_SHELL_CONVERSATION_FILE" > "${LACY_SHELL_CONVERSATION_FILE}.tmp"
+            mv "${LACY_SHELL_CONVERSATION_FILE}.tmp" "$LACY_SHELL_CONVERSATION_FILE"
+        fi
+
+        return 0
     fi
+
+    # Use original agent flow (fallback when Lash is not installed)
+    # Create temporary file for the query
+    local temp_file=$(mktemp)
+    local response_file=$(mktemp)
+    
+    # Prepare the query with context and conversation history
+    cat > "$temp_file" << EOF
+System Context:
+- Current Directory: $(pwd)
+- Current Date: $(date)
+- Shell: $SHELL
+- User: $USER
+
+EOF
+
+    # Add recent conversation history (last 10 exchanges)
+    if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
+        echo "Recent Conversation:" >> "$temp_file"
+        tail -20 "$LACY_SHELL_CONVERSATION_FILE" >> "$temp_file"
+        echo "" >> "$temp_file"
+    fi
+
+    # Add MCP context if available
+    if [[ "$use_mcp" == "true" ]] && [[ -n "$LACY_SHELL_MCP_SERVERS" ]]; then
+        echo "Available MCP Tools:" >> "$temp_file"
+        lacy_shell_list_mcp_tools >> "$temp_file"
+        echo "" >> "$temp_file"
+    fi
+    
+    echo "Current Query: $query" >> "$temp_file"
+    
+    # Send to AI service and stream response directly to stdout
+    lacy_shell_send_to_ai_streaming "$temp_file" "$query"
+    
+    # Save to conversation history
+    echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
+    echo "Assistant: [AI Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+    echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
+    
+    # Cleanup
+    rm -f "$temp_file" "$response_file"
     
     # Keep conversation history manageable (last 100 exchanges)
     if [[ $(wc -l < "$LACY_SHELL_CONVERSATION_FILE") -gt 300 ]]; then

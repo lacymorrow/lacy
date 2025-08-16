@@ -22,7 +22,26 @@ lacy_shell_smart_accept_line() {
     # Determine which mode to use
     local execution_mode=$(lacy_shell_detect_mode "$input")
     
-    # Handle based on mode
+    # In shell mode, always use normal shell execution
+    if [[ "$execution_mode" == "shell" ]]; then
+        zle .accept-line
+        return
+    fi
+    
+    # For auto mode, check if command might need TTY
+    if [[ "$execution_mode" == "auto" ]]; then
+        local first_word="${input%% *}"
+        
+        # If it's a known command and not obviously natural language, 
+        # let shell handle it directly to preserve TTY
+        if lacy_shell_command_exists "$first_word" && ! lacy_shell_is_obvious_natural_language "$input"; then
+            # Let the shell execute it directly with proper TTY
+            zle .accept-line
+            return
+        fi
+    fi
+    
+    # Handle based on mode (agent or auto with non-command/natural language)
     case "$execution_mode" in
         "agent")
             # Check if we can actually use the agent
@@ -40,7 +59,7 @@ lacy_shell_smart_accept_line() {
             lacy_shell_execute_agent "$input"
             ;;
         "auto")
-            # Smart auto mode: try shell first, fallback to agent
+            # Smart auto mode: for non-commands or natural language
             BUFFER=""
             zle .accept-line
             print -r -- ""
@@ -87,40 +106,28 @@ lacy_shell_execute_agent() {
     # Do not touch ZLE redraw here; we've already exited ZLE before streaming
 }
 
-# Smart auto execution: try shell first, fallback to agent
+# Smart auto execution: only called for non-commands or natural language
 lacy_shell_execute_smart_auto() {
     local input="$1"
     local first_word="${input%% *}"
     
-    # Skip obvious natural language queries
-    if lacy_shell_is_obvious_natural_language "$input"; then
-        echo "🤖 Natural language detected, using AI agent"
-        lacy_shell_execute_agent "$input"
-        return
-    fi
+    # This function is now only called when:
+    # 1. Input is natural language, OR
+    # 2. Command doesn't exist
+    # Known commands are handled directly by the shell in auto mode
     
-    # Check if the first word is an executable command
-    if lacy_shell_command_exists "$first_word"; then
-        echo "💻 Command found, executing: $input"
-        eval "$input"
-        local exit_code=$?
-        
-        # If command failed with "command not found" type errors, try agent
-        if [[ $exit_code -eq 127 || $exit_code -eq 126 ]]; then
-            echo ""
-            echo "⚠️  Command execution failed, trying AI agent..."
-            lacy_shell_execute_agent "$input"
-        fi
-    else
-        # Command doesn't exist, check if agent is available
-        if lacy_shell_check_api_keys >/dev/null 2>&1; then
-            echo "❓ Command not found, trying AI agent: $input"
-            lacy_shell_execute_agent "$input"
+    # Check if agent is available
+    if lacy_shell_check_api_keys >/dev/null 2>&1; then
+        if lacy_shell_is_obvious_natural_language "$input"; then
+            echo "🤖 Natural language detected, using AI agent"
         else
-            echo "❌ Command not found and no AI agent available: $first_word"
-            echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
-            echo "   Or check if the command is spelled correctly"
+            echo "❓ Command not found, trying AI agent: $input"
         fi
+        lacy_shell_execute_agent "$input"
+    else
+        echo "❌ Command not found and no AI agent available: $first_word"
+        echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
+        echo "   Or check if the command is spelled correctly"
     fi
 }
 
