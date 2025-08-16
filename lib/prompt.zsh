@@ -5,9 +5,13 @@
 # Store original prompts
 LACY_SHELL_ORIGINAL_PS1="$PS1"
 LACY_SHELL_ORIGINAL_RPS1="$RPS1"
+LACY_SHELL_BASE_PS1=""
 
 # Setup prompt integration
 lacy_shell_setup_prompt() {
+    # Store the base PS1 for later use
+    LACY_SHELL_BASE_PS1="$PS1"
+    
     # Add to precmd functions to update prompt
     precmd_functions+=(lacy_shell_update_prompt)
 }
@@ -17,8 +21,17 @@ lacy_shell_update_prompt() {
     # Get mode indicator
     local mode_indicator=$(lacy_shell_get_mode_indicator)
     
-    # Simple approach: always use RPS1 for the mode indicator
-    RPS1="$mode_indicator"
+    # Add mode indicator to the left prompt (like lash)
+    # Save original PS1 if not already saved
+    if [[ -z "$LACY_SHELL_BASE_PS1" ]]; then
+        LACY_SHELL_BASE_PS1="$PS1"
+    fi
+    
+    # Prepend mode indicator to the prompt with some spacing
+    PS1="${mode_indicator}  ${LACY_SHELL_BASE_PS1}"
+    
+    # Clear RPS1 to avoid duplicate indicators
+    RPS1=""
 }
 
 # Get a simple text mode indicator (for scripts)

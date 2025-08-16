@@ -75,20 +75,28 @@ lacy_shell_auto_mode() {
     lacy_shell_set_mode "auto"
 }
 
-# Get mode indicator for prompt
+# Get mode indicator for prompt (matching lash colors)
 lacy_shell_get_mode_indicator() {
+    # Using colors that match lash's theme:
+    # Shell = Secondary (Dolly/pink-ish)
+    # Agent = Accent (Zest/bright yellow-orange) 
+    # Auto = Primary (Charple/purple)
     case "$LACY_SHELL_CURRENT_MODE" in
         "shell")
-            echo "%K{green}%F{black} $ %k%f"
+            # Shell mode - pink/magenta bar with bold text
+            echo "%F{205}▌%f %B%F{205}Shell%b%f"
             ;;
         "agent")
-            echo "%K{blue}%F{white} ? %k%f"
+            # Agent mode - bright yellow/orange bar with bold text
+            echo "%F{214}▌%f %B%F{214}Agent%b%f"
             ;;
         "auto")
-            echo "%K{yellow}%F{black} ~ %k%f"
+            # Auto mode - purple bar with bold text
+            echo "%F{141}▌%f %B%F{141}Auto %b%f"
             ;;
         *)
-            echo "%K{red}%F{white} ! %k%f"
+            # Unknown mode - red bar
+            echo "%F{196}▌%f %B%F{196}!%b%f"
             ;;
     esac
 }
