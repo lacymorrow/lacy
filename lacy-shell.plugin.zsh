@@ -31,10 +31,11 @@ lacy_shell_cleanup() {
     lacy_shell_remove_top_bar
     lacy_shell_cleanup_mcp
     lacy_shell_cleanup_keybindings
-    unfunction TRAPINT 2>/dev/null
+    trap - INT
     unsetopt IGNORE_EOF
     unset IGNOREEOF
     LACY_SHELL_QUITTING=false
+    LACY_SHELL_ENABLED=false
 }
 
 # Set up hooks

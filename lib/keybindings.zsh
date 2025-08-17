@@ -101,6 +101,7 @@ lacy_shell_delete_char_or_quit_widget() {
     fi
 }
 
+
 # Scrolling widgets
 lacy_shell_scroll_up_widget() {
     # Scroll terminal buffer up (page)
@@ -225,15 +226,73 @@ lacy_shell_interrupt_handler() {
 
 # Set up the interrupt handler
 lacy_shell_setup_interrupt_handler() {
-    # In ZSH, use TRAPINT function for proper ZLE integration
     TRAPINT() {
-        lacy_shell_interrupt_handler
-        # If we're quitting, don't let shell continue
-        if [[ "$LACY_SHELL_QUITTING" == true ]]; then
-            # Exit the current command line completely
+        # Don't handle if already disabled
+        if [[ "$LACY_SHELL_ENABLED" != true ]]; then
             return 130
         fi
-        return 130
+        
+        # Get current time
+        local current_time
+        if command -v gdate >/dev/null 2>&1; then
+            current_time=$(gdate +%s%3N)
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            current_time=$(python3 -c 'import time; print(int(time.time() * 1000))')
+        else
+            current_time=$(date +%s%3N)
+        fi
+        
+        local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
+        
+        if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
+            # Double Ctrl+C - do complete cleanup
+            echo ""
+            echo "👋 Exiting Lacy Shell..."
+            echo ""
+            
+            # Disable everything immediately
+            LACY_SHELL_ENABLED=false
+            LACY_SHELL_QUITTING=true
+            
+            # Remove all hooks immediately
+            precmd_functions=(${precmd_functions:#lacy_shell_precmd})
+            precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
+            
+            # Restore accept-line
+            zle -A .accept-line accept-line 2>/dev/null
+            
+            # Remove top bar
+            lacy_shell_remove_top_bar
+            
+            # Clean up keybindings
+            lacy_shell_cleanup_keybindings
+            
+            # Clean up MCP
+            lacy_shell_cleanup_mcp
+            
+            # Remove this trap itself
+            trap - INT
+            
+            # Clear and reset terminal
+            echo -ne "\033c"
+            clear
+            
+            echo "✅ Lacy Shell disabled. Normal shell behavior restored."
+            echo ""
+            
+            # Return without further processing
+            return 130
+        else
+            # Single Ctrl+C
+            LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
+            echo ""
+            
+            if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
+                lacy_shell_show_top_bar_message "Press Ctrl-C again to quit" "$LACY_SHELL_EXIT_TIMEOUT_SEC"
+            fi
+            
+            return 130
+        fi
     }
 }
 
