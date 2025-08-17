@@ -60,35 +60,22 @@ lacy_shell_auto_mode_widget() {
 # Widget to show help
 lacy_shell_help_widget() {
     echo ""
-    echo "Lacy Shell Help:"
-    echo "================"
+    echo "Lacy Shell"
+    echo ""
     echo "Modes:"
-    echo "  Shell: Normal shell execution (\$)"
-    echo "  Agent: AI-powered assistance (?)"
-    echo "  Auto:  Smart detection (~)"
+    echo "  Shell  Normal shell execution"
+    echo "  Agent  AI-powered assistance"
+    echo "  Auto   Smart detection"
     echo ""
-    echo "Keybindings:"
-    echo "  Ctrl+Space:    Toggle mode (primary)"
-    echo "  Ctrl+T:        Toggle mode (backup)"
-    echo "  Ctrl+X Ctrl+A: Agent mode"
-    echo "  Ctrl+X Ctrl+S: Shell mode"
-    echo "  Ctrl+X Ctrl+U: Auto mode"
-    echo "  Ctrl+X Ctrl+H: This help"
-    echo "  Ctrl+D:        Quit Lacy Shell immediately"
-    echo "  Ctrl+C (2x):   Quit Lacy Shell (press twice quickly)"
-    echo ""
-    echo "Scrolling:"
-    echo "  Page Up:       Scroll up (page)"
-    echo "  Page Down:     Scroll down (page)"
-    echo "  Ctrl+Y:        Scroll up (line)"
-    echo "  Ctrl+E:        Scroll down (line)"
+    echo "Keys:"
+    echo "  Ctrl+Space     Toggle mode"
+    echo "  Ctrl+D         Quit"
+    echo "  Ctrl+C (2x)    Quit"
     echo ""
     echo "Commands:"
-    echo "  ask \"question\"     - Direct AI query"
-    echo "  clear_chat         - Clear conversation"
-    echo "  quit_lacy          - Exit Lacy Shell and restore normal shell"
+    echo "  ask \"text\"     Query AI"
+    echo "  quit_lacy      Exit"
     echo ""
-    echo "Current mode: $LACY_SHELL_CURRENT_MODE"
     zle reset-prompt
 }
 
@@ -103,9 +90,7 @@ lacy_shell_quit_widget() {
 # Widget for Ctrl+D - quit if buffer empty, else delete char
 lacy_shell_delete_char_or_quit_widget() {
     if [[ -z "$BUFFER" ]]; then
-        # Buffer is empty - quit lacy shell
-        echo ""
-        echo "Quitting Lacy Shell (Ctrl+D)..."
+        # Buffer is empty - quit lacy shell (silently)
         BUFFER=""
         zle accept-line
         lacy_shell_quit
@@ -207,14 +192,20 @@ lacy_shell_interrupt_handler() {
     if [[ $time_diff -lt $LACY_SHELL_INTERRUPT_THRESHOLD ]]; then
         # Double Ctrl+C detected - quit Lacy Shell
         echo ""
-        echo "Double Ctrl+C detected. Quitting Lacy Shell..."
         lacy_shell_quit
         return 130
     else
-        # Single Ctrl+C - normal interrupt behavior
+        # Single Ctrl+C - show message in top bar
         LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
-        echo ""
-        echo "^C (press again quickly to quit Lacy Shell)"
+        
+        # Show message in top bar if it's active
+        if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
+            lacy_shell_show_top_bar_message "Press Ctrl-C again to quit"
+        else
+            # Fallback: just clear the line
+            echo ""
+        fi
+        
         return 130
     fi
 }

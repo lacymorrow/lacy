@@ -175,10 +175,10 @@ lacy_shell_draw_top_bar() {
     # Get terminal width
     local term_width=${COLUMNS:-80}
     
-    # Create the status bar content
-    local left_text=" ▌ Lacy Shell"
-    local center_text="Mode: ${mode_text}"
-    local right_text="[Ctrl+Space: Toggle] "
+    # Create the status bar content (minimal)
+    local left_text=" Lacy"
+    local center_text="${mode_text}"
+    local right_text="^Space "
     
     # Calculate padding
     local left_len=${#left_text}
@@ -219,6 +219,78 @@ lacy_shell_draw_top_bar() {
     # Restore cursor attributes and position
     echo -ne "\033[8"  # Restore cursor attributes
     echo -ne "\033[u"
+}
+
+# Show a temporary message in the top bar
+lacy_shell_show_top_bar_message() {
+    local message="$1"
+    local duration="${2:-1.5}"  # Default 1.5 seconds
+    
+    if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" != true ]]; then
+        return
+    fi
+    
+    # Temporarily disable job notifications
+    local old_notify="${notify:-}"
+    unsetopt notify 2>/dev/null
+    setopt no_monitor 2>/dev/null
+    
+    # Get terminal width
+    local term_width=${COLUMNS:-80}
+    
+    # Save current cursor position
+    echo -ne "\033[s"
+    
+    # Temporarily disable scroll region to draw on line 1
+    echo -ne "\033[r"
+    
+    # Move to top line
+    echo -ne "\033[1;1H"
+    
+    # Clear the line
+    echo -ne "\033[K"
+    
+    # Draw the message bar with subtle styling
+    local left_text=" Lacy"
+    local center_text="$message"
+    
+    # Calculate padding for center alignment
+    local left_len=${#left_text}
+    local center_len=${#center_text}
+    local total_len=$((left_len + center_len))
+    local padding=$((term_width - total_len))
+    local left_pad=$((padding / 2))
+    local right_pad=$((padding - left_pad))
+    
+    # Draw with subtle colors
+    echo -ne "\033[48;5;235m"  # Dark gray background
+    echo -ne "\033[38;5;245m${left_text}\033[0m"
+    echo -ne "\033[48;5;235m"  # Continue background
+    printf "%${left_pad}s" ""  # Left padding
+    echo -ne "\033[38;5;250m${center_text}\033[0m"  # Light gray text for message
+    echo -ne "\033[48;5;235m"  # Continue background
+    printf "%${right_pad}s" ""  # Right padding to fill line
+    echo -ne "\033[0m"
+    
+    # Re-enable scroll region
+    local term_height=${LINES:-24}
+    echo -ne "\033[2;${term_height}r"
+    
+    # Restore cursor position
+    echo -ne "\033[u"
+    
+    # Schedule redraw of normal bar after duration
+    # Use disown to prevent job notifications
+    {
+        sleep "$duration"
+        lacy_shell_draw_top_bar
+    } 2>/dev/null &!  # &! is shorthand for & disown
+    
+    # Restore job notification settings
+    if [[ -n "$old_notify" ]]; then
+        setopt notify 2>/dev/null
+    fi
+    unsetopt no_monitor 2>/dev/null
 }
 
 # Remove top status bar and restore normal scrolling
