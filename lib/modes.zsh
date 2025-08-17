@@ -27,12 +27,10 @@ lacy_shell_set_mode() {
     # Save mode to persistence file
     lacy_shell_save_mode "$new_mode"
     
-    # Update prompt if function exists
+    # Update the prompt to show new mode
     if typeset -f lacy_shell_update_prompt > /dev/null; then
         lacy_shell_update_prompt
     fi
-    
-    # Quiet mode switching - indicator shows in prompt
 }
 
 # Get current mode
@@ -83,20 +81,20 @@ lacy_shell_get_mode_indicator() {
     # Auto = Primary (Charple/purple)
     case "$LACY_SHELL_CURRENT_MODE" in
         "shell")
-            # Shell mode - pink/magenta bar with bold text
-            echo "%F{205}▌%f %B%F{205}Shell%b%f"
+            # Shell mode - pink/magenta with background
+            echo "%K{235}%F{205}▌ %B%F{205}SHELL%b %k%f"
             ;;
         "agent")
-            # Agent mode - bright yellow/orange bar with bold text
-            echo "%F{214}▌%f %B%F{214}Agent%b%f"
+            # Agent mode - bright yellow/orange with background
+            echo "%K{235}%F{214}▌ %B%F{214}AGENT%b %k%f"
             ;;
         "auto")
-            # Auto mode - purple bar with bold text
-            echo "%F{141}▌%f %B%F{141}Auto %b%f"
+            # Auto mode - purple with background
+            echo "%K{235}%F{141}▌ %B%F{141}AUTO%b  %k%f"
             ;;
         *)
             # Unknown mode - red bar
-            echo "%F{196}▌%f %B%F{196}!%b%f"
+            echo "%K{235}%F{196}▌ %B%F{196}!%b %k%f"
             ;;
     esac
 }
@@ -136,6 +134,11 @@ lacy_shell_load_saved_mode() {
 lacy_shell_init_mode() {
     local saved_mode=$(lacy_shell_load_saved_mode)
     local default_mode="${LACY_SHELL_DEFAULT_MODE:-auto}"
+    
+    # Ensure we set a valid mode
+    if [[ -z "$saved_mode" ]]; then
+        saved_mode="$default_mode"
+    fi
     
     LACY_SHELL_CURRENT_MODE="$saved_mode"
     

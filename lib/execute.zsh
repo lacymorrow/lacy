@@ -52,6 +52,9 @@ lacy_shell_smart_accept_line() {
                 return
             fi
             
+            # Add to history before clearing buffer
+            print -s -- "$input"
+            
             # Clear the line, accept to exit ZLE, then stream below a fresh line
             BUFFER=""
             zle .accept-line
@@ -60,6 +63,9 @@ lacy_shell_smart_accept_line() {
             ;;
         "auto")
             # Smart auto mode: for non-commands or natural language
+            # Add to history before clearing buffer
+            print -s -- "$input"
+            
             BUFFER=""
             zle .accept-line
             print -r -- ""
@@ -322,30 +328,105 @@ lacy_shell_show_conversation() {
     fi
 }
 
+# Quit lacy shell function
+lacy_shell_quit() {
+    echo ""
+    echo "👋 Exiting Lacy Shell..."
+    echo ""
+    
+    # CRITICAL: Remove precmd hooks FIRST to prevent redrawing
+    precmd_functions=(${precmd_functions:#lacy_shell_precmd})
+    precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
+    
+    # Disable input interception
+    zle -A .accept-line accept-line
+    
+    # Comprehensive terminal reset sequence
+    # Reset all terminal attributes and clear any scroll regions
+    echo -ne "\033c"  # Full terminal reset
+    echo -ne "\033[0m"  # Reset all attributes
+    echo -ne "\033[r"  # Reset scroll region to full screen
+    echo -ne "\033[?1049l"  # Exit alternate screen if active
+    echo -ne "\033[1;1H"  # Move to top-left
+    echo -ne "\033[J"  # Clear from cursor to end of screen
+    
+    # Run cleanup
+    lacy_shell_cleanup
+    
+    # Unset all lacy shell functions and aliases
+    unalias ask suggest aihelp aicomplete hisearch clear_chat show_chat mode mode_style 2>/dev/null
+    unalias mcp_test mcp_check mcp_debug mcp_restart mcp_logs mcp_start mcp_stop 2>/dev/null
+    unalias disable_lacy enable_lacy test_smart_auto quit_lacy lacy_quit 2>/dev/null
+    
+    # Clear screen and reset terminal one more time
+    clear
+    
+    echo "✅ Lacy Shell disabled. Normal shell behavior restored."
+    echo "   To re-enable, source the plugin again or restart your shell."
+    echo ""
+}
+
 # Mode switching commands (work in any mode)
 lacy_shell_mode() {
     case "$1" in
         "shell"|"s")
             lacy_shell_set_mode "shell"
-            echo "Switched to shell mode (\$)"
+            echo ""
+            echo "  %F{205}▌ Switched to SHELL mode%f"
+            echo "  All commands execute directly in shell"
+            echo ""
             ;;
         "agent"|"a")
             lacy_shell_set_mode "agent"
-            echo "Switched to agent mode (?)"
+            echo ""
+            echo "  %F{214}▌ Switched to AGENT mode%f"
+            echo "  All input goes to AI agent"
+            echo ""
             ;;
         "auto"|"u")
             lacy_shell_set_mode "auto"
-            echo "Switched to auto mode (~)"
+            echo ""
+            echo "  %F{141}▌ Switched to AUTO mode%f"
+            echo "  Commands run in shell, natural language goes to AI"
+            echo ""
             ;;
         "toggle"|"t")
             lacy_shell_toggle_mode
+            local new_mode="$LACY_SHELL_CURRENT_MODE"
+            echo ""
+            case "$new_mode" in
+                "shell")
+                    echo "  %F{205}▌ Switched to SHELL mode%f"
+                    ;;
+                "agent")
+                    echo "  %F{214}▌ Switched to AGENT mode%f"
+                    ;;
+                "auto")
+                    echo "  %F{141}▌ Switched to AUTO mode%f"
+                    ;;
+            esac
+            echo ""
             ;;
         "status")
             lacy_shell_mode_status
             ;;
         *)
+            echo ""
             echo "Usage: mode [shell|agent|auto|toggle|status] or [s|a|u|t]"
-            echo "Current mode: $LACY_SHELL_CURRENT_MODE"
+            echo ""
+            echo -n "Current mode: "
+            case "$LACY_SHELL_CURRENT_MODE" in
+                "shell")
+                    echo "%F{205}▌ SHELL%f"
+                    ;;
+                "agent")
+                    echo "%F{214}▌ AGENT%f"
+                    ;;
+                "auto")
+                    echo "%F{141}▌ AUTO%f"
+                    ;;
+            esac
+            echo ""
             ;;
     esac
 }
@@ -359,6 +440,7 @@ alias hisearch="lacy_shell_ai_history_search"
 alias clear_chat="lacy_shell_clear_conversation"
 alias show_chat="lacy_shell_show_conversation"
 alias mode="lacy_shell_mode"
+alias mode_style="lacy_shell_toggle_indicator_style"
 
 # MCP-related aliases
 alias mcp_test="lacy_shell_test_mcp"
@@ -372,6 +454,10 @@ alias mcp_stop="lacy_shell_stop_mcp_servers"
 # Emergency aliases for input issues
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"
+
+# Quit aliases
+alias quit_lacy="lacy_shell_quit"
+alias lacy_quit="lacy_shell_quit"
 
 # Testing aliases
 alias test_smart_auto="lacy_shell_test_smart_auto"

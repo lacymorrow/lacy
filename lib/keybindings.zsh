@@ -18,6 +18,12 @@ lacy_shell_setup_keybindings() {
     bindkey '^X^S' lacy_shell_shell_mode_widget     # Ctrl+X Ctrl+S: Shell mode  
     bindkey '^X^U' lacy_shell_auto_mode_widget      # Ctrl+X Ctrl+U: Auto mode
     bindkey '^X^H' lacy_shell_help_widget           # Ctrl+X Ctrl+H: Help
+    
+    # Terminal scrolling keybindings
+    bindkey '^[[5~' lacy_shell_scroll_up_widget     # Page Up: Scroll up
+    bindkey '^[[6~' lacy_shell_scroll_down_widget   # Page Down: Scroll down
+    bindkey '^Y' lacy_shell_scroll_up_line_widget   # Ctrl+Y: Scroll up one line
+    bindkey '^E' lacy_shell_scroll_down_line_widget # Ctrl+E: Scroll down one line
 }
 
 # Widget to toggle mode
@@ -62,12 +68,82 @@ lacy_shell_help_widget() {
     echo "  Ctrl+X Ctrl+U: Auto mode"
     echo "  Ctrl+X Ctrl+H: This help"
     echo ""
+    echo "Scrolling:"
+    echo "  Page Up:       Scroll up (page)"
+    echo "  Page Down:     Scroll down (page)"
+    echo "  Ctrl+Y:        Scroll up (line)"
+    echo "  Ctrl+E:        Scroll down (line)"
+    echo ""
     echo "Commands:"
     echo "  ask \"question\"     - Direct AI query"
     echo "  clear_chat         - Clear conversation"
+    echo "  quit_lacy          - Exit Lacy Shell and restore normal shell"
     echo ""
     echo "Current mode: $LACY_SHELL_CURRENT_MODE"
     zle reset-prompt
+}
+
+# Widget to clear/cancel current input (was quit)
+lacy_shell_quit_widget() {
+    # Clear the current line buffer
+    BUFFER=""
+    # Reset the prompt
+    zle reset-prompt
+}
+
+# Scrolling widgets
+lacy_shell_scroll_up_widget() {
+    # Scroll terminal buffer up (page)
+    zle -I
+    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
+        printf '\e]1337;ScrollPageUp\a'
+    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
+        # Send shift+page up for terminal scrollback
+        printf '\e[5;2~'
+    else
+        # Generic terminal: try to scroll with tput
+        tput rin 5 2>/dev/null || printf '\e[5S'
+    fi
+}
+
+lacy_shell_scroll_down_widget() {
+    # Scroll terminal buffer down (page)
+    zle -I
+    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
+        printf '\e]1337;ScrollPageDown\a'
+    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
+        # Send shift+page down for terminal scrollback
+        printf '\e[6;2~'
+    else
+        # Generic terminal: try to scroll with tput
+        tput ri 5 2>/dev/null || printf '\e[5T'
+    fi
+}
+
+lacy_shell_scroll_up_line_widget() {
+    # Scroll terminal buffer up (single line)
+    zle -I
+    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
+        printf '\e]1337;ScrollLineUp\a'
+    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
+        printf '\eOA'
+    else
+        # Generic terminal: scroll one line
+        tput rin 1 2>/dev/null || printf '\e[S'
+    fi
+}
+
+lacy_shell_scroll_down_line_widget() {
+    # Scroll terminal buffer down (single line)
+    zle -I
+    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
+        printf '\e]1337;ScrollLineDown\a'
+    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
+        printf '\eOB'
+    else
+        # Generic terminal: scroll one line
+        tput ri 1 2>/dev/null || printf '\e[T'
+    fi
 }
 
 # Enhanced execute line widget that shows mode info
@@ -92,6 +168,11 @@ zle -N lacy_shell_agent_mode_widget
 zle -N lacy_shell_shell_mode_widget
 zle -N lacy_shell_auto_mode_widget
 zle -N lacy_shell_help_widget
+zle -N lacy_shell_quit_widget
+zle -N lacy_shell_scroll_up_widget
+zle -N lacy_shell_scroll_down_widget
+zle -N lacy_shell_scroll_up_line_widget
+zle -N lacy_shell_scroll_down_line_widget
 zle -N lacy_shell_execute_line_widget
 
 # Alternative keybindings that don't conflict with system shortcuts

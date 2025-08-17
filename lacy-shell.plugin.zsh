@@ -41,7 +41,13 @@ lacy_shell_init() {
 
 # Clean up function
 lacy_shell_cleanup() {
+    # Remove top bar if active
+    lacy_shell_remove_top_bar
+    
+    # Clean up MCP
     lacy_shell_cleanup_mcp
+    
+    # Unset variables
     unset LACY_SHELL_CURRENT_MODE
     unset LACY_SHELL_CONFIG
 }
