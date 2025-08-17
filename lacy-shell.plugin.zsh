@@ -36,6 +36,12 @@ lacy_shell_init() {
     # Initialize mode (loads saved mode or uses default)
     lacy_shell_init_mode
     
+    # Set up interrupt handler for double Ctrl-C quit
+    lacy_shell_setup_interrupt_handler
+    
+    # Set up EOF handler for Ctrl-D quit
+    lacy_shell_setup_eof_handler
+    
     # Quiet initialization - mode shows in prompt
 }
 
@@ -47,9 +53,17 @@ lacy_shell_cleanup() {
     # Clean up MCP
     lacy_shell_cleanup_mcp
     
+    # Remove interrupt handler
+    trap - INT
+    
+    # Restore normal EOF behavior
+    unsetopt IGNORE_EOF
+    unset IGNOREEOF
+    
     # Unset variables
     unset LACY_SHELL_CURRENT_MODE
     unset LACY_SHELL_CONFIG
+    unset LACY_SHELL_LAST_INTERRUPT_TIME
 }
 
 # Set up smart execution and prompt hooks

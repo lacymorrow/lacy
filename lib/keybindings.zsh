@@ -2,6 +2,10 @@
 
 # Keybinding setup for Lacy Shell
 
+# Variables for double Ctrl-C detection
+LACY_SHELL_LAST_INTERRUPT_TIME=0
+LACY_SHELL_INTERRUPT_THRESHOLD=500  # milliseconds
+
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
     # Enable emacs mode (more compatible)
@@ -24,6 +28,9 @@ lacy_shell_setup_keybindings() {
     bindkey '^[[6~' lacy_shell_scroll_down_widget   # Page Down: Scroll down
     bindkey '^Y' lacy_shell_scroll_up_line_widget   # Ctrl+Y: Scroll up one line
     bindkey '^E' lacy_shell_scroll_down_line_widget # Ctrl+E: Scroll down one line
+    
+    # Override Ctrl+D behavior
+    bindkey '^D' lacy_shell_delete_char_or_quit_widget  # Ctrl+D: Quit if buffer empty
 }
 
 # Widget to toggle mode
@@ -67,6 +74,8 @@ lacy_shell_help_widget() {
     echo "  Ctrl+X Ctrl+S: Shell mode"
     echo "  Ctrl+X Ctrl+U: Auto mode"
     echo "  Ctrl+X Ctrl+H: This help"
+    echo "  Ctrl+D:        Quit Lacy Shell immediately"
+    echo "  Ctrl+C (2x):   Quit Lacy Shell (press twice quickly)"
     echo ""
     echo "Scrolling:"
     echo "  Page Up:       Scroll up (page)"
@@ -89,6 +98,21 @@ lacy_shell_quit_widget() {
     BUFFER=""
     # Reset the prompt
     zle reset-prompt
+}
+
+# Widget for Ctrl+D - quit if buffer empty, else delete char
+lacy_shell_delete_char_or_quit_widget() {
+    if [[ -z "$BUFFER" ]]; then
+        # Buffer is empty - quit lacy shell
+        echo ""
+        echo "Quitting Lacy Shell (Ctrl+D)..."
+        BUFFER=""
+        zle accept-line
+        lacy_shell_quit
+    else
+        # Buffer has content - normal delete char behavior
+        zle delete-char-or-list
+    fi
 }
 
 # Scrolling widgets
@@ -162,6 +186,53 @@ lacy_shell_execute_line_widget() {
     zle accept-line
 }
 
+# Interrupt handler for double Ctrl-C quit
+lacy_shell_interrupt_handler() {
+    # Get current time in milliseconds (portable method)
+    local current_time
+    if command -v gdate >/dev/null 2>&1; then
+        # macOS with GNU date installed
+        current_time=$(gdate +%s%3N)
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS without GNU date - use python for milliseconds
+        current_time=$(python3 -c 'import time; print(int(time.time() * 1000))')
+    else
+        # Linux and other systems with GNU date
+        current_time=$(date +%s%3N)
+    fi
+    
+    local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
+    
+    # Check if this is a double Ctrl+C within threshold
+    if [[ $time_diff -lt $LACY_SHELL_INTERRUPT_THRESHOLD ]]; then
+        # Double Ctrl+C detected - quit Lacy Shell
+        echo ""
+        echo "Double Ctrl+C detected. Quitting Lacy Shell..."
+        lacy_shell_quit
+        return 130
+    else
+        # Single Ctrl+C - normal interrupt behavior
+        LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
+        echo ""
+        echo "^C (press again quickly to quit Lacy Shell)"
+        return 130
+    fi
+}
+
+# Set up the interrupt handler
+lacy_shell_setup_interrupt_handler() {
+    # Set up Ctrl-C handler
+    trap 'lacy_shell_interrupt_handler' INT
+}
+
+# EOF handler setup for Ctrl-D
+lacy_shell_setup_eof_handler() {
+    # Prevent Ctrl-D from exiting the shell at all
+    # The widget will handle quitting lacy shell
+    setopt IGNORE_EOF
+    export IGNOREEOF=1000
+}
+
 # Register all widgets
 zle -N lacy_shell_toggle_mode_widget
 zle -N lacy_shell_agent_mode_widget
@@ -169,6 +240,7 @@ zle -N lacy_shell_shell_mode_widget
 zle -N lacy_shell_auto_mode_widget
 zle -N lacy_shell_help_widget
 zle -N lacy_shell_quit_widget
+zle -N lacy_shell_delete_char_or_quit_widget
 zle -N lacy_shell_scroll_up_widget
 zle -N lacy_shell_scroll_down_widget
 zle -N lacy_shell_scroll_up_line_widget
