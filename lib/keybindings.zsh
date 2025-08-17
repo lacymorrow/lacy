@@ -4,7 +4,9 @@
 
 # Variables for double Ctrl-C detection
 LACY_SHELL_LAST_INTERRUPT_TIME=0
-LACY_SHELL_INTERRUPT_THRESHOLD=500  # milliseconds
+# Exit timeout configuration (centralized)
+LACY_SHELL_EXIT_TIMEOUT_MS=1000  # milliseconds - time window to press Ctrl-C again
+LACY_SHELL_EXIT_TIMEOUT_SEC=$(echo "scale=3; $LACY_SHELL_EXIT_TIMEOUT_MS / 1000" | bc)  # seconds for display
 
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
@@ -189,7 +191,7 @@ lacy_shell_interrupt_handler() {
     local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
     
     # Check if this is a double Ctrl+C within threshold
-    if [[ $time_diff -lt $LACY_SHELL_INTERRUPT_THRESHOLD ]]; then
+    if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
         # Double Ctrl+C detected - quit Lacy Shell
         echo ""
         lacy_shell_quit
@@ -200,7 +202,8 @@ lacy_shell_interrupt_handler() {
         
         # Show message in top bar if it's active
         if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
-            lacy_shell_show_top_bar_message "Press Ctrl-C again to quit"
+            # Use pre-calculated timeout in seconds
+            lacy_shell_show_top_bar_message "Press Ctrl-C again to quit" "$LACY_SHELL_EXIT_TIMEOUT_SEC"
         else
             # Fallback: just clear the line
             echo ""
