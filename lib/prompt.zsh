@@ -7,9 +7,8 @@ LACY_SHELL_ORIGINAL_PS1="$PS1"
 LACY_SHELL_ORIGINAL_RPS1="$RPS1"
 LACY_SHELL_BASE_PS1=""
 
-# Mode indicator display style (prompt, right, top)
-# Default to top style for status bar
-LACY_SHELL_INDICATOR_STYLE="${LACY_SHELL_INDICATOR_STYLE:-top}"
+# Mode indicator display style
+LACY_SHELL_INDICATOR_STYLE="$LACY_SHELL_DEFAULT_INDICATOR_STYLE"
 
 # Track if top bar is active
 LACY_SHELL_TOP_BAR_ACTIVE=false
@@ -224,7 +223,7 @@ lacy_shell_draw_top_bar() {
 # Show a temporary message in the top bar
 lacy_shell_show_top_bar_message() {
     local message="$1"
-    local duration="${2:-1.5}"  # Default 1.5 seconds
+    local duration="${2:-$LACY_SHELL_MESSAGE_DURATION_SEC}"
     
     if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" != true ]]; then
         return

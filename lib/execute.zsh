@@ -4,6 +4,12 @@
 
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
+    # If Lacy Shell is disabled, use normal accept-line
+    if [[ "$LACY_SHELL_ENABLED" != true ]]; then
+        zle .accept-line
+        return
+    fi
+    
     local input="$BUFFER"
     
     # Skip empty commands
@@ -197,6 +203,10 @@ lacy_shell_is_obvious_natural_language() {
 
 # Precmd hook - called before each prompt
 lacy_shell_precmd() {
+    # Don't run if disabled or quitting
+    if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
+        return
+    fi
     # Update prompt with current mode
     lacy_shell_update_prompt
 }
@@ -330,6 +340,10 @@ lacy_shell_show_conversation() {
 
 # Quit lacy shell function
 lacy_shell_quit() {
+    # Disable Lacy Shell immediately
+    LACY_SHELL_ENABLED=false
+    LACY_SHELL_QUITTING=true
+    
     echo ""
     echo "👋 Exiting Lacy Shell..."
     echo ""

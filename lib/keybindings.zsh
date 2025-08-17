@@ -4,9 +4,8 @@
 
 # Variables for double Ctrl-C detection
 LACY_SHELL_LAST_INTERRUPT_TIME=0
-# Exit timeout configuration (centralized)
-LACY_SHELL_EXIT_TIMEOUT_MS=1000  # milliseconds - time window to press Ctrl-C again
-LACY_SHELL_EXIT_TIMEOUT_SEC=$(echo "scale=3; $LACY_SHELL_EXIT_TIMEOUT_MS / 1000" | bc)  # seconds for display
+LACY_SHELL_QUITTING=false
+# Exit timeout configuration is defined in constants.zsh
 
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
@@ -175,6 +174,11 @@ lacy_shell_execute_line_widget() {
 
 # Interrupt handler for double Ctrl-C quit
 lacy_shell_interrupt_handler() {
+    # Don't handle if disabled
+    if [[ "$LACY_SHELL_ENABLED" != true ]]; then
+        return 130
+    fi
+    
     # Get current time in milliseconds (portable method)
     local current_time
     if command -v gdate >/dev/null 2>&1; then
@@ -193,6 +197,12 @@ lacy_shell_interrupt_handler() {
     # Check if this is a double Ctrl+C within threshold
     if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
         # Double Ctrl+C detected - quit Lacy Shell
+        LACY_SHELL_QUITTING=true
+        
+        # Remove precmd hooks IMMEDIATELY to prevent redraw
+        precmd_functions=(${precmd_functions:#lacy_shell_precmd})
+        precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
+        
         echo ""
         lacy_shell_quit
         return 130
@@ -215,8 +225,16 @@ lacy_shell_interrupt_handler() {
 
 # Set up the interrupt handler
 lacy_shell_setup_interrupt_handler() {
-    # Set up Ctrl-C handler
-    trap 'lacy_shell_interrupt_handler' INT
+    # In ZSH, use TRAPINT function for proper ZLE integration
+    TRAPINT() {
+        lacy_shell_interrupt_handler
+        # If we're quitting, don't let shell continue
+        if [[ "$LACY_SHELL_QUITTING" == true ]]; then
+            # Exit the current command line completely
+            return 130
+        fi
+        return 130
+    }
 }
 
 # EOF handler setup for Ctrl-D
@@ -225,6 +243,30 @@ lacy_shell_setup_eof_handler() {
     # The widget will handle quitting lacy shell
     setopt IGNORE_EOF
     export IGNOREEOF=1000
+}
+
+# Cleanup all keybindings
+lacy_shell_cleanup_keybindings() {
+    # Restore default keybindings
+    bindkey '^D' delete-char-or-list
+    bindkey '^@' set-mark-command
+    bindkey '^T' transpose-chars
+    bindkey '^Y' yank
+    bindkey '^E' end-of-line
+    
+    # Remove all custom widgets
+    zle -D lacy_shell_toggle_mode_widget 2>/dev/null
+    zle -D lacy_shell_agent_mode_widget 2>/dev/null
+    zle -D lacy_shell_shell_mode_widget 2>/dev/null
+    zle -D lacy_shell_auto_mode_widget 2>/dev/null
+    zle -D lacy_shell_help_widget 2>/dev/null
+    zle -D lacy_shell_quit_widget 2>/dev/null
+    zle -D lacy_shell_delete_char_or_quit_widget 2>/dev/null
+    zle -D lacy_shell_scroll_up_widget 2>/dev/null
+    zle -D lacy_shell_scroll_down_widget 2>/dev/null
+    zle -D lacy_shell_scroll_up_line_widget 2>/dev/null
+    zle -D lacy_shell_scroll_down_line_widget 2>/dev/null
+    zle -D lacy_shell_execute_line_widget 2>/dev/null
 }
 
 # Register all widgets

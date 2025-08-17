@@ -4,7 +4,7 @@
 
 # Default configuration
 typeset -A LACY_SHELL_CONFIG
-LACY_SHELL_CONFIG_FILE="${HOME}/.lacy-shell/config.yaml"
+# LACY_SHELL_CONFIG_FILE is defined in constants.zsh
 
 # Simple YAML parser for shell (handles basic key: value)
 lacy_shell_parse_yaml_value() {
@@ -17,14 +17,11 @@ lacy_shell_parse_yaml_value() {
 
 # Load configuration from file
 lacy_shell_load_config() {
-    # Set defaults
-    LACY_SHELL_DEFAULT_MODE="auto"
-    LACY_SHELL_CURRENT_MODE="auto"
+    # Set defaults from constants
+    LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
     
-    # Create config directory if it doesn't exist
-    if [[ ! -d "${HOME}/.lacy-shell" ]]; then
-        mkdir -p "${HOME}/.lacy-shell"
-    fi
+    # Ensure config directory exists
+    mkdir -p "$LACY_SHELL_HOME"
     
     # Create default config if it doesn't exist
     if [[ ! -f "$LACY_SHELL_CONFIG_FILE" ]]; then
@@ -33,13 +30,6 @@ lacy_shell_load_config() {
     
     # Parse configuration using simple shell parsing
     if [[ -f "$LACY_SHELL_CONFIG_FILE" ]]; then
-        # Load default mode
-        local mode_line=$(grep -A 1 "^modes:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null | grep "default:" | head -1)
-        if [[ -n "$mode_line" ]]; then
-            local default_mode=$(echo "$mode_line" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'")
-            LACY_SHELL_DEFAULT_MODE="${default_mode:-auto}"
-        fi
-        
         # Load API keys
         local in_api_section=false
         while IFS= read -r line; do
@@ -93,15 +83,10 @@ lacy_shell_load_config() {
         export LACY_SHELL_API_ANTHROPIC="$ANTHROPIC_API_KEY"
     fi
     
-    # Load persisted mode if exists
-    if [[ -f "${HOME}/.lacy_shell_mode" ]]; then
-        LACY_SHELL_CURRENT_MODE=$(cat "${HOME}/.lacy_shell_mode")
-    else
-        LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
-    fi
+    # Initialize current mode from default
+    LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
     
-    # Export the configuration
-    export LACY_SHELL_DEFAULT_MODE
+    # Export configuration
     export LACY_SHELL_CURRENT_MODE
 }
 

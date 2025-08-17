@@ -1,12 +1,12 @@
 #!/usr/bin/env zsh
 
 # Lacy Shell - Smart shell plugin with MCP support
-# Main plugin file
 
 # Plugin directory
 LACY_SHELL_DIR="${0:A:h}"
 
-# Load configuration
+# Load modules in order
+source "$LACY_SHELL_DIR/lib/constants.zsh"
 source "$LACY_SHELL_DIR/lib/config.zsh"
 source "$LACY_SHELL_DIR/lib/modes.zsh"
 source "$LACY_SHELL_DIR/lib/mcp.zsh"
@@ -15,63 +15,34 @@ source "$LACY_SHELL_DIR/lib/keybindings.zsh"
 source "$LACY_SHELL_DIR/lib/prompt.zsh"
 source "$LACY_SHELL_DIR/lib/execute.zsh"
 
-# Initialize the plugin
+# Initialize
 lacy_shell_init() {
-    # Load configuration
     lacy_shell_load_config
-    
-    # Ensure variables are exported globally
-    export LACY_SHELL_MCP_SERVERS
-    export LACY_SHELL_MCP_SERVERS_JSON
-    
-    # Set up keybindings
     lacy_shell_setup_keybindings
-    
-    # Initialize MCP connections
     lacy_shell_init_mcp
-    
-    # Set up prompt modifications
     lacy_shell_setup_prompt
-    
-    # Initialize mode (loads saved mode or uses default)
     lacy_shell_init_mode
-    
-    # Set up interrupt handler for double Ctrl-C quit
     lacy_shell_setup_interrupt_handler
-    
-    # Set up EOF handler for Ctrl-D quit
     lacy_shell_setup_eof_handler
-    
-    # Quiet initialization - mode shows in prompt
 }
 
-# Clean up function
+# Cleanup
 lacy_shell_cleanup() {
-    # Remove top bar if active
     lacy_shell_remove_top_bar
-    
-    # Clean up MCP
     lacy_shell_cleanup_mcp
-    
-    # Remove interrupt handler
-    trap - INT
-    
-    # Restore normal EOF behavior
+    lacy_shell_cleanup_keybindings
+    unfunction TRAPINT 2>/dev/null
     unsetopt IGNORE_EOF
     unset IGNOREEOF
-    
-    # Unset variables
-    unset LACY_SHELL_CURRENT_MODE
-    unset LACY_SHELL_CONFIG
-    unset LACY_SHELL_LAST_INTERRUPT_TIME
+    LACY_SHELL_QUITTING=false
 }
 
-# Set up smart execution and prompt hooks
+# Set up hooks
 zle -N accept-line lacy_shell_smart_accept_line
 precmd_functions+=(lacy_shell_precmd)
 
-# Initialize on load
+# Initialize
 lacy_shell_init
 
-# Add cleanup on shell exit
+# Cleanup on exit
 trap lacy_shell_cleanup EXIT

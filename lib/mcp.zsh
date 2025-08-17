@@ -11,8 +11,7 @@ typeset -A LACY_SHELL_MCP_TOOLS
 # MCP configuration (initialized in config.zsh)
 # Don't initialize here to avoid conflicts
 
-# MCP communication directory
-LACY_SHELL_MCP_DIR="${HOME}/.lacy-shell/mcp"
+# MCP communication directory is defined in constants.zsh
 
 # Initialize MCP connections
 lacy_shell_init_mcp() {
@@ -182,7 +181,7 @@ lacy_shell_mcp_send() {
 # Read MCP response from server
 lacy_shell_mcp_read() {
     local server_name="$1"
-    local timeout="${2:-5}"
+    local timeout="${2:-$LACY_SHELL_MCP_TIMEOUT_SEC}"
     local pipe_out="${LACY_SHELL_MCP_PIPES_OUT[$server_name]}"
     
     if [[ -n "$pipe_out" && -p "$pipe_out" ]]; then
@@ -324,8 +323,7 @@ print(json.dumps(message))
     return 1
 }
 
-# Conversation history
-LACY_SHELL_CONVERSATION_FILE="${HOME}/.lacy-shell/conversation.log"
+# Conversation history file is defined in constants.zsh
 
 # Send query to AI with MCP context and conversation history
 lacy_shell_query_agent() {
