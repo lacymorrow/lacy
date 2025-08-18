@@ -24,10 +24,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/username/lacy-shell.git"
+    "url": "https://github.com/lacymorrow/lacy-shell.git"
   },
   "bugs": {
-    "url": "https://github.com/username/lacy-shell/issues"
+    "url": "https://github.com/lacymorrow/lacy-shell/issues"
   },
-  "homepage": "https://github.com/username/lacy-shell#readme"
+  "homepage": "https://github.com/lacymorrow/lacy-shell#readme"
 }

@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Installation directory
 INSTALL_DIR="${HOME}/.lacy-shell"
-REPO_URL="https://github.com/username/lacy-shell.git"
+REPO_URL="https://github.com/lacymorrow/lacy-shell.git"
 
 echo -e "${BLUE}🚀 Installing Lacy Shell...${NC}"
 

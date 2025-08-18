@@ -1,3 +1,16 @@
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+
+# Node/Bun artifacts (agent subproject)
+agent/node_modules/
+agent/lacy-agent
+
+# Logs
+*.log
 # General
 .DS_Store
 *.log

@@ -16,7 +16,7 @@ LACY_SHELL_MODE_DESCRIPTIONS[auto]="Try shell commands first, fallback to AI age
 lacy_shell_set_mode() {
     local new_mode="$1"
     
-    if [[ ! " ${LACY_SHELL_MODES[@]} " =~ " ${new_mode} " ]]; then
+    if [[ ! " ${LACY_SHELL_MODES[@]} " =~  ${new_mode}  ]]; then
         echo "Invalid mode: $new_mode. Available modes: ${LACY_SHELL_MODES[*]}"
         return 1
     fi
@@ -89,7 +89,7 @@ lacy_shell_save_mode() {
 lacy_shell_init_mode() {
     if [[ -f "$LACY_SHELL_MODE_FILE" ]]; then
         local saved_mode=$(cat "$LACY_SHELL_MODE_FILE" 2>/dev/null)
-        if [[ " ${LACY_SHELL_MODES[@]} " =~ " ${saved_mode} " ]]; then
+        if [[ " ${LACY_SHELL_MODES[@]} " =~  ${saved_mode}  ]]; then
             LACY_SHELL_CURRENT_MODE="$saved_mode"
         else
             LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"

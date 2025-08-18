@@ -50,7 +50,7 @@ lacy_shell_should_use_agent() {
     fi
     
     # Check for natural language patterns
-    if [[ "$input_lower" =~ "^(can|could|would|should|do|does|did|is|are|was|were|have|has|had|will|would)" ]]; then
+    if [[ "$input_lower" =~ ^(can|could|would|should|do|does|did|is|are|was|were|have|has|had|will|would) ]]; then
         return 0  # Use agent
     fi
     
@@ -63,12 +63,12 @@ lacy_shell_should_use_agent() {
     fi
     
     # Check for file paths or command-like patterns
-    if [[ "$input" =~ "^[./~]" || "$input" =~ "^[a-zA-Z0-9_-]+$" ]]; then
+    if [[ "$input" =~ ^[./~] || "$input" =~ ^[a-zA-Z0-9_-]+$ ]]; then
         return 1  # Use shell
     fi
     
     # Check for command patterns (contains flags/options)
-    if [[ "$input" =~ " -[a-zA-Z]" || "$input" =~ " --[a-zA-Z]" ]]; then
+    if [[ "$input" =~  -[a-zA-Z] || "$input" =~  --[a-zA-Z] ]]; then
         return 1  # Use shell
     fi
     

@@ -185,8 +185,26 @@ lacy_shell_mcp_read() {
     local pipe_out="${LACY_SHELL_MCP_PIPES_OUT[$server_name]}"
     
     if [[ -n "$pipe_out" && -p "$pipe_out" ]]; then
-        timeout "$timeout" cat "$pipe_out" 2>/dev/null
-        return $?
+        # Cross-platform timeout: prefer timeout/gtimeout, otherwise fallback
+        if command -v timeout >/dev/null 2>&1; then
+            timeout "$timeout" cat "$pipe_out" 2>/dev/null
+            return $?
+        elif command -v gtimeout >/dev/null 2>&1; then
+            gtimeout "$timeout" cat "$pipe_out" 2>/dev/null
+            return $?
+        else
+            # Fallback: run cat in background and kill after timeout
+            (
+                cat "$pipe_out" &
+                local cat_pid=$!
+                sleep "$timeout" 2>/dev/null || true
+                if kill -0 "$cat_pid" 2>/dev/null; then
+                    kill "$cat_pid" 2>/dev/null || true
+                fi
+                wait "$cat_pid" 2>/dev/null || true
+            ) 2>/dev/null
+            return 0
+        fi
     else
         return 1
     fi
@@ -435,8 +453,11 @@ lacy_shell_send_to_ai_streaming() {
     local input_file="$1"
     local query="$2"
     
-    # Try OpenAI first, then Anthropic
-    if [[ -n "$LACY_SHELL_API_OPENAI" ]]; then
+    # Prefer configured provider/model, fallback by available keys
+    local provider="${LACY_SHELL_PROVIDER:-$LACY_SHELL_DEFAULT_PROVIDER}"
+    if [[ "$provider" == "anthropic" && -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
+        lacy_shell_query_anthropic_streaming "$input_file" "$query"
+    elif [[ -n "$LACY_SHELL_API_OPENAI" ]]; then
         lacy_shell_query_openai_streaming "$input_file" "$query"
     elif [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
         lacy_shell_query_anthropic_streaming "$input_file" "$query"
@@ -454,7 +475,7 @@ lacy_shell_send_to_ai_streaming_fallback() {
         # Use curl directly for OpenAI
         local json_payload=$(cat <<EOF
 {
-  "model": "gpt-4",
+  "model": "${LACY_SHELL_MODEL_NAME:-$LACY_SHELL_DEFAULT_MODEL}",
   "messages": [
     {"role": "system", "content": "You are a helpful coding assistant. Be concise and practical."},
     {"role": "user", "content": "$query"}
@@ -474,7 +495,7 @@ EOF
         # Use curl directly for Anthropic
         local json_payload=$(cat <<EOF
 {
-  "model": "claude-3-5-sonnet-20241022",
+  "model": "${LACY_SHELL_MODEL_NAME:-claude-3-5-sonnet-20241022}",
   "max_tokens": 1500,
   "messages": [
     {"role": "user", "content": "$query"}
@@ -505,7 +526,7 @@ lacy_shell_query_openai_streaming() {
     
     # Create JSON payload with proper escaping
     local json_payload="{
-  \"model\": \"gpt-4\",
+  \"model\": \"${LACY_SHELL_MODEL_NAME:-$LACY_SHELL_DEFAULT_MODEL}\",
   \"messages\": [
     {
       \"role\": \"system\",
@@ -558,7 +579,7 @@ lacy_shell_query_anthropic_streaming() {
     
     # Create JSON payload with proper escaping
     local json_payload="{
-  \"model\": \"claude-3-5-sonnet-20241022\",
+  \"model\": \"${LACY_SHELL_MODEL_NAME:-claude-3-5-sonnet-20241022}\",
   \"max_tokens\": 1500,
   \"messages\": [
     {
@@ -753,8 +774,9 @@ lacy_shell_test_mcp() {
     echo ""
     if [[ -d "$LACY_SHELL_MCP_DIR" ]]; then
         echo "✅ MCP directory: $LACY_SHELL_MCP_DIR"
-        local pipe_count=$(find "$LACY_SHELL_MCP_DIR" -name "*.pipe" 2>/dev/null | wc -l)
-        echo "   Active pipes: $pipe_count"
+        # Count named pipes (FIFOs) for an accurate view of active IPC files
+        local pipe_count=$(find "$LACY_SHELL_MCP_DIR" -type p 2>/dev/null | wc -l | tr -d ' ')
+        echo "   Named pipes: $pipe_count"
     else
         echo "❌ MCP directory not found"
     fi

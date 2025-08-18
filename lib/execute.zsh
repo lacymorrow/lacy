@@ -192,7 +192,7 @@ lacy_shell_is_obvious_natural_language() {
         local first_word="${input%% *}"
         if ! lacy_shell_command_exists "$first_word"; then
             # Check if it has sentence-like patterns (articles, pronouns, etc.)
-            if [[ "$input_lower" =~ " (the|a|an|this|that|these|those|i|you|we|they|it) " ]]; then
+            if [[ "$input_lower" =~  (the|a|an|this|that|these|those|i|you|we|they|it)  ]]; then
                 return 0
             fi
         fi

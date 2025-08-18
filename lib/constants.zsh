@@ -17,6 +17,8 @@ readonly LACY_SHELL_MCP_DIR="${LACY_SHELL_HOME}/mcp"
 readonly LACY_SHELL_DEFAULT_MODE="auto"
 readonly LACY_SHELL_DEFAULT_INDICATOR_STYLE="top"
 readonly LACY_SHELL_DEFAULT_CONFIDENCE_THRESHOLD="0.7"
+readonly LACY_SHELL_DEFAULT_PROVIDER="openai"
+readonly LACY_SHELL_DEFAULT_MODEL="gpt-4o-mini"
 
 # === Timeouts (in milliseconds) ===
 readonly LACY_SHELL_EXIT_TIMEOUT_MS=1000

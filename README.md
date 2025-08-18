@@ -11,7 +11,7 @@ Dead-simple zsh plugin that adds an AI agent to your terminal. When `lash` is in
 ## Install
 
 ```bash
-git clone https://github.com/your-username/lacy-shell.git ~/.lacy-shell
+git clone https://github.com/lacymorrow/lacy-shell.git ~/.lacy-shell
 echo 'source ~/.lacy-shell/lacy-shell.plugin.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
@@ -36,6 +36,10 @@ api_keys:
 
 modes:
   default: "auto"
+
+model:
+  provider: openai                 # openai | anthropic
+  name: gpt-4o-mini                # used when lash is not installed
 ```
 
 Notes:
@@ -60,6 +64,7 @@ Behavior in Auto mode:
 - Ensure the plugin is sourced: `source ~/.lacy-shell/lacy-shell.plugin.zsh`
 - Check keys for fallback mode: `env | grep LACY_SHELL_API`
 - Prefer installing `lash` for models/MCP: see `brew` commands above
+ - On macOS without `coreutils`, MCP timeouts fall back to a portable method; optionally install `gtimeout` via `brew install coreutils` for best behavior
 
 ## License
 
