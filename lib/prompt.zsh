@@ -12,17 +12,25 @@ LACY_SHELL_INDICATOR_STYLE="$LACY_SHELL_DEFAULT_INDICATOR_STYLE"
 
 # Track if top bar is active
 LACY_SHELL_TOP_BAR_ACTIVE=false
+# PID of any scheduled top bar message redraw job
+LACY_SHELL_MESSAGE_JOB_PID=""
+
+# Helper: check if a PID is alive
+lacy_shell_pid_is_alive() {
+    local pid="$1"
+    if [[ -z "$pid" ]]; then
+        return 1
+    fi
+    kill -0 "$pid" 2>/dev/null
+}
 
 # Setup prompt integration
 lacy_shell_setup_prompt() {
     # Store the base PS1 for later use
     LACY_SHELL_BASE_PS1="$PS1"
     
-    # Remove any duplicate functions from precmd
+    # Ensure we don't register redundant precmd updaters; rely on lacy_shell_precmd
     precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
-    
-    # Add to precmd functions to update prompt
-    precmd_functions+=(lacy_shell_update_prompt)
     
     # Set up terminal resize handler
     trap 'lacy_shell_handle_resize' WINCH
@@ -35,6 +43,10 @@ lacy_shell_setup_prompt() {
 lacy_shell_handle_resize() {
     # Redraw based on current style
     if [[ "$LACY_SHELL_INDICATOR_STYLE" == "top" && "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
+        # If a message redraw job is pending, skip drawing to avoid overwriting the message
+        if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]] && lacy_shell_pid_is_alive "$LACY_SHELL_MESSAGE_JOB_PID"; then
+            return
+        fi
         # Recalculate scroll region for new size
         local term_height=${LINES:-24}
         echo -ne "\033[2;${term_height}r"
@@ -52,6 +64,12 @@ lacy_shell_update_prompt() {
     
     case "$LACY_SHELL_INDICATOR_STYLE" in
         "top")
+            # If a message redraw job is pending, do not redraw the bar; keep the message visible
+            if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]] && lacy_shell_pid_is_alive "$LACY_SHELL_MESSAGE_JOB_PID"; then
+                PS1="$LACY_SHELL_BASE_PS1"
+                RPS1=""
+                return
+            fi
             # Update top bar if active, otherwise set it up
             if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
                 # Just redraw the bar without resetting scroll region
@@ -229,6 +247,13 @@ lacy_shell_show_top_bar_message() {
         return
     fi
     
+    # Cancel any previously scheduled redraw job
+    if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]]; then
+        kill -TERM "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
+        wait "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
+        LACY_SHELL_MESSAGE_JOB_PID=""
+    fi
+    
     # Temporarily disable job notifications
     local old_notify="${notify:-}"
     unsetopt notify 2>/dev/null
@@ -279,11 +304,12 @@ lacy_shell_show_top_bar_message() {
     echo -ne "\033[u"
     
     # Schedule redraw of normal bar after duration
-    # Use disown to prevent job notifications
+    # Use disown to prevent job notifications and track PID for cancellation
     {
         sleep "$duration"
         lacy_shell_draw_top_bar
-    } 2>/dev/null &!  # &! is shorthand for & disown
+    } 2>/dev/null &!
+    LACY_SHELL_MESSAGE_JOB_PID=$!
     
     # Restore job notification settings
     if [[ -n "$old_notify" ]]; then
@@ -296,6 +322,13 @@ lacy_shell_show_top_bar_message() {
 lacy_shell_remove_top_bar() {
     # Always attempt to reset terminal state when removing top bar
     # This ensures cleanup even if state tracking is inconsistent
+    
+    # Cancel any scheduled redraw job to prevent bar from reappearing
+    if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]]; then
+        kill -TERM "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
+        wait "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
+        LACY_SHELL_MESSAGE_JOB_PID=""
+    fi
     
     # Save cursor position
     echo -ne "\033[s"

@@ -4,6 +4,7 @@
 
 # === Runtime State ===
 LACY_SHELL_ENABLED=true
+LACY_SHELL_DEFER_QUIT=false
 
 # === Paths ===
 readonly LACY_SHELL_HOME="${HOME}/.lacy-shell"

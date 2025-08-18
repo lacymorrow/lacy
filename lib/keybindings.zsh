@@ -91,10 +91,10 @@ lacy_shell_quit_widget() {
 # Widget for Ctrl+D - quit if buffer empty, else delete char
 lacy_shell_delete_char_or_quit_widget() {
     if [[ -z "$BUFFER" ]]; then
-        # Buffer is empty - quit lacy shell (silently)
-        BUFFER=""
-        zle accept-line
-        lacy_shell_quit
+        # Buffer is empty - request deferred quit and consume Ctrl-D safely
+        LACY_SHELL_DEFER_QUIT=true
+        BUFFER=":"
+        zle .accept-line
     else
         # Buffer has content - normal delete char behavior
         zle delete-char-or-list
@@ -245,42 +245,10 @@ lacy_shell_setup_interrupt_handler() {
         local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
         
         if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
-            # Double Ctrl+C - do complete cleanup
-            echo ""
-            echo "👋 Exiting Lacy Shell..."
-            echo ""
-            
-            # Disable everything immediately
-            LACY_SHELL_ENABLED=false
-            LACY_SHELL_QUITTING=true
-            
-            # Remove all hooks immediately
-            precmd_functions=(${precmd_functions:#lacy_shell_precmd})
-            precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
-            
-            # Restore accept-line
-            zle -A .accept-line accept-line 2>/dev/null
-            
-            # Remove top bar
-            lacy_shell_remove_top_bar
-            
-            # Clean up keybindings
-            lacy_shell_cleanup_keybindings
-            
-            # Clean up MCP
-            lacy_shell_cleanup_mcp
-            
-            # Remove this trap itself
+            # Double Ctrl+C - quit
+            lacy_shell_quit
+            # Remove this trap itself after quit
             trap - INT
-            
-            # Clear and reset terminal
-            echo -ne "\033c"
-            clear
-            
-            echo "✅ Lacy Shell disabled. Normal shell behavior restored."
-            echo ""
-            
-            # Return without further processing
             return 130
         else
             # Single Ctrl+C

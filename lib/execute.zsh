@@ -207,6 +207,16 @@ lacy_shell_precmd() {
     if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
         return
     fi
+    # Handle deferred quit triggered by Ctrl-D without letting EOF propagate
+    if [[ "$LACY_SHELL_DEFER_QUIT" == true ]]; then
+        LACY_SHELL_DEFER_QUIT=false
+        lacy_shell_quit
+        return
+    fi
+    # If a Ctrl-C message is currently displayed, skip redraw to preserve it
+    if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]] && kill -0 "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null; then
+        return
+    fi
     # Update prompt with current mode
     lacy_shell_update_prompt
 }
@@ -352,12 +362,14 @@ lacy_shell_quit() {
     precmd_functions=(${precmd_functions:#lacy_shell_precmd})
     precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
     
-    # Disable input interception
-    zle -A .accept-line accept-line
+    # Disable input interception (only if ZLE is active)
+    if [[ -n "$ZLE_VERSION" ]]; then
+        zle -A .accept-line accept-line 2>/dev/null
+    fi
     
     # Comprehensive terminal reset sequence
     # Reset all terminal attributes and clear any scroll regions
-    echo -ne "\033c"  # Full terminal reset
+    # Avoid full terminal reset (\033c) because it can cause prompt systems to redraw unpredictably
     echo -ne "\033[0m"  # Reset all attributes
     echo -ne "\033[r"  # Reset scroll region to full screen
     echo -ne "\033[?1049l"  # Exit alternate screen if active
@@ -372,8 +384,8 @@ lacy_shell_quit() {
     unalias mcp_test mcp_check mcp_debug mcp_restart mcp_logs mcp_start mcp_stop 2>/dev/null
     unalias disable_lacy enable_lacy test_smart_auto quit_lacy lacy_quit 2>/dev/null
     
-    # Clear screen and reset terminal one more time
-    clear
+    # Clear screen without triggering terminal full reset
+    tput clear 2>/dev/null || clear
     
     echo "✅ Lacy Shell disabled. Normal shell behavior restored."
     echo "   To re-enable, source the plugin again or restart your shell."
