@@ -372,6 +372,8 @@ lacy_shell_quit() {
     # Avoid full terminal reset (\033c) because it can cause prompt systems to redraw unpredictably
     echo -ne "\033[0m"  # Reset all attributes
     echo -ne "\033[r"  # Reset scroll region to full screen
+    echo -ne "\033[?7h"  # Enable line wrapping
+    echo -ne "\033[?25h" # Ensure cursor is visible
     echo -ne "\033[?1049l"  # Exit alternate screen if active
     echo -ne "\033[1;1H"  # Move to top-left
     echo -ne "\033[J"  # Clear from cursor to end of screen
@@ -379,6 +381,11 @@ lacy_shell_quit() {
     # Run cleanup
     lacy_shell_cleanup
     
+    # Prepare for prompt display if not in ZLE
+    if [[ -z "$ZLE_VERSION" ]]; then
+        print -r -- ""
+    fi
+
     # Unset all lacy shell functions and aliases
     unalias ask suggest aihelp aicomplete hisearch clear_chat show_chat mode mode_style 2>/dev/null
     unalias mcp_test mcp_check mcp_debug mcp_restart mcp_logs mcp_start mcp_stop 2>/dev/null
@@ -387,9 +394,15 @@ lacy_shell_quit() {
     # Clear screen without triggering terminal full reset
     tput clear 2>/dev/null || clear
     
-    echo "✅ Lacy Shell disabled. Normal shell behavior restored."
-    echo "   To re-enable, source the plugin again or restart your shell."
-    echo ""
+    echo "✅ Lacy Shell... done."
+
+    # Final: restore original prompt and display it now
+    lacy_shell_restore_prompt
+    if [[ -n "$ZLE_VERSION" ]]; then
+        zle -I 2>/dev/null
+        zle -R 2>/dev/null
+        zle reset-prompt 2>/dev/null || true
+    fi
 }
 
 # Mode switching commands (work in any mode)

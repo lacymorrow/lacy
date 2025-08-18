@@ -99,7 +99,7 @@ lacy_shell_start_mcp_server() {
         fi
         $command $args < "$pipe_in" > "$pipe_out" 2> "$pipe_err" &
         echo $! > "$pipe_dir/pid"
-    ) &
+    ) &!
     
     # Wait a moment for the process to start
     sleep 0.5

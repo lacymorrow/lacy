@@ -247,6 +247,10 @@ lacy_shell_setup_interrupt_handler() {
         if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
             # Double Ctrl+C - quit
             lacy_shell_quit
+            # After quitting, force prompt redraw (best-effort)
+            zle -I 2>/dev/null
+            zle -R 2>/dev/null
+            zle reset-prompt 2>/dev/null
             # Remove this trap itself after quit
             trap - INT
             return 130
