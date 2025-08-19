@@ -195,7 +195,7 @@ lacy_shell_draw_top_bar() {
     # Create the status bar content (minimal)
     local left_text=" Lacy"
     local center_text="${mode_text}"
-    local right_text="^Space "
+    local right_text="ctrl + space "
     
     # Calculate padding
     local left_len=${#left_text}
