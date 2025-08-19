@@ -104,7 +104,7 @@ lacy_shell_execute_agent() {
     local query="$1"
     
     # Add timeout and error handling
-    echo "🤖 Sending to AI agent: $query"
+    echo "🤖 "
     
     # Query the agent with error handling
     if ! lacy_shell_query_agent "$query"; then
@@ -394,7 +394,7 @@ lacy_shell_quit() {
     # Clear screen without triggering terminal full reset
     tput clear 2>/dev/null || clear
     
-    echo "✅ Lacy Shell... done."
+    # echo "✅ Lacy Shell... done."
 
     # Final: restore original prompt and display it now
     lacy_shell_restore_prompt
