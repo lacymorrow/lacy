@@ -16,6 +16,12 @@ echo 'source ~/.lacy-shell/lacy-shell.plugin.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
+One-liner:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/lacymorrow/lacy-shell/main/install.sh)"
+```
+
 Optional: install Lash for full power (recommended)
 
 ```bash
@@ -65,6 +71,16 @@ Behavior in Auto mode:
 - Check keys for fallback mode: `env | grep LACY_SHELL_API`
 - Prefer installing `lash` for models/MCP: see `brew` commands above
  - On macOS without `coreutils`, MCP timeouts fall back to a portable method; optionally install `gtimeout` via `brew install coreutils` for best behavior
+
+## Uninstall
+
+```bash
+~/.lacy-shell/uninstall.sh
+# then restart your terminal or:
+source ~/.zshrc
+```
+
+If you installed to a custom directory, run the script from that clone path or remove the `source ~/.lacy-shell/lacy-shell.plugin.zsh` line from `~/.zshrc` manually and delete the directory.
 
 ## License
 

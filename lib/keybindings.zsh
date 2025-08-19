@@ -93,7 +93,7 @@ lacy_shell_delete_char_or_quit_widget() {
     if [[ -z "$BUFFER" ]]; then
         # Buffer is empty - request deferred quit and consume Ctrl-D safely
         LACY_SHELL_DEFER_QUIT=true
-        BUFFER=":"
+        BUFFER=" :"
         zle .accept-line
     else
         # Buffer has content - normal delete char behavior
