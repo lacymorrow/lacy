@@ -20,21 +20,21 @@ echo -e "${BLUE}🚀 Installing Lacy Shell...${NC}"
 # Check prerequisites (minimal)
 check_prerequisites() {
     echo -e "${BLUE}📋 Checking prerequisites...${NC}"
-    
+
     # Check for zsh
     if ! command -v zsh >/dev/null 2>&1; then
         echo -e "${RED}❌ zsh is required but not installed${NC}"
         exit 1
     fi
     echo -e "${GREEN}✅ zsh found${NC}"
-    
+
     # Check for curl
     if ! command -v curl >/dev/null 2>&1; then
         echo -e "${RED}❌ curl is required but not installed${NC}"
         exit 1
     fi
     echo -e "${GREEN}✅ curl found${NC}"
-    
+
     # Check for git
     if ! command -v git >/dev/null 2>&1; then
         echo -e "${RED}❌ git is required but not installed${NC}"
@@ -46,7 +46,7 @@ check_prerequisites() {
 # Clone or update repository
 install_plugin() {
     echo -e "${BLUE}📁 Installing plugin files...${NC}"
-    
+
     if [[ -d "$INSTALL_DIR" ]]; then
         echo -e "${YELLOW}⚠️  Existing installation found. Updating...${NC}"
         cd "$INSTALL_DIR"
@@ -55,17 +55,17 @@ install_plugin() {
         echo -e "${BLUE}📥 Cloning repository...${NC}"
         git clone "$REPO_URL" "$INSTALL_DIR"
     fi
-    
+
     echo -e "${GREEN}✅ Plugin files installed${NC}"
 }
 
 # Setup local installation (if not using git)
 setup_local() {
     echo -e "${BLUE}📁 Setting up local installation...${NC}"
-    
+
     # Create installation directory
     mkdir -p "$INSTALL_DIR"
-    
+
     # Copy files from current directory
     if [[ -f "lacy-shell.plugin.zsh" ]]; then
         cp -r . "$INSTALL_DIR/"
@@ -79,33 +79,33 @@ setup_local() {
 # Configure zsh integration
 configure_zsh() {
     echo -e "${BLUE}⚙️  Configuring zsh integration...${NC}"
-    
+
     local zshrc="${HOME}/.zshrc"
     local plugin_line="source ${INSTALL_DIR}/lacy-shell.plugin.zsh"
-    
+
     # Check if already configured
     if grep -q "lacy-shell.plugin.zsh" "$zshrc" 2>/dev/null; then
         echo -e "${YELLOW}⚠️  Lacy Shell already configured in .zshrc${NC}"
         return
     fi
-    
+
     # Add to .zshrc
     echo "" >> "$zshrc"
     echo "# Lacy Shell Plugin" >> "$zshrc"
     echo "$plugin_line" >> "$zshrc"
-    
+
     echo -e "${GREEN}✅ Added to .zshrc${NC}"
 }
 
 # Create initial configuration
 create_config() {
     echo -e "${BLUE}📝 Creating initial configuration...${NC}"
-    
+
     local config_dir="${HOME}/.lacy-shell"
     local config_file="${config_dir}/config.yaml"
-    
+
     mkdir -p "$config_dir"
-    
+
     if [[ ! -f "$config_file" ]]; then
         # Create default config
         cat > "$config_file" << 'EOF'
@@ -144,7 +144,7 @@ detection:
     - "show me"
     - "find"
     - "search"
-  
+
   shell_commands:
     - "ls"
     - "cd"
@@ -168,7 +168,7 @@ show_instructions() {
     echo -e "${BLUE}📋 Next steps:${NC}"
     echo "1. Restart your terminal or run: source ~/.zshrc"
     echo "2. Edit your configuration: ${HOME}/.lacy-shell/config.yaml"
-    echo "3. (Optional) Install Lash: brew tap lacymorrow/tap && brew install lacymorrow/tap/lash"
+    echo "3. (Optional) Install Lash: brew install lacymorrow/tap/lash"
     echo "4. Try it: ask \"what files are in this directory?\""
     echo ""
     echo -e "${BLUE}🔧 Configuration file:${NC} ${HOME}/.lacy-shell/config.yaml"
@@ -192,7 +192,7 @@ main() {
     else
         install_plugin
     fi
-    
+
     configure_zsh
     create_config
     show_instructions
