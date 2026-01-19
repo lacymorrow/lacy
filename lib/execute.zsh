@@ -52,6 +52,18 @@ lacy_shell_stop_loader() {
     fi
 }
 
+# Helper: Stop loader when first output byte arrives, then pass through
+_lacy_stop_loader_on_output() {
+    local first_char
+    # Read first character (blocks until output starts)
+    IFS= read -r -n1 first_char
+    # Stop the loader now that output is coming
+    lacy_shell_stop_loader
+    # Print the first character and pass through the rest
+    printf '%s' "$first_char"
+    cat
+}
+
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
     # If Lacy Shell is disabled, use normal accept-line
