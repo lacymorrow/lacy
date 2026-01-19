@@ -2,6 +2,64 @@
 
 # MCP (Model Context Protocol) integration for Lacy Shell
 
+# ============================================================================
+# Shared Helper Functions (reduces code duplication across API implementations)
+# ============================================================================
+
+# Escape content for JSON embedding
+lacy_shell_escape_json() {
+    local content="$1"
+    echo "$content" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g' | tr '\n' ' '
+}
+
+# Unescape JSON string sequences
+lacy_shell_unescape_json() {
+    local content="$1"
+    echo "$content" | sed 's/\\n/\
+/g' | sed 's/\\t/	/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
+}
+
+# Handle API error responses - returns 0 if error found, 1 if no error
+lacy_shell_handle_api_error() {
+    local response="$1"
+    if echo "$response" | grep -q '"error"'; then
+        echo "❌ API Error:"
+        echo "$response" | grep -o '"message":"[^"]*' | sed 's/"message":"/  /' | head -1
+        return 0  # Error found
+    fi
+    return 1  # No error
+}
+
+# Make an API request with curl
+# Usage: lacy_shell_api_request <url> <json_payload> <auth_header> [extra_headers...]
+lacy_shell_api_request() {
+    local url="$1"
+    local payload="$2"
+    local auth_header="$3"
+    shift 3
+    local extra_headers=("$@")
+
+    local curl_args=(-s -H "Content-Type: application/json" -H "$auth_header" -d "$payload")
+    for header in "${extra_headers[@]}"; do
+        curl_args+=(-H "$header")
+    done
+    curl_args+=("$url")
+
+    curl "${curl_args[@]}" 2>&1
+}
+
+# Extract content from API response
+# Usage: lacy_shell_extract_response <response> <content_key>
+lacy_shell_extract_response() {
+    local response="$1"
+    local key="$2"
+    echo "$response" | grep -o "\"${key}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/"
+}
+
+# ============================================================================
+# MCP Server Management
+# ============================================================================
+
 # MCP server management
 typeset -A LACY_SHELL_MCP_PIDS
 typeset -A LACY_SHELL_MCP_PIPES_IN
@@ -544,11 +602,11 @@ EOF
 lacy_shell_query_openai_streaming() {
     local input_file="$1"
     local query="$2"
-    
-    # Read and escape the input properly for JSON using pure shell
-    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g' | tr '\n' ' ')
-    
-    # Create JSON payload with proper escaping
+
+    # Read and escape the input properly for JSON
+    local content=$(lacy_shell_escape_json "$(cat "$input_file")")
+
+    # Create JSON payload
     local json_payload="{
   \"model\": \"${LACY_SHELL_MODEL_NAME:-$LACY_SHELL_DEFAULT_MODEL}\",
   \"messages\": [
@@ -564,27 +622,23 @@ lacy_shell_query_openai_streaming() {
   \"temperature\": 0.3,
   \"max_tokens\": 1500
 }"
-    
-    # Send request and get response
-    local response=$(curl -s -H "Content-Type: application/json" \
-         -H "Authorization: Bearer $LACY_SHELL_API_OPENAI" \
-         -d "$json_payload" \
-         "https://api.openai.com/v1/chat/completions" 2>&1)
-    
-    # Check if response contains an error
-    if echo "$response" | grep -q '"error"'; then
-        echo "❌ API Error:"
-        echo "$response" | grep -o '"message":"[^"]*' | sed 's/"message":"/  /' | head -1
+
+    # Send request
+    local response=$(lacy_shell_api_request \
+        "https://api.openai.com/v1/chat/completions" \
+        "$json_payload" \
+        "Authorization: Bearer $LACY_SHELL_API_OPENAI")
+
+    # Check for errors
+    if lacy_shell_handle_api_error "$response"; then
         return 1
     fi
-    
-    # Parse the JSON response using pure shell tools
-    local content=$(echo "$response" | grep -o '"content"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-    
-    if [[ -n "$content" ]]; then
-        # Unescape common JSON sequences
-        echo "$content" | sed 's/\\n/\
-/g' | sed 's/\\t/	/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
+
+    # Extract and unescape content
+    local extracted=$(lacy_shell_extract_response "$response" "content")
+
+    if [[ -n "$extracted" ]]; then
+        lacy_shell_unescape_json "$extracted"
     else
         echo "❌ No response from API. Raw response:"
         echo "$response" | head -3
@@ -597,11 +651,11 @@ lacy_shell_query_openai_streaming() {
 lacy_shell_query_anthropic_streaming() {
     local input_file="$1"
     local query="$2"
-    
-    # Read and escape the input properly for JSON using pure shell
-    local content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/	/\\t/g' | tr '\n' ' ')
-    
-    # Create JSON payload with proper escaping
+
+    # Read and escape the input properly for JSON
+    local content=$(lacy_shell_escape_json "$(cat "$input_file")")
+
+    # Create JSON payload
     local json_payload="{
   \"model\": \"${LACY_SHELL_MODEL_NAME:-claude-3-5-sonnet-20241022}\",
   \"max_tokens\": 1500,
@@ -612,28 +666,24 @@ lacy_shell_query_anthropic_streaming() {
     }
   ]
 }"
-    
-    # Send request and extract response
-    local response=$(curl -s -H "Content-Type: application/json" \
-         -H "x-api-key: $LACY_SHELL_API_ANTHROPIC" \
-         -H "anthropic-version: 2023-06-01" \
-         -d "$json_payload" \
-         "https://api.anthropic.com/v1/messages" 2>&1)
-    
-    # Check if response contains an error
-    if echo "$response" | grep -q '"error"'; then
-        echo "❌ API Error:"
-        echo "$response" | grep -o '"message":"[^"]*' | sed 's/"message":"/  /' | head -1
+
+    # Send request
+    local response=$(lacy_shell_api_request \
+        "https://api.anthropic.com/v1/messages" \
+        "$json_payload" \
+        "x-api-key: $LACY_SHELL_API_ANTHROPIC" \
+        "anthropic-version: 2023-06-01")
+
+    # Check for errors
+    if lacy_shell_handle_api_error "$response"; then
         return 1
     fi
-    
-    # Parse the JSON response using pure shell tools
-    local content=$(echo "$response" | grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-    
-    if [[ -n "$content" ]]; then
-        # Unescape common JSON sequences
-        echo "$content" | sed 's/\\n/\
-/g' | sed 's/\\t/	/g' | sed 's/\\"/"/g' | sed 's/\\\\/\\/g'
+
+    # Extract and unescape content (Anthropic uses "text" key)
+    local extracted=$(lacy_shell_extract_response "$response" "text")
+
+    if [[ -n "$extracted" ]]; then
+        lacy_shell_unescape_json "$extracted"
     else
         echo "❌ No response from API. Raw response:"
         echo "$response" | head -3

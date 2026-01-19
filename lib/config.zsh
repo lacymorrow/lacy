@@ -6,6 +6,10 @@
 typeset -A LACY_SHELL_CONFIG
 # LACY_SHELL_CONFIG_FILE is defined in constants.zsh
 
+# ============================================================================
+# Config Parsing Helpers (reduces code duplication)
+# ============================================================================
+
 # Simple YAML parser for shell (handles basic key: value)
 lacy_shell_parse_yaml_value() {
     local file="$1"
@@ -13,6 +17,41 @@ lacy_shell_parse_yaml_value() {
 
     # Extract value for a simple key: value pair
     grep "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'"
+}
+
+# Clean a config value (remove quotes, comments, whitespace)
+lacy_shell_clean_config_value() {
+    local value="$1"
+    echo "$value" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs
+}
+
+# Parse a key-value line from config and export if valid
+# Usage: lacy_shell_export_config_value <key> <value> <key_map>
+# key_map format: "config_key1:ENV_VAR1,config_key2:ENV_VAR2"
+lacy_shell_export_config_value() {
+    local key="$1"
+    local value="$2"
+    local key_map="$3"
+
+    # Clean the value
+    value=$(lacy_shell_clean_config_value "$value")
+
+    # Skip empty or null values
+    if [[ -z "$value" ]] || [[ "$value" == "null" ]]; then
+        return 1
+    fi
+
+    # Look up the key in the map and export
+    local mapping
+    for mapping in ${(s:,:)key_map}; do
+        local config_key="${mapping%%:*}"
+        local env_var="${mapping#*:}"
+        if [[ "$key" == "$config_key" ]]; then
+            export "$env_var"="$value"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # Load configuration from file
@@ -30,78 +69,47 @@ lacy_shell_load_config() {
 
     # Parse configuration using simple shell parsing
     if [[ -f "$LACY_SHELL_CONFIG_FILE" ]]; then
-        # Load API keys
-        local in_api_section=false
-        local in_model_section=false
-        local in_agent_section=false
+        # Define key mappings for each section
+        local api_keys_map="openai:LACY_SHELL_API_OPENAI,anthropic:LACY_SHELL_API_ANTHROPIC"
+        local model_map="provider:LACY_SHELL_PROVIDER,name:LACY_SHELL_MODEL_NAME"
+        local agent_map="command:LACY_SHELL_AGENT_COMMAND,context_mode:LACY_SHELL_AGENT_CONTEXT_MODE,needs_api_keys:LACY_SHELL_AGENT_NEEDS_API_KEYS"
+
+        # Track current section
+        local current_section=""
+
         while IFS= read -r line; do
-            # Check if we're in the api_keys section
+            # Detect section headers
             if [[ "$line" =~ ^api_keys: ]]; then
-                in_api_section=true
-                in_model_section=false
-                in_agent_section=false
+                current_section="api_keys"
                 continue
             elif [[ "$line" =~ ^model: ]]; then
-                in_model_section=true
-                in_api_section=false
-                in_agent_section=false
+                current_section="model"
                 continue
             elif [[ "$line" =~ ^agent: ]]; then
-                in_agent_section=true
-                in_api_section=false
-                in_model_section=false
+                current_section="agent"
                 continue
             elif [[ "$line" =~ ^[^[:space:]] ]] && [[ ! "$line" =~ ^# ]]; then
-                # New section started, exit all sections
-                in_api_section=false
-                in_model_section=false
-                in_agent_section=false
+                # New section started (not indented, not a comment)
+                current_section=""
             fi
 
-            # Parse API keys
-            if [[ "$in_api_section" == true ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
+            # Parse key-value pairs within sections
+            if [[ -n "$current_section" ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
                 local key="${match[1]}"
                 local value="${match[2]}"
-                # Remove quotes and comments
-                value=$(echo "$value" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs)
 
-                if [[ -n "$value" ]] && [[ "$value" != "null" ]]; then
-                    if [[ "$key" == "openai" ]]; then
-                        export LACY_SHELL_API_OPENAI="$value"
-                    elif [[ "$key" == "anthropic" ]]; then
-                        export LACY_SHELL_API_ANTHROPIC="$value"
-                    fi
-                fi
-            fi
-
-            # Parse model config
-            if [[ "$in_model_section" == true ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
-                local mkey="${match[1]}"
-                local mval="${match[2]}"
-                mval=$(echo "$mval" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs)
-                if [[ -n "$mval" ]] && [[ "$mval" != "null" ]]; then
-                    if [[ "$mkey" == "provider" ]]; then
-                        export LACY_SHELL_PROVIDER="$mval"
-                    elif [[ "$mkey" == "name" ]]; then
-                        export LACY_SHELL_MODEL_NAME="$mval"
-                    fi
-                fi
-            fi
-
-            # Parse agent config
-            if [[ "$in_agent_section" == true ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
-                local akey="${match[1]}"
-                local aval="${match[2]}"
-                aval=$(echo "$aval" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs)
-                if [[ -n "$aval" ]] && [[ "$aval" != "null" ]]; then
-                    if [[ "$akey" == "command" ]]; then
-                        export LACY_SHELL_AGENT_COMMAND="$aval"
-                    elif [[ "$akey" == "context_mode" ]]; then
-                        export LACY_SHELL_AGENT_CONTEXT_MODE="$aval"
-                    elif [[ "$akey" == "needs_api_keys" ]]; then
-                        export LACY_SHELL_AGENT_NEEDS_API_KEYS="$aval"
-                    fi
-                fi
+                # Use appropriate key map based on section
+                case "$current_section" in
+                    "api_keys")
+                        lacy_shell_export_config_value "$key" "$value" "$api_keys_map"
+                        ;;
+                    "model")
+                        lacy_shell_export_config_value "$key" "$value" "$model_map"
+                        ;;
+                    "agent")
+                        lacy_shell_export_config_value "$key" "$value" "$agent_map"
+                        ;;
+                esac
             fi
         done < "$LACY_SHELL_CONFIG_FILE"
 
