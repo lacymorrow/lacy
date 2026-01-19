@@ -6,7 +6,7 @@
 # Background process ID for the loader
 LACY_SHELL_LOADER_PID=""
 
-# Start the pink sparkle loader animation
+# Start the pink sparkle loader animation (writes to stderr to not interfere with output)
 lacy_shell_start_loader() {
     local message="${1:-thinking}"
 
@@ -16,9 +16,10 @@ lacy_shell_start_loader() {
     fi
 
     # Hide cursor
-    echo -ne "\033[?25l"
+    printf '\033[?25l' >&2
 
-    # Run loader in background subshell
+    # Run loader in background subshell (suppress job notification with setopt)
+    setopt LOCAL_OPTIONS NO_NOTIFY NO_MONITOR
     (
         local frame_idx=0
         local num_frames=${#LACY_SHELL_LOADER_FRAMES[@]}
@@ -27,13 +28,13 @@ lacy_shell_start_loader() {
             # Get current frame (zsh arrays are 1-indexed)
             local frame="${LACY_SHELL_LOADER_FRAMES[$((frame_idx % num_frames + 1))]}"
 
-            # Print loader with pink color - carriage return to overwrite
-            printf "\r${LACY_SHELL_LOADER_COLOR}  %s ${message}...${LACY_SHELL_LOADER_RESET}  " "$frame"
+            # Print loader with pink color to stderr - carriage return to overwrite
+            printf "\r${LACY_SHELL_LOADER_COLOR}  %s ${message}...${LACY_SHELL_LOADER_RESET}  " "$frame" >&2
 
             frame_idx=$((frame_idx + 1))
             sleep "$LACY_SHELL_LOADER_SPEED"
         done
-    ) &
+    ) &!
 
     LACY_SHELL_LOADER_PID=$!
 }
@@ -41,27 +42,14 @@ lacy_shell_start_loader() {
 # Stop the loader animation
 lacy_shell_stop_loader() {
     if [[ -n "$LACY_SHELL_LOADER_PID" ]]; then
-        # Kill the loader process
+        # Kill the loader process (disowned, so no wait needed)
         kill "$LACY_SHELL_LOADER_PID" 2>/dev/null
-        wait "$LACY_SHELL_LOADER_PID" 2>/dev/null
         LACY_SHELL_LOADER_PID=""
 
-        # Clear the loader line and show cursor
-        printf "\r\033[K"
-        echo -ne "\033[?25h"
+        # Clear the loader line and show cursor (on stderr)
+        printf "\r\033[K" >&2
+        printf '\033[?25h' >&2
     fi
-}
-
-# Helper: Stop loader when first output byte arrives, then pass through
-_lacy_stop_loader_on_output() {
-    local first_char
-    # Read first character (blocks until output starts)
-    IFS= read -r -n1 first_char
-    # Stop the loader now that output is coming
-    lacy_shell_stop_loader
-    # Print the first character and pass through the rest
-    printf '%s' "$first_char"
-    cat
 }
 
 # Smart accept-line widget that handles agent queries

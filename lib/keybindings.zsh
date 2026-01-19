@@ -9,19 +9,7 @@ LACY_SHELL_QUITTING=false
 
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
-    # Enable emacs mode (more compatible)
-    bindkey -e
-
-    # Restore macOS navigation shortcuts (Cmd+Arrow and Option+Arrow)
-    # These get cleared by bindkey -e
-    bindkey '\e[1;9D' beginning-of-line      # Cmd+Left: beginning of line
-    bindkey '\e[1;9C' end-of-line            # Cmd+Right: end of line
-    bindkey '\e[1;3D' backward-word          # Option+Left: backward word
-    bindkey '\e[1;3C' forward-word           # Option+Right: forward word
-    bindkey '\e[H' beginning-of-line         # Home (alternate Cmd+Left)
-    bindkey '\e[F' end-of-line               # End (alternate Cmd+Right)
-    bindkey '\eb' backward-word              # Option+B / Esc+B: backward word
-    bindkey '\ef' forward-word               # Option+F / Esc+F: forward word
+    # Only add our custom bindings - don't touch existing terminal shortcuts
 
     # Primary mode toggle - Ctrl+Space (most universal)
     bindkey '^@' lacy_shell_toggle_mode_widget      # Ctrl+Space: Toggle mode
@@ -289,12 +277,10 @@ lacy_shell_setup_eof_handler() {
 
 # Cleanup all keybindings
 lacy_shell_cleanup_keybindings() {
-    # Restore default keybindings
+    # Restore only the keybindings we actually override
     bindkey '^D' delete-char-or-list
     bindkey '^@' set-mark-command
     bindkey '^T' transpose-chars
-    bindkey '^Y' yank
-    bindkey '^E' end-of-line
 
     # Remove all custom widgets
     zle -D lacy_shell_toggle_mode_widget 2>/dev/null

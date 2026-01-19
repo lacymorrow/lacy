@@ -392,16 +392,16 @@ EOF
         local final_cmd="${agent_cmd//\{query\}/$escaped_query}"
         final_cmd="${final_cmd//\{context_file\}/$temp_file}"
 
-        # Execute and stop loader when first output byte arrives
+        # Execute command (loader runs on stderr, output on stdout - no conflict)
         if [[ "$context_mode" == "stdin" ]]; then
-            cat "$temp_file" | eval "$final_cmd" | _lacy_stop_loader_on_output
+            cat "$temp_file" | eval "$final_cmd"
         else
             # File mode - context is already in temp_file referenced by {context_file}
-            eval "$final_cmd" | _lacy_stop_loader_on_output
+            eval "$final_cmd"
         fi
 
-        # Safety cleanup (pipe runs in subshell, so reset state in main shell)
-        LACY_SHELL_LOADER_PID=""
+        # Stop the loader after command finishes
+        lacy_shell_stop_loader
 
         # Save to conversation history
         echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
@@ -451,11 +451,11 @@ EOF
     
     echo "Current Query: $query" >> "$temp_file"
 
-    # Send to AI service - stop loader when first output arrives
-    lacy_shell_send_to_ai_streaming "$temp_file" "$query" | _lacy_stop_loader_on_output
+    # Send to AI service (loader runs on stderr, output on stdout)
+    lacy_shell_send_to_ai_streaming "$temp_file" "$query"
 
-    # Safety cleanup (pipe runs in subshell, so reset state in main shell)
-    LACY_SHELL_LOADER_PID=""
+    # Stop the loader after response finishes
+    lacy_shell_stop_loader
 
     # Save to conversation history
     echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
