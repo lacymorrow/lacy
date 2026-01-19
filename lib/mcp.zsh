@@ -450,20 +450,25 @@ EOF
         local final_cmd="${agent_cmd//\{query\}/$escaped_query}"
         final_cmd="${final_cmd//\{context_file\}/$temp_file}"
 
-        # Execute command (loader runs on stderr, output on stdout - no conflict)
+        # Execute command and capture response (loader runs on stderr, output on stdout)
+        local captured_response=""
         if [[ "$context_mode" == "stdin" ]]; then
-            cat "$temp_file" | eval "$final_cmd"
+            captured_response=$(cat "$temp_file" | eval "$final_cmd" | tee /dev/tty)
         else
             # File mode - context is already in temp_file referenced by {context_file}
-            eval "$final_cmd"
+            captured_response=$(eval "$final_cmd" | tee /dev/tty)
         fi
 
         # Stop the loader after command finishes
         lacy_shell_stop_loader
 
-        # Save to conversation history
+        # Truncate response for history (keep first 500 chars to avoid bloat)
+        local truncated_response="${captured_response:0:500}"
+        [[ ${#captured_response} -gt 500 ]] && truncated_response="${truncated_response}..."
+
+        # Save to conversation history with actual response
         echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
-        echo "Assistant: [Agent Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "Assistant: $truncated_response" >> "$LACY_SHELL_CONVERSATION_FILE"
         echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
 
         # Cleanup
@@ -509,15 +514,20 @@ EOF
     
     echo "Current Query: $query" >> "$temp_file"
 
-    # Send to AI service (loader runs on stderr, output on stdout)
-    lacy_shell_send_to_ai_streaming "$temp_file" "$query"
+    # Send to AI service and capture response (loader runs on stderr, output on stdout)
+    local captured_response=""
+    captured_response=$(lacy_shell_send_to_ai_streaming "$temp_file" "$query" | tee /dev/tty)
 
     # Stop the loader after response finishes
     lacy_shell_stop_loader
 
-    # Save to conversation history
+    # Truncate response for history (keep first 500 chars to avoid bloat)
+    local truncated_response="${captured_response:0:500}"
+    [[ ${#captured_response} -gt 500 ]] && truncated_response="${truncated_response}..."
+
+    # Save to conversation history with actual response
     echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
-    echo "Assistant: [AI Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+    echo "Assistant: $truncated_response" >> "$LACY_SHELL_CONVERSATION_FILE"
     echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
     
     # Cleanup

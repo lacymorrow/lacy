@@ -49,8 +49,14 @@ install_plugin() {
 
     if [[ -d "$INSTALL_DIR" ]]; then
         echo -e "${YELLOW}⚠️  Existing installation found. Updating...${NC}"
-        cd "$INSTALL_DIR"
-        git pull origin main
+        cd "$INSTALL_DIR" || {
+            echo -e "${RED}❌ Cannot access installation directory: $INSTALL_DIR${NC}"
+            exit 1
+        }
+        git pull origin main || {
+            echo -e "${RED}❌ Failed to update repository${NC}"
+            exit 1
+        }
     else
         echo -e "${BLUE}📥 Cloning repository...${NC}"
         git clone "$REPO_URL" "$INSTALL_DIR"
@@ -84,15 +90,28 @@ configure_zsh() {
     local plugin_line="source ${INSTALL_DIR}/lacy-shell.plugin.zsh"
 
     # Check if already configured
-    if grep -q "lacy-shell.plugin.zsh" "$zshrc" 2>/dev/null; then
+    if [[ -f "$zshrc" ]] && grep -q "lacy-shell.plugin.zsh" "$zshrc" 2>/dev/null; then
         echo -e "${YELLOW}⚠️  Lacy Shell already configured in .zshrc${NC}"
         return
     fi
 
+    # Create .zshrc if it doesn't exist
+    if [[ ! -f "$zshrc" ]]; then
+        touch "$zshrc" || {
+            echo -e "${RED}❌ Cannot create .zshrc file${NC}"
+            exit 1
+        }
+    fi
+
     # Add to .zshrc
-    echo "" >> "$zshrc"
-    echo "# Lacy Shell Plugin" >> "$zshrc"
-    echo "$plugin_line" >> "$zshrc"
+    {
+        echo ""
+        echo "# Lacy Shell Plugin"
+        echo "$plugin_line"
+    } >> "$zshrc" || {
+        echo -e "${RED}❌ Cannot write to .zshrc file${NC}"
+        exit 1
+    }
 
     echo -e "${GREEN}✅ Added to .zshrc${NC}"
 }

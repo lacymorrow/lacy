@@ -198,15 +198,13 @@ appearance:
     auto: yellow
 
 # Model selection (used when agent CLI is not installed)
-model:
-  provider: openai
-  name: gpt-4o-mini
+
 
 # Agent CLI configuration
 # Configure which CLI tool to use for AI queries
 agent:
   # Command to run. Variables: {query}, {context_file}
-  command: "lash run --continue {query}"
+  command: "lash run --prompt {query}"
   # How to pass context: stdin or file
   context_mode: stdin
   # Set to true if the CLI needs API keys from lacy-shell
