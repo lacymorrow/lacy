@@ -95,10 +95,7 @@ lacy_shell_handle_resize() {
         if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]] && lacy_shell_pid_is_alive "$LACY_SHELL_MESSAGE_JOB_PID"; then
             return
         fi
-        # Recalculate scroll region for new size
-        local term_height=${LINES:-24}
-        lacy_shell_set_scroll_region 2 "$term_height"
-        # Redraw the top bar
+        # Redraw the top bar for new terminal size
         lacy_shell_draw_top_bar
     fi
 }
@@ -173,50 +170,24 @@ lacy_shell_toggle_indicator_style() {
     lacy_shell_update_prompt
 }
 
-# Setup top status bar with scroll region
+# Setup top status bar (no scroll region - preserves scrollback)
 lacy_shell_setup_top_bar() {
-    # Save cursor position
-    lacy_shell_cursor_save
-
-    # Get terminal dimensions
-    local term_height=${LINES:-24}
-
-    # Enable alternate screen buffer for better scrolling
-    # This preserves the main buffer's scroll history
-    if [[ "${LACY_SHELL_USE_ALT_SCREEN:-no}" == "yes" ]]; then
-        echo -ne "\033[?1049h"  # Switch to alternate screen
-    fi
-
-    # Set scroll region (line 2 to bottom, leaving line 1 for status)
-    # This allows the content area to scroll independently
-    lacy_shell_set_scroll_region 2 "$term_height"
-
-    # Move to line 1 and draw the bar
-    lacy_shell_cursor_move 1 1
-    lacy_shell_draw_top_bar
-
-    # Move to line 2 (start of scroll region)
-    lacy_shell_cursor_move 2 1
-
-    # Clear the scrollable area
-    echo -ne "\033[J"
-
-    # Mark top bar as active
+    # Mark top bar as active first
     LACY_SHELL_TOP_BAR_ACTIVE=true
 
-    # Position cursor at the start of the scrollable area
-    lacy_shell_cursor_move 2 1
+    # Draw the bar at the top of visible window
+    lacy_shell_draw_top_bar
 }
 
-# Draw the top status bar
+# Draw the top status bar (no scroll region - preserves scrollback)
 lacy_shell_draw_top_bar() {
     if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" != true ]]; then
         return
     fi
-    
+
     local mode_text=""
     local color=""
-    
+
     # Get color and text based on mode
     case "$LACY_SHELL_CURRENT_MODE" in
         "shell")
@@ -236,15 +207,15 @@ lacy_shell_draw_top_bar() {
             color="196"  # Red
             ;;
     esac
-    
+
     # Get terminal width
     local term_width=${COLUMNS:-80}
-    
+
     # Create the status bar content (minimal)
     local left_text=" Lacy"
     local center_text="${mode_text}"
     local right_text="ctrl + space "
-    
+
     # Calculate padding
     local left_len=${#left_text}
     local center_len=${#center_text}
@@ -253,13 +224,11 @@ lacy_shell_draw_top_bar() {
     local padding=$((term_width - total_len))
     local left_pad=$((padding / 2))
     local right_pad=$((padding - left_pad))
-    
-    # Save current cursor position and attributes
-    lacy_shell_cursor_save
-    echo -ne "\033[7s"  # Save cursor attributes
 
-    # Temporarily disable scroll region to draw on line 1
-    lacy_shell_reset_scroll_region
+    # Save current cursor position
+    lacy_shell_cursor_save
+
+    # Move to line 1 and draw (no scroll region manipulation)
     lacy_shell_cursor_move 1 1
     lacy_shell_clear_line
 
@@ -273,12 +242,7 @@ lacy_shell_draw_top_bar() {
     printf "%${right_pad}s" ""  # Right padding
     echo -ne "\033[38;5;245m${right_text}\033[0m"
 
-    # Re-enable scroll region (line 2 to bottom)
-    local term_height=${LINES:-24}
-    lacy_shell_set_scroll_region 2 "$term_height"
-
-    # Restore cursor attributes and position
-    echo -ne "\033[8"  # Restore cursor attributes
+    # Restore cursor position
     lacy_shell_cursor_restore
 }
 
@@ -286,31 +250,30 @@ lacy_shell_draw_top_bar() {
 lacy_shell_show_top_bar_message() {
     local message="$1"
     local duration="${2:-$LACY_SHELL_MESSAGE_DURATION_SEC}"
-    
+
     if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" != true ]]; then
         return
     fi
-    
+
     # Cancel any previously scheduled redraw job
     if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]]; then
         kill -TERM "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
         wait "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
         LACY_SHELL_MESSAGE_JOB_PID=""
     fi
-    
+
     # Temporarily disable job notifications
     local old_notify="${notify:-}"
     unsetopt notify 2>/dev/null
     setopt no_monitor 2>/dev/null
-    
+
     # Get terminal width
     local term_width=${COLUMNS:-80}
 
     # Save current cursor position
     lacy_shell_cursor_save
 
-    # Temporarily disable scroll region to draw on line 1
-    lacy_shell_reset_scroll_region
+    # Move to line 1 and draw (no scroll region manipulation)
     lacy_shell_cursor_move 1 1
     lacy_shell_clear_line
 
@@ -336,13 +299,9 @@ lacy_shell_show_top_bar_message() {
     printf "%${right_pad}s" ""  # Right padding to fill line
     lacy_shell_reset_attrs
 
-    # Re-enable scroll region
-    local term_height=${LINES:-24}
-    lacy_shell_set_scroll_region 2 "$term_height"
-
     # Restore cursor position
     lacy_shell_cursor_restore
-    
+
     # Schedule redraw of normal bar after duration
     # Use disown to prevent job notifications and track PID for cancellation
     {
@@ -350,7 +309,7 @@ lacy_shell_show_top_bar_message() {
         lacy_shell_draw_top_bar
     } 2>/dev/null &!
     LACY_SHELL_MESSAGE_JOB_PID=$!
-    
+
     # Restore job notification settings
     if [[ -n "$old_notify" ]]; then
         setopt notify 2>/dev/null
@@ -358,35 +317,14 @@ lacy_shell_show_top_bar_message() {
     unsetopt no_monitor 2>/dev/null
 }
 
-# Remove top status bar and restore normal scrolling
+# Remove top status bar
 lacy_shell_remove_top_bar() {
-    # Always attempt to reset terminal state when removing top bar
-    # This ensures cleanup even if state tracking is inconsistent
-
     # Cancel any scheduled redraw job to prevent bar from reappearing
     if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]]; then
         kill -TERM "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
         wait "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null
         LACY_SHELL_MESSAGE_JOB_PID=""
     fi
-
-    # Save cursor position
-    lacy_shell_cursor_save
-
-    # Reset scroll region to full screen (entire terminal)
-    lacy_shell_set_scroll_region 1 "${LINES:-24}"
-    lacy_shell_reset_scroll_region
-
-    # Exit alternate screen if it was used
-    echo -ne "\033[?1049l"
-
-    # Clear the entire first line where the bar was
-    lacy_shell_cursor_move 1 1
-    lacy_shell_clear_entire_line
-    lacy_shell_reset_attrs
-
-    # Restore cursor position
-    lacy_shell_cursor_restore
 
     # Mark top bar as inactive
     LACY_SHELL_TOP_BAR_ACTIVE=false
