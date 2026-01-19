@@ -372,13 +372,11 @@ lacy_shell_quit() {
     unalias mcp_test mcp_check mcp_debug mcp_restart mcp_logs mcp_start mcp_stop 2>/dev/null
     unalias disable_lacy enable_lacy test_smart_auto quit_lacy lacy_quit 2>/dev/null
     
-    # Clear screen without triggering terminal full reset
-    tput clear 2>/dev/null || clear
-    
-    # echo "✅ Lacy Shell... done."
-
-    # Final: restore original prompt and display it now
+    # Restore original prompt
     lacy_shell_restore_prompt
+
+    # Print newline and trigger prompt display
+    echo ""
     if [[ -n "$ZLE_VERSION" ]]; then
         zle -I 2>/dev/null
         zle -R 2>/dev/null
