@@ -17,9 +17,11 @@ typeset -A LACY_SHELL_MCP_TOOLS
 lacy_shell_init_mcp() {
     # Create MCP directory
     mkdir -p "$LACY_SHELL_MCP_DIR"
-    
-    # If Lash is available, let Lash manage MCP. Nothing to start here.
-    if command -v lash >/dev/null 2>&1; then
+
+    # If a configured agent CLI is available, let it manage MCP. Nothing to start here.
+    local agent_cmd="${LACY_SHELL_AGENT_COMMAND:-$LACY_SHELL_DEFAULT_AGENT_COMMAND}"
+    local base_cmd="${agent_cmd%% *}"
+    if command -v "$base_cmd" >/dev/null 2>&1; then
         return 0
     fi
 
@@ -354,12 +356,18 @@ lacy_shell_query_agent() {
         return 1
     fi
     
-    # If Lash CLI is available, prefer delegating to Lash for models + MCP.
-    if command -v lash >/dev/null 2>&1; then
+    # Use configured agent CLI (defaults from constants.zsh)
+    local agent_cmd="${LACY_SHELL_AGENT_COMMAND:-$LACY_SHELL_DEFAULT_AGENT_COMMAND}"
+    local context_mode="${LACY_SHELL_AGENT_CONTEXT_MODE:-$LACY_SHELL_DEFAULT_AGENT_CONTEXT_MODE}"
+    local needs_api_keys="${LACY_SHELL_AGENT_NEEDS_API_KEYS:-$LACY_SHELL_DEFAULT_AGENT_NEEDS_API_KEYS}"
+
+    # Extract the base command (first word) to check if it exists
+    local base_cmd="${agent_cmd%% *}"
+    if command -v "$base_cmd" >/dev/null 2>&1; then
         # Ensure conversation directory exists
         mkdir -p "$(dirname "$LACY_SHELL_CONVERSATION_FILE")"
 
-        # Prepare minimal context and recent conversation; pipe into lash run (it prepends stdin to prompt)
+        # Prepare minimal context and recent conversation
         local temp_file=$(mktemp)
         local response_file=$(mktemp)
 
@@ -378,13 +386,26 @@ EOF
             echo "" >> "$temp_file"
         fi
 
-        # Run non-interactively through Lash. Lash handles MCP per its own config.
-        # We pass our context via stdin and the current query as args.
-        cat "$temp_file" | lash run -q -- "$query"
+        # Build the command with query and context_file substitution
+        # Use printf %q to properly shell-escape the query
+        local escaped_query=$(printf '%q' "$query")
+        local final_cmd="${agent_cmd//\{query\}/$escaped_query}"
+        final_cmd="${final_cmd//\{context_file\}/$temp_file}"
+
+        # Stop the loader before output starts
+        lacy_shell_stop_loader
+
+        # Execute based on context mode
+        if [[ "$context_mode" == "stdin" ]]; then
+            cat "$temp_file" | eval "$final_cmd"
+        else
+            # File mode - context is already in temp_file referenced by {context_file}
+            eval "$final_cmd"
+        fi
 
         # Save to conversation history
         echo "User: $query" >> "$LACY_SHELL_CONVERSATION_FILE"
-        echo "Assistant: [Lash Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
+        echo "Assistant: [Agent Response]" >> "$LACY_SHELL_CONVERSATION_FILE"
         echo "---" >> "$LACY_SHELL_CONVERSATION_FILE"
 
         # Cleanup
@@ -429,7 +450,10 @@ EOF
     fi
     
     echo "Current Query: $query" >> "$temp_file"
-    
+
+    # Stop the loader before output starts
+    lacy_shell_stop_loader
+
     # Send to AI service and stream response directly to stdout
     lacy_shell_send_to_ai_streaming "$temp_file" "$query"
     

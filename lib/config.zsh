@@ -10,7 +10,7 @@ typeset -A LACY_SHELL_CONFIG
 lacy_shell_parse_yaml_value() {
     local file="$1"
     local key="$2"
-    
+
     # Extract value for a simple key: value pair
     grep "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'"
 }
@@ -19,43 +19,52 @@ lacy_shell_parse_yaml_value() {
 lacy_shell_load_config() {
     # Set defaults from constants
     LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
-    
+
     # Ensure config directory exists
     mkdir -p "$LACY_SHELL_HOME"
-    
+
     # Create default config if it doesn't exist
     if [[ ! -f "$LACY_SHELL_CONFIG_FILE" ]]; then
         lacy_shell_create_default_config
     fi
-    
+
     # Parse configuration using simple shell parsing
     if [[ -f "$LACY_SHELL_CONFIG_FILE" ]]; then
         # Load API keys
         local in_api_section=false
         local in_model_section=false
+        local in_agent_section=false
         while IFS= read -r line; do
             # Check if we're in the api_keys section
             if [[ "$line" =~ ^api_keys: ]]; then
                 in_api_section=true
                 in_model_section=false
+                in_agent_section=false
                 continue
             elif [[ "$line" =~ ^model: ]]; then
                 in_model_section=true
                 in_api_section=false
+                in_agent_section=false
                 continue
-            elif [[ "$line" =~ ^[^[:space:]] ]] && [[ ! "$line" =~ ^# ]]; then
-                # New section started, exit api_keys
+            elif [[ "$line" =~ ^agent: ]]; then
+                in_agent_section=true
                 in_api_section=false
                 in_model_section=false
+                continue
+            elif [[ "$line" =~ ^[^[:space:]] ]] && [[ ! "$line" =~ ^# ]]; then
+                # New section started, exit all sections
+                in_api_section=false
+                in_model_section=false
+                in_agent_section=false
             fi
-            
+
             # Parse API keys
             if [[ "$in_api_section" == true ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
                 local key="${match[1]}"
                 local value="${match[2]}"
                 # Remove quotes and comments
                 value=$(echo "$value" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs)
-                
+
                 if [[ -n "$value" ]] && [[ "$value" != "null" ]]; then
                     if [[ "$key" == "openai" ]]; then
                         export LACY_SHELL_API_OPENAI="$value"
@@ -78,8 +87,24 @@ lacy_shell_load_config() {
                     fi
                 fi
             fi
+
+            # Parse agent config
+            if [[ "$in_agent_section" == true ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
+                local akey="${match[1]}"
+                local aval="${match[2]}"
+                aval=$(echo "$aval" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs)
+                if [[ -n "$aval" ]] && [[ "$aval" != "null" ]]; then
+                    if [[ "$akey" == "command" ]]; then
+                        export LACY_SHELL_AGENT_COMMAND="$aval"
+                    elif [[ "$akey" == "context_mode" ]]; then
+                        export LACY_SHELL_AGENT_CONTEXT_MODE="$aval"
+                    elif [[ "$akey" == "needs_api_keys" ]]; then
+                        export LACY_SHELL_AGENT_NEEDS_API_KEYS="$aval"
+                    fi
+                fi
+            fi
         done < "$LACY_SHELL_CONFIG_FILE"
-        
+
         # Check for MCP configuration (simplified)
         if grep -q "^mcp:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null && \
            grep -q "^[[:space:]]*servers:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null; then
@@ -90,12 +115,12 @@ lacy_shell_load_config() {
             LACY_SHELL_MCP_SERVERS=""
             LACY_SHELL_MCP_SERVERS_JSON=""
         fi
-        
+
         # Export variables for global access
         export LACY_SHELL_MCP_SERVERS
         export LACY_SHELL_MCP_SERVERS_JSON
     fi
-    
+
     # Also check environment variables as fallback
     if [[ -z "$LACY_SHELL_API_OPENAI" ]] && [[ -n "$OPENAI_API_KEY" ]]; then
         export LACY_SHELL_API_OPENAI="$OPENAI_API_KEY"
@@ -111,10 +136,16 @@ lacy_shell_load_config() {
     if [[ -z "$LACY_SHELL_MODEL_NAME" ]] && [[ -n "$LACY_SHELL_DEFAULT_MODEL" ]]; then
         export LACY_SHELL_MODEL_NAME="$LACY_SHELL_DEFAULT_MODEL"
     fi
-    
+
+    # Agent CLI defaults (if not configured, use defaults from constants.zsh)
+    : ${LACY_SHELL_AGENT_COMMAND:="$LACY_SHELL_DEFAULT_AGENT_COMMAND"}
+    : ${LACY_SHELL_AGENT_CONTEXT_MODE:="$LACY_SHELL_DEFAULT_AGENT_CONTEXT_MODE"}
+    : ${LACY_SHELL_AGENT_NEEDS_API_KEYS:="$LACY_SHELL_DEFAULT_AGENT_NEEDS_API_KEYS"}
+    export LACY_SHELL_AGENT_COMMAND LACY_SHELL_AGENT_CONTEXT_MODE LACY_SHELL_AGENT_NEEDS_API_KEYS
+
     # Initialize current mode from default
     LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
-    
+
     # Export configuration
     export LACY_SHELL_CURRENT_MODE
 }
@@ -147,7 +178,7 @@ mcp:
       command: npx
       args: ["@modelcontextprotocol/server-filesystem", "/"]
     - name: web
-      command: npx  
+      command: npx
       args: ["@modelcontextprotocol/server-web"]
 
 # Appearance
@@ -158,12 +189,22 @@ appearance:
     agent: blue
     auto: yellow
 
-# Model selection (used when Lash is not installed)
+# Model selection (used when agent CLI is not installed)
 model:
   provider: openai
   name: gpt-4o-mini
+
+# Agent CLI configuration
+# Configure which CLI tool to use for AI queries
+agent:
+  # Command to run. Variables: {query}, {context_file}
+  command: "lash run {query}"
+  # How to pass context: stdin or file
+  context_mode: stdin
+  # Set to true if the CLI needs API keys from lacy-shell
+  needs_api_keys: false
 EOF
-    
+
     echo "Created default configuration at: $LACY_SHELL_CONFIG_FILE"
 }
 

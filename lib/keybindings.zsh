@@ -11,25 +11,36 @@ LACY_SHELL_QUITTING=false
 lacy_shell_setup_keybindings() {
     # Enable emacs mode (more compatible)
     bindkey -e
-    
+
+    # Restore macOS navigation shortcuts (Cmd+Arrow and Option+Arrow)
+    # These get cleared by bindkey -e
+    bindkey '\e[1;9D' beginning-of-line      # Cmd+Left: beginning of line
+    bindkey '\e[1;9C' end-of-line            # Cmd+Right: end of line
+    bindkey '\e[1;3D' backward-word          # Option+Left: backward word
+    bindkey '\e[1;3C' forward-word           # Option+Right: forward word
+    bindkey '\e[H' beginning-of-line         # Home (alternate Cmd+Left)
+    bindkey '\e[F' end-of-line               # End (alternate Cmd+Right)
+    bindkey '\eb' backward-word              # Option+B / Esc+B: backward word
+    bindkey '\ef' forward-word               # Option+F / Esc+F: forward word
+
     # Primary mode toggle - Ctrl+Space (most universal)
     bindkey '^@' lacy_shell_toggle_mode_widget      # Ctrl+Space: Toggle mode
-    
+
     # Alternative keybindings
     bindkey '^T' lacy_shell_toggle_mode_widget      # Ctrl+T: Toggle mode (backup)
-    
+
     # Direct mode switches (Ctrl+X prefix)
-    bindkey '^X^A' lacy_shell_agent_mode_widget     # Ctrl+X Ctrl+A: Agent mode
-    bindkey '^X^S' lacy_shell_shell_mode_widget     # Ctrl+X Ctrl+S: Shell mode  
-    bindkey '^X^U' lacy_shell_auto_mode_widget      # Ctrl+X Ctrl+U: Auto mode
-    bindkey '^X^H' lacy_shell_help_widget           # Ctrl+X Ctrl+H: Help
-    
+    # bindkey '^X^A' lacy_shell_agent_mode_widget     # Ctrl+X Ctrl+A: Agent mode
+    # bindkey '^X^S' lacy_shell_shell_mode_widget     # Ctrl+X Ctrl+S: Shell mode
+    # bindkey '^X^U' lacy_shell_auto_mode_widget      # Ctrl+X Ctrl+U: Auto mode
+    # bindkey '^X^H' lacy_shell_help_widget           # Ctrl+X Ctrl+H: Help
+
     # Terminal scrolling keybindings
-    bindkey '^[[5~' lacy_shell_scroll_up_widget     # Page Up: Scroll up
-    bindkey '^[[6~' lacy_shell_scroll_down_widget   # Page Down: Scroll down
-    bindkey '^Y' lacy_shell_scroll_up_line_widget   # Ctrl+Y: Scroll up one line
-    bindkey '^E' lacy_shell_scroll_down_line_widget # Ctrl+E: Scroll down one line
-    
+    # bindkey '^[[5~' lacy_shell_scroll_up_widget     # Page Up: Scroll up
+    # bindkey '^[[6~' lacy_shell_scroll_down_widget   # Page Down: Scroll down
+    # bindkey '^Y' lacy_shell_scroll_up_line_widget   # Ctrl+Y: Scroll up one line
+    # bindkey '^E' lacy_shell_scroll_down_line_widget # Ctrl+E: Scroll down one line
+
     # Override Ctrl+D behavior
     bindkey '^D' lacy_shell_delete_char_or_quit_widget  # Ctrl+D: Quit if buffer empty
 }
@@ -160,15 +171,15 @@ lacy_shell_scroll_down_line_widget() {
 # Enhanced execute line widget that shows mode info
 lacy_shell_execute_line_widget() {
     local input="$BUFFER"
-    
+
     # If buffer is empty, just accept line normally
     if [[ -z "$input" ]]; then
         zle accept-line
         return
     fi
-    
+
     # Silent execution - mode shows in prompt
-    
+
     # Accept the line for normal processing
     zle accept-line
 }
@@ -179,7 +190,7 @@ lacy_shell_interrupt_handler() {
     if [[ "$LACY_SHELL_ENABLED" != true ]]; then
         return 130
     fi
-    
+
     # Get current time in milliseconds (portable method)
     local current_time
     if command -v gdate >/dev/null 2>&1; then
@@ -192,25 +203,25 @@ lacy_shell_interrupt_handler() {
         # Linux and other systems with GNU date
         current_time=$(date +%s%3N)
     fi
-    
+
     local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
-    
+
     # Check if this is a double Ctrl+C within threshold
     if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
         # Double Ctrl+C detected - quit Lacy Shell
         LACY_SHELL_QUITTING=true
-        
+
         # Remove precmd hooks IMMEDIATELY to prevent redraw
         precmd_functions=(${precmd_functions:#lacy_shell_precmd})
         precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
-        
+
         echo ""
         lacy_shell_quit
         return 130
     else
         # Single Ctrl+C - show message in top bar
         LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
-        
+
         # Show message in top bar if it's active
         if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
             # Use pre-calculated timeout in seconds
@@ -219,7 +230,7 @@ lacy_shell_interrupt_handler() {
             # Fallback: just clear the line
             echo ""
         fi
-        
+
         return 130
     fi
 }
@@ -231,7 +242,7 @@ lacy_shell_setup_interrupt_handler() {
         if [[ "$LACY_SHELL_ENABLED" != true ]]; then
             return 130
         fi
-        
+
         # Get current time
         local current_time
         if command -v gdate >/dev/null 2>&1; then
@@ -241,9 +252,9 @@ lacy_shell_setup_interrupt_handler() {
         else
             current_time=$(date +%s%3N)
         fi
-        
+
         local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
-        
+
         if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
             # Double Ctrl+C - quit
             lacy_shell_quit
@@ -258,11 +269,11 @@ lacy_shell_setup_interrupt_handler() {
             # Single Ctrl+C
             LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
             echo ""
-            
+
             if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
                 lacy_shell_show_top_bar_message "Press Ctrl-C again to quit" "$LACY_SHELL_EXIT_TIMEOUT_SEC"
             fi
-            
+
             return 130
         fi
     }
@@ -284,7 +295,7 @@ lacy_shell_cleanup_keybindings() {
     bindkey '^T' transpose-chars
     bindkey '^Y' yank
     bindkey '^E' end-of-line
-    
+
     # Remove all custom widgets
     zle -D lacy_shell_toggle_mode_widget 2>/dev/null
     zle -D lacy_shell_agent_mode_widget 2>/dev/null
@@ -319,10 +330,10 @@ lacy_shell_setup_safe_keybindings() {
     # Use Alt-based bindings that are less likely to conflict
     bindkey '^[^M' lacy_shell_toggle_mode_widget    # Alt+Enter
     bindkey '^[1' lacy_shell_shell_mode_widget      # Alt+1
-    bindkey '^[2' lacy_shell_agent_mode_widget      # Alt+2  
+    bindkey '^[2' lacy_shell_agent_mode_widget      # Alt+2
     bindkey '^[3' lacy_shell_auto_mode_widget       # Alt+3
     bindkey '^[h' lacy_shell_help_widget            # Alt+H
-    
+
     echo "Using safe keybindings:"
     echo "  Alt+Enter: Toggle mode"
     echo "  Alt+1:     Shell mode"

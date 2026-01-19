@@ -2,6 +2,56 @@
 
 # Command execution logic for Lacy Shell
 
+# === Pink Sparkle Loader ===
+# Background process ID for the loader
+LACY_SHELL_LOADER_PID=""
+
+# Start the pink sparkle loader animation
+lacy_shell_start_loader() {
+    local message="${1:-thinking}"
+
+    # Don't start if already running
+    if [[ -n "$LACY_SHELL_LOADER_PID" ]] && kill -0 "$LACY_SHELL_LOADER_PID" 2>/dev/null; then
+        return 0
+    fi
+
+    # Hide cursor
+    echo -ne "\033[?25l"
+
+    # Run loader in background subshell
+    (
+        local frame_idx=0
+        local num_frames=${#LACY_SHELL_LOADER_FRAMES[@]}
+
+        while true; do
+            # Get current frame (zsh arrays are 1-indexed)
+            local frame="${LACY_SHELL_LOADER_FRAMES[$((frame_idx % num_frames + 1))]}"
+
+            # Print loader with pink color - carriage return to overwrite
+            printf "\r${LACY_SHELL_LOADER_COLOR}  %s ${message}...${LACY_SHELL_LOADER_RESET}  " "$frame"
+
+            frame_idx=$((frame_idx + 1))
+            sleep "$LACY_SHELL_LOADER_SPEED"
+        done
+    ) &
+
+    LACY_SHELL_LOADER_PID=$!
+}
+
+# Stop the loader animation
+lacy_shell_stop_loader() {
+    if [[ -n "$LACY_SHELL_LOADER_PID" ]]; then
+        # Kill the loader process
+        kill "$LACY_SHELL_LOADER_PID" 2>/dev/null
+        wait "$LACY_SHELL_LOADER_PID" 2>/dev/null
+        LACY_SHELL_LOADER_PID=""
+
+        # Clear the loader line and show cursor
+        printf "\r\033[K"
+        echo -ne "\033[?25h"
+    fi
+}
+
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
     # If Lacy Shell is disabled, use normal accept-line
@@ -34,14 +84,12 @@ lacy_shell_smart_accept_line() {
         return
     fi
     
-    # For auto mode, check if command might need TTY
+    # For auto mode, check if first word is a valid command
     if [[ "$execution_mode" == "auto" ]]; then
         local first_word="${input%% *}"
-        
-        # If it's a known command and not obviously natural language, 
-        # let shell handle it directly to preserve TTY
-        if lacy_shell_command_exists "$first_word" && ! lacy_shell_is_obvious_natural_language "$input"; then
-            # Let the shell execute it directly with proper TTY
+
+        # If the first word is a valid command, let shell handle it
+        if command -v "$first_word" >/dev/null 2>&1; then
             zle .accept-line
             return
         fi
@@ -102,12 +150,13 @@ lacy_shell_enable_interception() {
 # Execute command via AI agent
 lacy_shell_execute_agent() {
     local query="$1"
-    
-    # Add timeout and error handling
-    echo "🤖 "
-    
+
+    # Start the pink sparkle loader
+    lacy_shell_start_loader "thinking"
+
     # Query the agent with error handling
     if ! lacy_shell_query_agent "$query"; then
+        lacy_shell_stop_loader
         echo "❌ Agent request failed or timed out. Try:"
         echo "   - Check your API keys: lacy_shell_check_api_keys"
         echo "   - Check internet connection"
@@ -118,87 +167,19 @@ lacy_shell_execute_agent() {
     # Do not touch ZLE redraw here; we've already exited ZLE before streaming
 }
 
-# Smart auto execution: only called for non-commands or natural language
+# Smart auto execution: only called when first word is not a valid command
 lacy_shell_execute_smart_auto() {
     local input="$1"
     local first_word="${input%% *}"
-    
-    # This function is now only called when:
-    # 1. Input is natural language, OR
-    # 2. Command doesn't exist
-    # Known commands are handled directly by the shell in auto mode
-    
+
     # Check if agent is available
     if lacy_shell_check_api_keys >/dev/null 2>&1; then
-        if lacy_shell_is_obvious_natural_language "$input"; then
-            echo "🤖 Natural language detected, using AI agent"
-        else
-            echo "❓ Command not found, trying AI agent: $input"
-        fi
         lacy_shell_execute_agent "$input"
     else
         echo "❌ Command not found and no AI agent available: $first_word"
         echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
         echo "   Or check if the command is spelled correctly"
     fi
-}
-
-# Check if a command exists in the system
-lacy_shell_command_exists() {
-    local cmd="$1"
-    
-    # Handle built-in commands and common shell constructs
-    case "$cmd" in
-        cd|pwd|echo|export|alias|unalias|which|type|help|history|jobs|fg|bg|source|.|exit|logout)
-            return 0
-            ;;
-        # Common system commands that should always be treated as commands
-        timeout|nohup|sudo|env|time|nice|ionice|taskset|strace|ltrace)
-            return 0
-            ;;
-    esac
-    
-    # Check using command -v (POSIX compliant)
-    command -v "$cmd" >/dev/null 2>&1
-}
-
-# Check if input is obvious natural language
-lacy_shell_is_obvious_natural_language() {
-    local input="$1"
-    local input_lower="${input:l}"
-    
-    # Question patterns
-    if [[ "$input_lower" == \?* || "$input_lower" == *\? ]]; then
-        return 0
-    fi
-    
-    # Natural language starters
-    local natural_starters=(
-        "what" "how" "why" "when" "where" "who" "which" "can you" "could you"
-        "would you" "please" "help me" "tell me" "show me" "explain" "describe"
-        "i want" "i need" "i would like" "find me" "search for" "look for"
-    )
-    
-    for starter in "${natural_starters[@]}"; do
-        if [[ "$input_lower" == "$starter"* ]]; then
-            return 0
-        fi
-    done
-    
-    # Only treat as natural language if it's a very long sentence (>10 words) 
-    # AND doesn't start with a command AND has natural language patterns
-    local word_count=$(echo "$input" | wc -w)
-    if [[ $word_count -gt 10 ]]; then
-        local first_word="${input%% *}"
-        if ! lacy_shell_command_exists "$first_word"; then
-            # Check if it has sentence-like patterns (articles, pronouns, etc.)
-            if [[ "$input_lower" =~  (the|a|an|this|that|these|those|i|you|we|they|it)  ]]; then
-                return 0
-            fi
-        fi
-    fi
-    
-    return 1
 }
 
 # Precmd hook - called before each prompt
@@ -506,37 +487,29 @@ lacy_shell_test_smart_auto() {
     echo "Testing Smart Auto Mode"
     echo "======================"
     echo
-    
+
     local test_cases=(
-        "ls -la"                              # Should execute shell command
-        "nonexistentcommand123"               # Should try shell, fail, then try agent
-        "what files are in this directory?"   # Should go directly to agent (natural language)
-        "git status"                          # Should execute shell command
-        "how do I install python packages?"   # Should go directly to agent (natural language)
-        "pwd"                                 # Should execute shell command
-        "please help me with docker"          # Should go directly to agent (natural language)
-        "invalidcmd --help"                   # Should try shell first, then fallback
+        "ls -la"
+        "nonexistentcommand123"
+        "hey"
+        "git status"
+        "what files are here"
+        "pwd"
     )
-    
-    echo "The following tests would demonstrate smart auto mode behavior:"
+
+    echo "Auto mode behavior (command exists = shell, otherwise = agent):"
     echo
-    
+
     for test_case in "${test_cases[@]}"; do
-        echo "Input: '$test_case'"
-        
-        if lacy_shell_is_obvious_natural_language "$test_case"; then
-            echo "  → Would go directly to AI agent (natural language detected)"
+        local first_word="${test_case%% *}"
+        echo -n "  '$test_case' -> "
+        if command -v "$first_word" >/dev/null 2>&1; then
+            echo "shell"
         else
-            local first_word="${test_case%% *}"
-            if lacy_shell_command_exists "$first_word"; then
-                echo "  → Would execute shell command (command exists)"
-            else
-                echo "  → Would try shell first, then fallback to AI agent (command not found)"
-            fi
+            echo "agent"
         fi
-        echo
     done
-    
-    echo "To test for real, switch to auto mode with: mode auto"
-    echo "Then try typing any of the above commands."
+
+    echo
+    echo "Switch to auto mode with: mode auto"
 }
