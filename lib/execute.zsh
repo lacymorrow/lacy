@@ -87,9 +87,13 @@ lacy_shell_smart_accept_line() {
     # For auto mode, check if first word is a valid command
     if [[ "$execution_mode" == "auto" ]]; then
         local first_word="${input%% *}"
+        local first_word_lower="${first_word:l}"
 
+        # "what" always triggers agent mode (hardcoded override)
+        if [[ "$first_word_lower" == "what" ]]; then
+            : # Fall through to agent handling below
         # If the first word is a valid command, let shell handle it
-        if command -v "$first_word" >/dev/null 2>&1; then
+        elif command -v "$first_word" >/dev/null 2>&1; then
             zle .accept-line
             return
         fi
