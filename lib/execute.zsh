@@ -9,75 +9,55 @@ lacy_shell_smart_accept_line() {
         zle .accept-line
         return
     fi
-    
+
     local input="$BUFFER"
-    
+
     # Skip empty commands
     if [[ -z "$input" ]]; then
         zle .accept-line
         return
     fi
-    
-    # Emergency bypass - if input starts with !, force shell execution
-    if [[ "$input" == !* ]]; then
-        BUFFER="${input#!}"
-        zle .accept-line
-        return
-    fi
-    
-    # Determine which mode to use
-    local execution_mode=$(lacy_shell_detect_mode "$input")
-    
-    # In shell mode, always use normal shell execution
-    if [[ "$execution_mode" == "shell" ]]; then
-        zle .accept-line
-        return
-    fi
-    
-    # For auto mode, check if first word is a valid command
-    if [[ "$execution_mode" == "auto" ]]; then
-        local first_word="${input%% *}"
-        local first_word_lower="${first_word:l}"
 
-        # "what" always triggers agent mode (hardcoded override)
-        if [[ "$first_word_lower" == "what" ]]; then
-            : # Fall through to agent handling below
-        # If the first word is a valid command, let shell handle it
-        elif command -v "$first_word" >/dev/null 2>&1; then
+    # Classify using centralized detection (handles whitespace trimming internally)
+    local classification
+    classification=$(lacy_shell_classify_input "$input")
+
+    case "$classification" in
+        "neutral")
             zle .accept-line
             return
-        # Single word that's not a command = probably a typo, let shell error
-        elif [[ "$input" != *" "* ]]; then
+            ;;
+        "shell")
+            # Trim input to check for ! bypass
+            local trimmed="$input"
+            trimmed="${trimmed#"${trimmed%%[^[:space:]]*}"}"
+
+            if [[ "$trimmed" == !* ]]; then
+                # Strip the ! prefix, keep everything after it
+                trimmed="${trimmed#!}"
+                BUFFER="$trimmed"
+            fi
+
+            # Handle "exit" explicitly: in shell mode pass through to builtin,
+            # in auto/agent mode quit lacy shell
+            local first_word="${trimmed%% *}"
+            if [[ "$first_word" == "exit" && "$LACY_SHELL_CURRENT_MODE" != "shell" ]]; then
+                lacy_shell_quit
+                return
+            fi
+
             zle .accept-line
             return
-        fi
-    fi
-    
-    # Handle based on mode (agent or auto with non-command/natural language)
-    case "$execution_mode" in
+            ;;
         "agent")
             # Add to history before clearing buffer
             print -s -- "$input"
-            
+
             # Clear the line, accept to exit ZLE, then stream below a fresh line
             BUFFER=""
             zle .accept-line
             print -r -- ""
             lacy_shell_execute_agent "$input"
-            ;;
-        "auto")
-            # Smart auto mode: for non-commands or natural language
-            # Add to history before clearing buffer
-            print -s -- "$input"
-            
-            BUFFER=""
-            zle .accept-line
-            print -r -- ""
-            lacy_shell_execute_smart_auto "$input"
-            ;;
-        *)
-            # Normal shell execution
-            zle .accept-line
             ;;
     esac
 }
@@ -119,6 +99,8 @@ lacy_shell_execute_smart_auto() {
 
 # Precmd hook - called before each prompt
 lacy_shell_precmd() {
+    # Ensure cursor is visible (safety net for interrupted spinners)
+    printf '\e[?25h'
     # Don't run if disabled or quitting
     if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
         return
@@ -303,7 +285,7 @@ lacy_shell_quit() {
     fi
 
     # Unset aliases
-    unalias ask mode tool quit_lacy quit stop exit disable_lacy enable_lacy 2>/dev/null
+    unalias ask mode tool quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
     
     # Restore original prompt
     lacy_shell_restore_prompt
@@ -424,6 +406,5 @@ alias tool="lacy_shell_tool"
 alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
 alias stop="lacy_shell_quit"
-alias exit="lacy_shell_quit"
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"

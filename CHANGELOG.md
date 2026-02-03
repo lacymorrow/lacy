@@ -5,6 +5,20 @@ All notable changes to Lacy Shell will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-02-03
+
+### Fixed
+- Leading whitespace no longer misroutes input to agent (`  ls -la` now correctly executes in shell)
+- Spinner no longer permanently disables job control (`fg`/`bg` work after AI queries)
+- Spinner no longer leaves cursor hidden after Ctrl+C interrupts
+- `exit` no longer shadowed by alias — passes through to shell builtin in shell mode, quits lacy in auto/agent mode
+
+### Changed
+- Centralized detection logic into single `lacy_shell_classify_input()` function — indicator and execution can no longer disagree
+- Added single-entry cache for `command -v` lookups to reduce input lag with large PATH
+
+---
+
 ## [1.1.0] - 2024-12-19 - SMART AUTO MODE 🧠
 
 ### ⚡ Major Enhancement: Intelligent Auto Mode

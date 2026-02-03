@@ -15,63 +15,9 @@ LACY_SHELL_INPUT_TYPE=""  # "shell" or "agent"
 # ============================================================================
 
 # Check if input will go to shell or agent
-# MUST match the logic in execute.zsh lacy_shell_smart_accept_line()
+# Delegates to centralized detection in detection.zsh
 lacy_shell_detect_input_type() {
-    local input="$1"
-
-    # Empty input = neutral
-    if [[ -z "$input" ]]; then
-        echo "neutral"
-        return
-    fi
-
-    # Emergency bypass prefix (!) = shell
-    if [[ "$input" == !* ]]; then
-        echo "shell"
-        return
-    fi
-
-    # In shell mode, everything goes to shell
-    if [[ "$LACY_SHELL_CURRENT_MODE" == "shell" ]]; then
-        echo "shell"
-        return
-    fi
-
-    # In agent mode, everything goes to agent
-    if [[ "$LACY_SHELL_CURRENT_MODE" == "agent" ]]; then
-        echo "agent"
-        return
-    fi
-
-    # Auto mode: check special cases and commands
-    local first_word="${input%% *}"
-    local first_word_lower="${first_word:l}"
-
-    # Skip if first word is empty
-    if [[ -z "$first_word" ]]; then
-        echo "neutral"
-        return
-    fi
-
-    # "what" always goes to agent (hardcoded override)
-    if [[ "$first_word_lower" == "what" ]]; then
-        echo "agent"
-        return
-    fi
-
-    # Check if it's a valid command
-    if command -v "$first_word" >/dev/null 2>&1; then
-        echo "shell"
-        return
-    fi
-
-    # Single word that's not a command = probably a typo → shell
-    # Multiple words with non-command first word = natural language → agent
-    if [[ "$input" != *" "* ]]; then
-        echo "shell"
-    else
-        echo "agent"
-    fi
+    lacy_shell_classify_input "$1"
 }
 
 # Update the indicator based on current input (called on every keystroke)

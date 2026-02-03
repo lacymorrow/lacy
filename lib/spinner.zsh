@@ -4,6 +4,7 @@
 # Displays a braille spinner + "Thinking" with a sweeping brightness pulse
 
 LACY_SPINNER_PID=""
+LACY_SPINNER_MONITOR_WAS_SET=""
 
 lacy_start_spinner() {
     # Guard against double-start
@@ -11,7 +12,12 @@ lacy_start_spinner() {
         lacy_stop_spinner
     fi
 
-    # Suppress job control messages
+    # Save and suppress job control messages
+    if [[ -o monitor ]]; then
+        LACY_SPINNER_MONITOR_WAS_SET=1
+    else
+        LACY_SPINNER_MONITOR_WAS_SET=""
+    fi
     set +m
 
     {
@@ -78,6 +84,9 @@ lacy_start_spinner() {
 }
 
 lacy_stop_spinner() {
+    # Unconditional cursor restore — safety net even if PID is empty (e.g. Ctrl+C race)
+    printf '\e[?25h'
+
     if [[ -z "$LACY_SPINNER_PID" ]]; then
         return
     fi
@@ -93,4 +102,10 @@ lacy_stop_spinner() {
     printf '\e[?25h'
 
     LACY_SPINNER_PID=""
+
+    # Restore job control if it was previously enabled
+    if [[ -n "$LACY_SPINNER_MONITOR_WAS_SET" ]]; then
+        set -m
+        LACY_SPINNER_MONITOR_WAS_SET=""
+    fi
 }
