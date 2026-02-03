@@ -11,7 +11,7 @@ const INSTALL_DIR = join(homedir(), '.lacy');
 const INSTALL_DIR_OLD = join(homedir(), '.lacy-shell');
 const CONFIG_FILE = join(INSTALL_DIR, 'config.yaml');
 const ZSHRC = join(homedir(), '.zshrc');
-const REPO_URL = 'https://github.com/lacymorrow/lacy-shell.git';
+const REPO_URL = 'https://github.com/lacymorrow/lacy.git';
 
 const TOOLS = [
   { value: 'lash', label: 'lash', hint: 'recommended' },
@@ -97,7 +97,7 @@ async function uninstall() {
     // Remove source line and comment
     content = content
       .split('\n')
-      .filter(line => !line.includes('lacy-shell.plugin.zsh') && line.trim() !== '# Lacy Shell')
+      .filter(line => !line.includes('lacy.plugin.zsh') && line.trim() !== '# Lacy Shell')
       .join('\n');
     writeFileSync(ZSHRC, content);
     zshrcSpinner.stop('Removed from .zshrc');
@@ -263,23 +263,13 @@ async function install() {
   const zshrcSpinner = p.spinner();
   zshrcSpinner.start('Configuring shell');
 
-  const sourceLine = `source ${INSTALL_DIR}/lacy-shell.plugin.zsh`;
+  const sourceLine = `source ${INSTALL_DIR}/lacy.plugin.zsh`;
 
   if (existsSync(ZSHRC)) {
     const zshrcContent = readFileSync(ZSHRC, 'utf-8');
 
-    if (zshrcContent.includes('lacy-shell.plugin.zsh')) {
-      // Update old path if needed
-      if (zshrcContent.includes('.lacy-shell/lacy-shell.plugin.zsh')) {
-        const updated = zshrcContent.replace(
-          /\.lacy-shell\/lacy-shell\.plugin\.zsh/g,
-          '.lacy/lacy-shell.plugin.zsh'
-        );
-        writeFileSync(ZSHRC, updated);
-        zshrcSpinner.stop('Updated .zshrc');
-      } else {
-        zshrcSpinner.stop('Already configured');
-      }
+    if (zshrcContent.includes('lacy.plugin.zsh')) {
+      zshrcSpinner.stop('Already configured');
     } else {
       appendFileSync(ZSHRC, `\n# Lacy Shell\n${sourceLine}\n`);
       zshrcSpinner.stop('Added to .zshrc');
@@ -302,7 +292,7 @@ async function install() {
     : `  # custom_command: "your-command -flags"`;
 
   const configContent = `# Lacy Shell Configuration
-# https://github.com/lacymorrow/lacy-shell
+# https://github.com/lacymorrow/lacy
 
 # AI CLI tool selection
 # Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
@@ -349,7 +339,7 @@ Commands:
 
   await restartShell();
 
-  p.outro(pc.dim('Learn more: https://github.com/lacymorrow/lacy-shell'));
+  p.outro(pc.dim('Learn more: https://github.com/lacymorrow/lacy'));
 }
 
 // ============================================================================
@@ -370,8 +360,8 @@ async function main() {
 ${pc.magenta(pc.bold('Lacy Shell'))} - Talk directly to your shell
 
 ${pc.bold('Usage:')}
-  npx lacy-sh              Install Lacy Shell
-  npx lacy-sh --uninstall  Uninstall Lacy Shell
+  npx lacy              Install Lacy Shell
+  npx lacy --uninstall  Uninstall Lacy Shell
 
 ${pc.bold('Options:')}
   -h, --help       Show this help message
@@ -381,7 +371,7 @@ ${pc.bold('Other install methods:')}
   curl -fsSL https://lacy.sh/install | bash
   brew install lacymorrow/tap/lacy
 
-${pc.dim('https://github.com/lacymorrow/lacy-shell')}
+${pc.dim('https://github.com/lacymorrow/lacy')}
 `);
     return;
   }
@@ -426,7 +416,7 @@ ${pc.dim('https://github.com/lacymorrow/lacy-shell')}
         let content = readFileSync(ZSHRC, 'utf-8');
         content = content
           .split('\n')
-          .filter(line => !line.includes('lacy-shell.plugin.zsh') && line.trim() !== '# Lacy Shell')
+          .filter(line => !line.includes('lacy.plugin.zsh') && line.trim() !== '# Lacy Shell')
           .join('\n');
         writeFileSync(ZSHRC, content);
         zshrcSpinner.stop('Removed from .zshrc');

@@ -11,14 +11,14 @@ Enable developers to talk directly to their shell.
 Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No mode switching required.
 
 **Install location:** `~/.lacy`
-**Package name:** `lacy-sh` (npm)
+**Package name:** `lacy` (npm)
 
 ## Installation Methods
 
 | Method | Command |
 |--------|---------|
 | curl | `curl -fsSL https://lacy.sh/install \| bash` |
-| npx | `npx lacy-sh` |
+| npx | `npx lacy` |
 | Homebrew | `brew install lacymorrow/tap/lacy` |
 
 ## Visual Feedback
@@ -65,7 +65,7 @@ All tools handle their own authentication - no API keys needed from lacy.
 
 ```
 ~/.lacy/
-├── lacy-shell.plugin.zsh    # Entry point
+├── lacy.plugin.zsh          # Entry point
 ├── config.yaml              # User configuration
 ├── install.sh               # Installer (bash + npx fallback)
 ├── uninstall.sh             # Uninstaller
@@ -81,7 +81,7 @@ All tools handle their own authentication - no API keys needed from lacy.
     ├── prompt.zsh           # Prompt with indicator, mode in right prompt
     └── execute.zsh          # Command execution routing, tool command
 
-packages/lacy-sh/            # npm package for interactive installer
+packages/lacy/               # npm package for interactive installer
 ├── package.json
 ├── index.mjs                # @clack/prompts based installer
 └── README.md
@@ -109,7 +109,7 @@ packages/lacy-sh/            # npm package for interactive installer
 - `lib/preheat.zsh` - Background server (lash/opencode) + session reuse (claude)
 - `lib/keybindings.zsh` - Real-time indicator logic
 - `install.sh` - Bash installer with npx fallback, interactive menu
-- `packages/lacy-sh/index.mjs` - Node installer with @clack/prompts
+- `packages/lacy/index.mjs` - Node installer with @clack/prompts
 
 ## Configuration
 

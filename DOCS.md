@@ -5,7 +5,7 @@
 ## Architecture Overview
 
 ```
-lacy-shell.plugin.zsh (entry point)
+lacy.plugin.zsh (entry point)
 ├── lib/constants.zsh   - Paths, defaults, UI config
 ├── lib/config.zsh      - YAML parsing, API key management
 ├── lib/modes.zsh       - Mode state management
@@ -16,7 +16,7 @@ lacy-shell.plugin.zsh (entry point)
 └── lib/execute.zsh     - Command execution, agent queries
 ```
 
-**Config/State Files** (`~/.lacy-shell/`):
+**Config/State Files** (`~/.lacy/`):
 - `config.yaml` - API keys, modes, MCP servers, appearance
 - `current_mode` - Persisted mode state
 - `conversation.log` - Chat history (auto-trimmed to 200 lines)
@@ -62,7 +62,7 @@ lacy-shell.plugin.zsh (entry point)
 - Available MCP tools (if configured)
 
 **API Keys** (precedence):
-1. `~/.lacy-shell/config.yaml` → `api_keys.openai/anthropic`
+1. `~/.lacy/config.yaml` → `api_keys.openai/anthropic`
 2. Environment: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
 
 ---

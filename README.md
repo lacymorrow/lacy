@@ -20,7 +20,7 @@ curl -fsSL https://lacy.sh/install | bash
 Or with npm (interactive arrow-key selection):
 
 ```bash
-npx lacy-sh
+npx lacy
 ```
 
 ### Other Methods
@@ -34,8 +34,8 @@ source ~/.zshrc
 
 **Manual:**
 ```bash
-git clone https://github.com/lacymorrow/lacy-shell.git ~/.lacy
-echo 'source ~/.lacy/lacy-shell.plugin.zsh' >> ~/.zshrc
+git clone https://github.com/lacymorrow/lacy.git ~/.lacy
+echo 'source ~/.lacy/lacy.plugin.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -43,7 +43,7 @@ source ~/.zshrc
 
 ```bash
 # Interactive
-npx lacy-sh --uninstall
+npx lacy --uninstall
 
 # Or via curl
 curl -fsSL https://lacy.sh/install | bash -s -- --uninstall
@@ -143,7 +143,7 @@ auto_detection:
 
 ```
 ~/.lacy/
-├── lacy-shell.plugin.zsh   # Entry point
+├── lacy.plugin.zsh   # Entry point
 ├── config.yaml             # User configuration
 ├── lib/
 │   ├── constants.zsh       # Colors, paths, defaults
@@ -180,13 +180,13 @@ bash install.sh --uninstall
 
 ```bash
 # Install (interactive)
-npx lacy-sh
+npx lacy
 
 # Uninstall
-npx lacy-sh --uninstall
+npx lacy --uninstall
 
 # Help
-npx lacy-sh --help
+npx lacy --help
 ```
 
 ## Troubleshooting
@@ -226,11 +226,11 @@ enable_lacy    # Re-enable
 
 ```bash
 # Clone
-git clone https://github.com/lacymorrow/lacy-shell.git
-cd lacy-shell
+git clone https://github.com/lacymorrow/lacy.git
+cd lacy
 
 # Source directly for testing
-source lacy-shell.plugin.zsh
+source lacy.plugin.zsh
 
 # Test installer
 bash install.sh --bash

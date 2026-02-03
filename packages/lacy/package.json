@@ -1,10 +1,10 @@
 {
-  "name": "lacy-sh",
+  "name": "lacy",
   "version": "1.3.0",
   "description": "Install Lacy Shell - talk directly to your shell",
   "type": "module",
   "bin": {
-    "lacy-sh": "./index.mjs"
+    "lacy": "./index.mjs"
   },
   "files": [
     "index.mjs"
@@ -25,10 +25,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lacymorrow/lacy-shell.git",
-    "directory": "packages/lacy-sh"
+    "url": "https://github.com/lacymorrow/lacy.git",
+    "directory": "packages/lacy"
   },
-  "homepage": "https://github.com/lacymorrow/lacy-shell",
+  "homepage": "https://github.com/lacymorrow/lacy",
   "dependencies": {
     "@clack/prompts": "^0.7.0",
     "picocolors": "^1.0.0"

@@ -12,7 +12,7 @@ gh auth status      # Must be authenticated with repo + workflow scopes
 ```
 
 You need push access to:
-- `lacymorrow/lacy-shell` (main repo)
+- `lacymorrow/lacy` (main repo)
 - `lacymorrow/homebrew-tap` (Homebrew formula)
 - `lacymorrow/lacy-sh` (website — only if updating)
 
@@ -33,7 +33,7 @@ Both `package.json` files must stay in sync:
 
 ```bash
 npm version $VERSION --no-git-tag-version
-cd packages/lacy-sh && npm version $VERSION --no-git-tag-version && cd ../..
+cd packages/lacy && npm version $VERSION --no-git-tag-version && cd ../..
 ```
 
 Then update `CHANGELOG.md` — add a section at the top:
@@ -51,7 +51,7 @@ Then update `CHANGELOG.md` — add a section at the top:
 ### 2. Commit and push
 
 ```bash
-git add package.json packages/lacy-sh/package.json packages/lacy-sh/package-lock.json CHANGELOG.md
+git add package.json packages/lacy/package.json packages/lacy/package-lock.json CHANGELOG.md
 git commit -m "release: v$VERSION"
 git push origin main
 ```
@@ -70,12 +70,12 @@ gh release create "v$VERSION" \
 ### 4. Publish to npm
 
 ```bash
-cd packages/lacy-sh
+cd packages/lacy
 npm publish --otp=YOUR_OTP_CODE
 cd ../..
 ```
 
-Verify: `npm view lacy-sh version` → should print the new version.
+Verify: `npm view lacy version` → should print the new version.
 
 ### 5. Update Homebrew tap
 
@@ -83,14 +83,14 @@ Get the SHA of the release tarball, then update the formula:
 
 ```bash
 # Get SHA
-SHA=$(curl -sL "https://github.com/lacymorrow/lacy-shell/archive/refs/tags/v$VERSION.tar.gz" | shasum -a 256 | cut -d' ' -f1)
+SHA=$(curl -sL "https://github.com/lacymorrow/lacy/archive/refs/tags/v$VERSION.tar.gz" | shasum -a 256 | cut -d' ' -f1)
 echo "SHA: $SHA"
 
 # Clone/update tap
 gh repo clone lacymorrow/homebrew-tap /tmp/homebrew-tap 2>/dev/null || git -C /tmp/homebrew-tap pull
 
 # Update formula (url + sha256)
-sed -i '' "s|url \".*\"|url \"https://github.com/lacymorrow/lacy-shell/archive/refs/tags/v$VERSION.tar.gz\"|" /tmp/homebrew-tap/Formula/lacy.rb
+sed -i '' "s|url \".*\"|url \"https://github.com/lacymorrow/lacy/archive/refs/tags/v$VERSION.tar.gz\"|" /tmp/homebrew-tap/Formula/lacy.rb
 sed -i '' "s|sha256 \".*\"|sha256 \"$SHA\"|" /tmp/homebrew-tap/Formula/lacy.rb
 
 # Push
@@ -115,7 +115,7 @@ cd /tmp/lacy-sh && git add . && git commit -m "update for v$VERSION" && git push
 
 ```bash
 gh release view "v$VERSION"                    # GitHub release exists
-npm view lacy-sh version                       # npm shows new version
+npm view lacy version                       # npm shows new version
 brew update && brew info lacymorrow/tap/lacy   # Homebrew shows new version
 ```
 
@@ -130,7 +130,7 @@ bump versions → commit & push → gh release → npm publish → update homebr
 | Channel | What gets updated | Trigger |
 |---------|-------------------|---------|
 | GitHub | Release + tag | `gh release create` |
-| npm | `lacy-sh` package | `npm publish` in `packages/lacy-sh` |
+| npm | `lacy` package | `npm publish` in `packages/lacy` |
 | Homebrew | `lacymorrow/tap/lacy` formula | Push to `homebrew-tap` repo |
 | curl install | `install.sh` | Pulls from git main (automatic) |
 | Website | lacy.sh | Push to `lacy-sh` repo (Vercel auto-deploy) |
@@ -144,4 +144,4 @@ bump versions → commit & push → gh release → npm publish → update homebr
 | Homebrew still shows old version | Run `brew update` to fetch the new tap index. |
 | GitHub release tarball 404 | Wait a few seconds after `gh release create` for the tarball to generate. |
 | SHA mismatch after Homebrew update | Re-fetch: `curl -sL "...tar.gz" \| shasum -a 256` and update formula. |
-| Version mismatch between package.json files | Both root and `packages/lacy-sh/package.json` must match. |
+| Version mismatch between package.json files | Both root and `packages/lacy/package.json` must match. |

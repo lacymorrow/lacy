@@ -15,7 +15,7 @@ echo ""
 if [[ -f "$ZSHRC" ]]; then
     echo "Removing from .zshrc..."
     tmp_file=$(mktemp)
-    grep -v "lacy-shell.plugin.zsh" "$ZSHRC" > "$tmp_file" || true
+    grep -v "lacy.plugin.zsh" "$ZSHRC" > "$tmp_file" || true
     # Also remove the comment line
     grep -v "# Lacy Shell" "$tmp_file" > "${tmp_file}.2" || true
     mv "${tmp_file}.2" "$ZSHRC"

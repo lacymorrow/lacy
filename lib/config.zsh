@@ -238,7 +238,7 @@ agent:
   command: "lash run --prompt {query}"
   # How to pass context: stdin or file
   context_mode: stdin
-  # Set to true if the CLI needs API keys from lacy-shell
+  # Set to true if the CLI needs API keys from lacy
   needs_api_keys: false
 EOF
 

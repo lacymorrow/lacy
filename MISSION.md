@@ -40,7 +40,7 @@ You type: fix the authentication bug
 ┌─────────────────────────────────┐
 │  Your Terminal (ZSH)            │
 │  ┌───────────────────────────┐  │
-│  │  lacy-shell               │  │
+│  │  lacy                      │  │
 │  │  Real-time detection      │  │
 │  │  Green = shell            │  │
 │  │  Magenta = agent          │  │

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 # Lacy Shell Installation Script
-# https://github.com/lacymorrow/lacy-shell
+# https://github.com/lacymorrow/lacy
 #
 # Install methods:
 #   curl -fsSL https://lacy.sh/install | bash
-#   npx lacy-sh
+#   npx lacy
 #   brew install lacymorrow/tap/lacy
 
 set -e
@@ -23,7 +23,7 @@ NC='\033[0m' # No Color
 
 # Installation directory
 INSTALL_DIR="${HOME}/.lacy"
-REPO_URL="https://github.com/lacymorrow/lacy-shell.git"
+REPO_URL="https://github.com/lacymorrow/lacy.git"
 CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 
 # Selected tool (set during installation)
@@ -45,13 +45,13 @@ use_node_installer() {
 # Run Node installer via npx
 run_node_installer() {
     # Quietly check if package exists first
-    if ! npm view lacy-sh version >/dev/null 2>&1; then
+    if ! npm view lacy version >/dev/null 2>&1; then
         return 1
     fi
 
     printf "${BLUE}Using interactive installer...${NC}\n"
     printf "\n"
-    if npx --yes lacy-sh@latest; then
+    if npx --yes lacy@latest; then
         exit 0
     fi
 
@@ -249,18 +249,11 @@ configure_zsh() {
     printf "${BLUE}Configuring shell...${NC}\n"
 
     local zshrc="${HOME}/.zshrc"
-    local plugin_line="source ${INSTALL_DIR}/lacy-shell.plugin.zsh"
+    local plugin_line="source ${INSTALL_DIR}/lacy.plugin.zsh"
 
     # Check if already configured
-    if [[ -f "$zshrc" ]] && grep -q "lacy-shell.plugin.zsh" "$zshrc" 2>/dev/null; then
-        # Update path if it points to old location
-        if grep -q ".lacy-shell/lacy-shell.plugin.zsh" "$zshrc" 2>/dev/null; then
-            sed -i '' 's|\.lacy-shell/lacy-shell\.plugin\.zsh|.lacy/lacy-shell.plugin.zsh|g' "$zshrc" 2>/dev/null || \
-            sed -i 's|\.lacy-shell/lacy-shell\.plugin\.zsh|.lacy/lacy-shell.plugin.zsh|g' "$zshrc" 2>/dev/null
-            printf "${GREEN}✓ Updated path in .zshrc${NC}\n"
-        else
-            printf "${GREEN}✓ Already configured in .zshrc${NC}\n"
-        fi
+    if [[ -f "$zshrc" ]] && grep -q "lacy.plugin.zsh" "$zshrc" 2>/dev/null; then
+        printf "${GREEN}✓ Already configured in .zshrc${NC}\n"
     else
         # Create .zshrc if it doesn't exist
         [[ ! -f "$zshrc" ]] && touch "$zshrc"
@@ -299,7 +292,7 @@ create_config() {
     # Create config file
     cat > "$CONFIG_FILE" << EOF
 # Lacy Shell Configuration
-# https://github.com/lacymorrow/lacy-shell
+# https://github.com/lacymorrow/lacy
 
 # AI CLI tool selection
 # Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
@@ -352,7 +345,7 @@ show_success() {
         printf "\n"
     fi
 
-    printf "${DIM}Learn more: https://github.com/lacymorrow/lacy-shell${NC}\n"
+    printf "${DIM}Learn more: https://github.com/lacymorrow/lacy${NC}\n"
     printf "\n"
 }
 
@@ -378,7 +371,7 @@ do_uninstall() {
     printf "\n"
 
     # Check if installed
-    if [[ ! -d "$INSTALL_DIR" && ! -d "${HOME}/.lacy-shell" ]]; then
+    if [[ ! -d "$INSTALL_DIR" ]]; then
         printf "${YELLOW}Lacy Shell is not installed${NC}\n"
         exit 0
     fi
@@ -388,7 +381,7 @@ do_uninstall() {
     if [[ -f "$zshrc" ]]; then
         printf "${BLUE}Removing from .zshrc...${NC}\n"
         local tmp_file=$(mktemp)
-        grep -v "lacy-shell.plugin.zsh" "$zshrc" | grep -v "# Lacy Shell" > "$tmp_file" || true
+        grep -v "lacy.plugin.zsh" "$zshrc" | grep -v "# Lacy Shell" > "$tmp_file" || true
         mv "$tmp_file" "$zshrc"
         printf "  ${GREEN}✓${NC} Removed from .zshrc\n"
     fi
@@ -397,12 +390,6 @@ do_uninstall() {
     if [[ -d "$INSTALL_DIR" ]]; then
         printf "${BLUE}Removing $INSTALL_DIR...${NC}\n"
         rm -rf "$INSTALL_DIR"
-        printf "  ${GREEN}✓${NC} Removed\n"
-    fi
-
-    if [[ -d "${HOME}/.lacy-shell" ]]; then
-        printf "${BLUE}Removing ${HOME}/.lacy-shell...${NC}\n"
-        rm -rf "${HOME}/.lacy-shell"
         printf "  ${GREEN}✓${NC} Removed\n"
     fi
 
@@ -424,7 +411,7 @@ do_uninstall() {
 
 # Check if already installed and show menu
 check_existing_installation() {
-    if [[ -d "$INSTALL_DIR" || -d "${HOME}/.lacy-shell" ]]; then
+    if [[ -d "$INSTALL_DIR" ]]; then
         print_banner
         printf "${YELLOW}Lacy Shell is already installed.${NC}\n"
         printf "\n"
@@ -443,7 +430,7 @@ check_existing_installation() {
             1)
                 printf "\n"
                 printf "${BLUE}Updating Lacy...${NC}\n"
-                cd "$INSTALL_DIR" 2>/dev/null || cd "${HOME}/.lacy-shell" || {
+                cd "$INSTALL_DIR" 2>/dev/null || {
                     printf "${RED}Could not find installation directory${NC}\n"
                     exit 1
                 }
@@ -458,7 +445,7 @@ check_existing_installation() {
             2)
                 printf "\n"
                 printf "${BLUE}Removing existing installation...${NC}\n"
-                rm -rf "$INSTALL_DIR" "${HOME}/.lacy-shell" 2>/dev/null
+                rm -rf "$INSTALL_DIR" 2>/dev/null
                 printf "${GREEN}✓ Removed${NC}\n"
                 printf "\n"
                 # Continue with fresh install
@@ -524,8 +511,8 @@ case "$1" in
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --uninstall\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool claude\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool custom \"claude -p\"\n"
-        printf "  npx lacy-sh\n"
-        printf "  npx lacy-sh --uninstall\n"
+        printf "  npx lacy\n"
+        printf "  npx lacy --uninstall\n"
         exit 0
         ;;
     "--uninstall"|"-u")

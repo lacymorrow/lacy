@@ -1,11 +1,11 @@
-# lacy-sh
+# lacy
 
-Interactive installer for [Lacy Shell](https://github.com/lacymorrow/lacy-shell) — talk directly to your shell.
+Interactive installer for [Lacy Shell](https://github.com/lacymorrow/lacy) — talk directly to your shell.
 
 ## Install
 
 ```bash
-npx lacy-sh
+npx lacy
 ```
 
 Features:
@@ -17,15 +17,15 @@ Features:
 ## Uninstall
 
 ```bash
-npx lacy-sh --uninstall
+npx lacy --uninstall
 ```
 
 ## Options
 
 ```
 Usage:
-  npx lacy-sh              Install Lacy Shell
-  npx lacy-sh --uninstall  Uninstall Lacy Shell
+  npx lacy              Install Lacy Shell
+  npx lacy --uninstall  Uninstall Lacy Shell
 
 Options:
   -h, --help       Show help message
