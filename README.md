@@ -38,7 +38,7 @@ Real-time visual feedback shows what will happen before you hit enter:
   <img src="assets/real-time-indicator.jpeg" alt="Green indicator for shell commands, magenta for AI" width="680" />
 </p>
 
-Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no mode switching — you just type.
+Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no context switching — you just type.
 
 | Input | Routes to | Why |
 |-------|-----------|-----|

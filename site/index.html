@@ -1,699 +1,1123 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>lacy.sh</title>
-  <meta name="description" content="ZSH plugin. Natural language goes to AI. Commands run in shell. No mode switching." />
-  <meta property="og:title" content="lacy - talk to your shell" />
-  <meta property="og:description" content="ZSH plugin. Natural language goes to AI. Commands run in shell." />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://lacy.sh" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.88em' font-size='80' fill='%23c084fc'>%E2%96%8C</text></svg>" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>lacy.sh</title>
+        <meta
+            name="description"
+            content="ZSH plugin. Natural language goes to AI. Commands run in shell. No context switching."
+        />
+        <meta property="og:title" content="lacy - talk to your shell" />
+        <meta
+            property="og:description"
+            content="ZSH plugin. Natural language goes to AI. Commands run in shell."
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://lacy.sh" />
+        <link
+            rel="icon"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.88em' font-size='80' fill='%23c084fc'>%E2%96%8C</text></svg>"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
 
-    :root {
-      --black: #09090b;
-      --surface: #111113;
-      --raised: #19191d;
-      --line: #27272a;
-      --line-dim: #1c1c1f;
-      --fg: #fafafa;
-      --fg-2: #a1a1aa;
-      --fg-3: #52525b;
-      --fg-4: #3f3f46;
-      --green: #4ade80;
-      --magenta: #d946ef;
-      --violet: #a78bfa;
-      --blue: #60a5fa;
-      --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
-      --mono: 'DM Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-    }
+            :root {
+                --black: #09090b;
+                --surface: #111113;
+                --raised: #19191d;
+                --line: #27272a;
+                --line-dim: #1c1c1f;
+                --fg: #fafafa;
+                --fg-2: #a1a1aa;
+                --fg-3: #52525b;
+                --fg-4: #3f3f46;
+                --green: #4ade80;
+                --magenta: #d946ef;
+                --violet: #a78bfa;
+                --blue: #60a5fa;
+                --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+                --mono:
+                    "DM Mono", "SF Mono", "Fira Code", "Cascadia Code",
+                    monospace;
+            }
 
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: var(--mono);
-      background: var(--black);
-      color: var(--fg);
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-      font-size: 14px;
-      line-height: 1.6;
-    }
-    a { color: inherit; }
+            html {
+                scroll-behavior: smooth;
+            }
+            body {
+                font-family: var(--mono);
+                background: var(--black);
+                color: var(--fg);
+                -webkit-font-smoothing: antialiased;
+                overflow-x: hidden;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+            a {
+                color: inherit;
+            }
 
-    /* ── grain ── */
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      pointer-events: none;
-      opacity: 0.025;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      background-repeat: repeat;
-      background-size: 200px;
-    }
+            /* ── grain ── */
+            body::after {
+                content: "";
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                pointer-events: none;
+                opacity: 0.025;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+                background-repeat: repeat;
+                background-size: 200px;
+            }
 
-    /* ── layout ── */
-    .wrap { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+            /* ── layout ── */
+            .wrap {
+                max-width: 680px;
+                margin: 0 auto;
+                padding: 0 24px;
+            }
 
-    /* ── nav ── */
-    header {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      background: rgba(9,9,11,0.8);
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--line-dim);
-    }
-    .nav { display: flex; align-items: center; justify-content: space-between; height: 52px; }
-    .nav-name { font-size: 13px; font-weight: 500; letter-spacing: 0.04em; color: var(--fg-2); display: flex; align-items: center; gap: 8px; text-decoration: none; }
-    .nav-bar { width: 3px; height: 16px; border-radius: 1px; background: var(--magenta); }
-    .nav-right { display: flex; align-items: center; gap: 20px; }
-    .nav-right a { font-size: 12px; color: var(--fg-3); text-decoration: none; transition: color 0.15s; letter-spacing: 0.02em; cursor: pointer; }
-    .nav-right a:hover { color: var(--fg-2); }
+            /* ── nav ── */
+            header {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 100;
+                background: rgba(9, 9, 11, 0.8);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                border-bottom: 1px solid var(--line-dim);
+            }
+            .nav {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                height: 52px;
+            }
+            .nav-name {
+                font-size: 13px;
+                font-weight: 500;
+                letter-spacing: 0.04em;
+                color: var(--fg-2);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                text-decoration: none;
+            }
+            .nav-bar {
+                width: 3px;
+                height: 16px;
+                border-radius: 1px;
+                background: var(--magenta);
+            }
+            .nav-right {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+            }
+            .nav-right a {
+                font-size: 12px;
+                color: var(--fg-3);
+                text-decoration: none;
+                transition: color 0.15s;
+                letter-spacing: 0.02em;
+                cursor: pointer;
+            }
+            .nav-right a:hover {
+                color: var(--fg-2);
+            }
 
-    /* ── hero ── */
-    .hero {
-      padding: 140px 0 0;
-      position: relative;
-    }
-    .hero-label {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--fg-3);
-      margin-bottom: 32px;
-    }
-    .hero h1 {
-      font-family: var(--serif);
-      font-weight: 400;
-      font-size: clamp(52px, 10vw, 96px);
-      line-height: 0.95;
-      letter-spacing: -0.02em;
-      color: var(--fg);
-      margin-bottom: 40px;
-    }
-    .hero h1 em {
-      font-style: italic;
-      color: var(--violet);
-    }
-    .hero-desc {
-      font-size: 14px;
-      color: var(--fg-2);
-      line-height: 1.7;
-      max-width: 440px;
-      margin-bottom: 56px;
-    }
-    .hero-desc strong { color: var(--fg); font-weight: 500; }
+            /* ── hero ── */
+            .hero {
+                padding: 140px 0 0;
+                position: relative;
+            }
+            .hero-label {
+                font-size: 11px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--fg-3);
+                margin-bottom: 32px;
+            }
+            .hero h1 {
+                font-family: var(--serif);
+                font-weight: 400;
+                font-size: clamp(52px, 10vw, 96px);
+                line-height: 0.95;
+                letter-spacing: -0.02em;
+                color: var(--fg);
+                margin-bottom: 40px;
+            }
+            .hero h1 em {
+                font-style: italic;
+                color: var(--violet);
+            }
+            .hero-desc {
+                font-size: 14px;
+                color: var(--fg-2);
+                line-height: 1.7;
+                max-width: 440px;
+                margin-bottom: 56px;
+            }
+            .hero-desc strong {
+                color: var(--fg);
+                font-weight: 500;
+            }
 
-    /* ── install ── */
-    .install {
-      border: 1px solid var(--line);
-      background: var(--surface);
-      margin-bottom: 120px;
-    }
-    .install-head {
-      display: flex;
-      border-bottom: 1px solid var(--line);
-    }
-    .install-tab {
-      padding: 10px 20px;
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--fg-3);
-      border: none;
-      background: none;
-      cursor: pointer;
-      border-right: 1px solid var(--line);
-      transition: color 0.15s, background 0.15s;
-      letter-spacing: 0.02em;
-    }
-    .install-tab:last-child { border-right: none; }
-    .install-tab:hover { color: var(--fg-2); }
-    .install-tab.active { color: var(--fg); background: var(--raised); }
-    .install-body {
-      padding: 20px 24px;
-      position: relative;
-      min-height: 60px;
-    }
-    .install-panel { display: none; }
-    .install-panel.active { display: block; }
-    .install-panel code {
-      display: block;
-      font-family: var(--mono);
-      font-size: 13px;
-      line-height: 1.8;
-      color: var(--fg);
-      white-space: nowrap;
-      overflow-x: auto;
-    }
-    .install-panel code .p { color: var(--fg-4); user-select: none; }
-    .install-panel code .cmd { color: var(--fg-2); }
-    .install-panel code .url { color: var(--violet); }
-    .install-panel code .flag { color: var(--fg-3); }
-    .copy-btn {
-      position: absolute;
-      top: 14px; right: 14px;
-      background: none;
-      border: 1px solid var(--line);
-      color: var(--fg-3);
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 4px 10px;
-      cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-      letter-spacing: 0.02em;
-    }
-    .copy-btn:hover { color: var(--fg-2); border-color: var(--fg-4); }
+            /* ── install ── */
+            .install {
+                border: 1px solid var(--line);
+                background: var(--surface);
+                margin-bottom: 120px;
+            }
+            .install-head {
+                display: flex;
+                border-bottom: 1px solid var(--line);
+            }
+            .install-tab {
+                padding: 10px 20px;
+                font-family: var(--mono);
+                font-size: 12px;
+                color: var(--fg-3);
+                border: none;
+                background: none;
+                cursor: pointer;
+                border-right: 1px solid var(--line);
+                transition:
+                    color 0.15s,
+                    background 0.15s;
+                letter-spacing: 0.02em;
+            }
+            .install-tab:last-child {
+                border-right: none;
+            }
+            .install-tab:hover {
+                color: var(--fg-2);
+            }
+            .install-tab.active {
+                color: var(--fg);
+                background: var(--raised);
+            }
+            .install-body {
+                padding: 20px 24px;
+                position: relative;
+                min-height: 60px;
+            }
+            .install-panel {
+                display: none;
+            }
+            .install-panel.active {
+                display: block;
+            }
+            .install-panel code {
+                display: block;
+                font-family: var(--mono);
+                font-size: 13px;
+                line-height: 1.8;
+                color: var(--fg);
+                white-space: nowrap;
+                overflow-x: auto;
+            }
+            .install-panel code .p {
+                color: var(--fg-4);
+                user-select: none;
+            }
+            .install-panel code .cmd {
+                color: var(--fg-2);
+            }
+            .install-panel code .url {
+                color: var(--violet);
+            }
+            .install-panel code .flag {
+                color: var(--fg-3);
+            }
+            .copy-btn {
+                position: absolute;
+                top: 14px;
+                right: 14px;
+                background: none;
+                border: 1px solid var(--line);
+                color: var(--fg-3);
+                font-family: var(--mono);
+                font-size: 11px;
+                padding: 4px 10px;
+                cursor: pointer;
+                transition:
+                    color 0.15s,
+                    border-color 0.15s;
+                letter-spacing: 0.02em;
+            }
+            .copy-btn:hover {
+                color: var(--fg-2);
+                border-color: var(--fg-4);
+            }
 
-    /* ── divider ── */
-    .rule { border: none; border-top: 1px solid var(--line-dim); margin: 0; }
+            /* ── divider ── */
+            .rule {
+                border: none;
+                border-top: 1px solid var(--line-dim);
+                margin: 0;
+            }
 
-    /* ── demo ── */
-    .demo {
-      padding: 80px 0;
-    }
-    .demo-label {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--fg-3);
-      margin-bottom: 24px;
-    }
-    .demo-lines {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .dl {
-      display: grid;
-      grid-template-columns: 6px 14px 1fr auto;
-      gap: 10px;
-      align-items: baseline;
-      padding: 6px 0;
-      font-size: 13px;
-    }
-    .dl-bar {
-      width: 3px;
-      height: 14px;
-      border-radius: 1px;
-      margin-top: 3px;
-    }
-    .dl-bar.g { background: var(--green); }
-    .dl-bar.m { background: var(--magenta); }
-    .dl-prompt { color: var(--fg-4); user-select: none; font-size: 12px; }
-    .dl-input { color: var(--fg); }
-    .dl-tag {
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 2px 6px;
-      border-radius: 2px;
-      font-weight: 500;
-    }
-    .dl-tag.shell { color: var(--green); background: rgba(74,222,128,0.08); }
-    .dl-tag.agent { color: var(--magenta); background: rgba(217,70,239,0.08); }
-    .dl-out {
-      grid-column: 3 / -1;
-      color: var(--fg-3);
-      font-size: 12px;
-      padding-bottom: 4px;
-    }
+            /* ── demo ── */
+            .demo {
+                padding: 80px 0;
+            }
+            .demo-label {
+                font-size: 11px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--fg-3);
+                margin-bottom: 24px;
+            }
+            .demo-lines {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .dl {
+                display: grid;
+                grid-template-columns: 6px 14px 1fr auto;
+                gap: 10px;
+                align-items: baseline;
+                padding: 6px 0;
+                font-size: 13px;
+            }
+            .dl-bar {
+                width: 3px;
+                height: 14px;
+                border-radius: 1px;
+                margin-top: 3px;
+            }
+            .dl-bar.g {
+                background: var(--green);
+            }
+            .dl-bar.m {
+                background: var(--magenta);
+            }
+            .dl-prompt {
+                color: var(--fg-4);
+                user-select: none;
+                font-size: 12px;
+            }
+            .dl-input {
+                color: var(--fg);
+            }
+            .dl-tag {
+                font-size: 10px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                padding: 2px 6px;
+                border-radius: 2px;
+                font-weight: 500;
+            }
+            .dl-tag.shell {
+                color: var(--green);
+                background: rgba(74, 222, 128, 0.08);
+            }
+            .dl-tag.agent {
+                color: var(--magenta);
+                background: rgba(217, 70, 239, 0.08);
+            }
+            .dl-out {
+                grid-column: 3 / -1;
+                color: var(--fg-3);
+                font-size: 12px;
+                padding-bottom: 4px;
+            }
 
-    /* ── how ── */
-    .how {
-      padding: 80px 0;
-    }
-    .how-label {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--fg-3);
-      margin-bottom: 32px;
-    }
-    .how h2 {
-      font-family: var(--serif);
-      font-weight: 400;
-      font-size: clamp(32px, 5vw, 48px);
-      line-height: 1.05;
-      letter-spacing: -0.01em;
-      margin-bottom: 20px;
-    }
-    .how-desc {
-      color: var(--fg-2);
-      font-size: 14px;
-      line-height: 1.7;
-      max-width: 440px;
-      margin-bottom: 48px;
-    }
-    .how-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      border: 1px solid var(--line);
-    }
-    .how-cell {
-      padding: 24px;
-      border-bottom: 1px solid var(--line);
-    }
-    .how-cell:nth-child(odd) { border-right: 1px solid var(--line); }
-    .how-cell:nth-last-child(-n+2) { border-bottom: none; }
-    .how-cell-head {
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--fg-3);
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .how-cell-head .dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-    }
-    .how-cell p {
-      font-size: 13px;
-      color: var(--fg-2);
-      line-height: 1.55;
-    }
+            /* ── how ── */
+            .how {
+                padding: 80px 0;
+            }
+            .how-label {
+                font-size: 11px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--fg-3);
+                margin-bottom: 32px;
+            }
+            .how h2 {
+                font-family: var(--serif);
+                font-weight: 400;
+                font-size: clamp(32px, 5vw, 48px);
+                line-height: 1.05;
+                letter-spacing: -0.01em;
+                margin-bottom: 20px;
+            }
+            .how-desc {
+                color: var(--fg-2);
+                font-size: 14px;
+                line-height: 1.7;
+                max-width: 440px;
+                margin-bottom: 48px;
+            }
+            .how-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                border: 1px solid var(--line);
+            }
+            .how-cell {
+                padding: 24px;
+                border-bottom: 1px solid var(--line);
+            }
+            .how-cell:nth-child(odd) {
+                border-right: 1px solid var(--line);
+            }
+            .how-cell:nth-last-child(-n + 2) {
+                border-bottom: none;
+            }
+            .how-cell-head {
+                font-size: 11px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--fg-3);
+                margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .how-cell-head .dot {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+            }
+            .how-cell p {
+                font-size: 13px;
+                color: var(--fg-2);
+                line-height: 1.55;
+            }
 
-    /* ── tools ── */
-    .tools { padding: 80px 0; }
-    .tools-label {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--fg-3);
-      margin-bottom: 24px;
-    }
-    .tools-list {
-      display: flex;
-      flex-direction: column;
-    }
-    .tool-row {
-      display: grid;
-      grid-template-columns: 100px 1fr auto;
-      gap: 16px;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--line-dim);
-      font-size: 13px;
-    }
-    .tool-row:last-child { border-bottom: none; }
-    .tool-name {
-      color: var(--fg);
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .tool-name .dot { width: 4px; height: 4px; border-radius: 50%; }
-    .tool-cmd { color: var(--fg-3); }
-    .tool-note { color: var(--fg-4); font-size: 11px; text-align: right; letter-spacing: 0.02em; }
+            /* ── tools ── */
+            .tools {
+                padding: 80px 0;
+            }
+            .tools-label {
+                font-size: 11px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--fg-3);
+                margin-bottom: 24px;
+            }
+            .tools-list {
+                display: flex;
+                flex-direction: column;
+            }
+            .tool-row {
+                display: grid;
+                grid-template-columns: 100px 1fr auto;
+                gap: 16px;
+                align-items: center;
+                padding: 12px 0;
+                border-bottom: 1px solid var(--line-dim);
+                font-size: 13px;
+            }
+            .tool-row:last-child {
+                border-bottom: none;
+            }
+            .tool-name {
+                color: var(--fg);
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .tool-name .dot {
+                width: 4px;
+                height: 4px;
+                border-radius: 50%;
+            }
+            .tool-cmd {
+                color: var(--fg-3);
+            }
+            .tool-note {
+                color: var(--fg-4);
+                font-size: 11px;
+                text-align: right;
+                letter-spacing: 0.02em;
+            }
 
-    /* ── modes ── */
-    .modes { padding: 80px 0; }
-    .modes-label {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--fg-3);
-      margin-bottom: 32px;
-    }
-    .modes-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1px;
-      background: var(--line);
-      border: 1px solid var(--line);
-    }
-    .mode-cell {
-      background: var(--surface);
-      padding: 28px 24px;
-    }
-    .mode-cell-bar {
-      width: 3px;
-      height: 20px;
-      border-radius: 1px;
-      margin-bottom: 14px;
-    }
-    .mode-cell h3 {
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 6px;
-      letter-spacing: 0.02em;
-    }
-    .mode-cell p {
-      font-size: 12px;
-      color: var(--fg-3);
-      line-height: 1.5;
-    }
-    .mode-cell .key {
-      display: inline-block;
-      margin-top: 10px;
-      font-size: 10px;
-      color: var(--fg-4);
-      border: 1px solid var(--line);
-      padding: 1px 6px;
-      letter-spacing: 0.04em;
-    }
+            /* ── modes ── */
+            .modes {
+                padding: 80px 0;
+            }
+            .modes-label {
+                font-size: 11px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--fg-3);
+                margin-bottom: 32px;
+            }
+            .modes-row {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 1px;
+                background: var(--line);
+                border: 1px solid var(--line);
+            }
+            .mode-cell {
+                background: var(--surface);
+                padding: 28px 24px;
+            }
+            .mode-cell-bar {
+                width: 3px;
+                height: 20px;
+                border-radius: 1px;
+                margin-bottom: 14px;
+            }
+            .mode-cell h3 {
+                font-size: 13px;
+                font-weight: 500;
+                margin-bottom: 6px;
+                letter-spacing: 0.02em;
+            }
+            .mode-cell p {
+                font-size: 12px;
+                color: var(--fg-3);
+                line-height: 1.5;
+            }
+            .mode-cell .key {
+                display: inline-block;
+                margin-top: 10px;
+                font-size: 10px;
+                color: var(--fg-4);
+                border: 1px solid var(--line);
+                padding: 1px 6px;
+                letter-spacing: 0.04em;
+            }
 
-    /* ── bottom ── */
-    .bottom {
-      padding: 120px 0 80px;
-      text-align: center;
-    }
-    .bottom h2 {
-      font-family: var(--serif);
-      font-weight: 400;
-      font-style: italic;
-      font-size: clamp(28px, 5vw, 44px);
-      line-height: 1.1;
-      letter-spacing: -0.01em;
-      margin-bottom: 32px;
-      color: var(--fg-2);
-    }
-    .bottom-cmd {
-      display: inline-block;
-      font-size: 13px;
-      color: var(--fg);
-      border: 1px solid var(--line);
-      padding: 10px 24px;
-      background: var(--surface);
-      cursor: pointer;
-      transition: border-color 0.15s;
-      letter-spacing: 0.01em;
-    }
-    .bottom-cmd:hover { border-color: var(--fg-4); }
-    .bottom-cmd .p { color: var(--fg-4); user-select: none; }
+            /* ── bottom ── */
+            .bottom {
+                padding: 120px 0 80px;
+                text-align: center;
+            }
+            .bottom h2 {
+                font-family: var(--serif);
+                font-weight: 400;
+                font-style: italic;
+                font-size: clamp(28px, 5vw, 44px);
+                line-height: 1.1;
+                letter-spacing: -0.01em;
+                margin-bottom: 32px;
+                color: var(--fg-2);
+            }
+            .bottom-cmd {
+                display: inline-block;
+                font-size: 13px;
+                color: var(--fg);
+                border: 1px solid var(--line);
+                padding: 10px 24px;
+                background: var(--surface);
+                cursor: pointer;
+                transition: border-color 0.15s;
+                letter-spacing: 0.01em;
+            }
+            .bottom-cmd:hover {
+                border-color: var(--fg-4);
+            }
+            .bottom-cmd .p {
+                color: var(--fg-4);
+                user-select: none;
+            }
 
-    /* ── footer ── */
-    footer {
-      border-top: 1px solid var(--line-dim);
-      padding: 24px 0;
-    }
-    .foot { display: flex; justify-content: space-between; align-items: center; }
-    .foot-left { font-size: 11px; color: var(--fg-4); letter-spacing: 0.02em; }
-    .foot-right { display: flex; gap: 20px; }
-    .foot-right a { font-size: 11px; color: var(--fg-4); text-decoration: none; letter-spacing: 0.02em; transition: color 0.15s; cursor: pointer; }
-    .foot-right a:hover { color: var(--fg-2); }
+            /* ── footer ── */
+            footer {
+                border-top: 1px solid var(--line-dim);
+                padding: 24px 0;
+            }
+            .foot {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .foot-left {
+                font-size: 11px;
+                color: var(--fg-4);
+                letter-spacing: 0.02em;
+            }
+            .foot-right {
+                display: flex;
+                gap: 20px;
+            }
+            .foot-right a {
+                font-size: 11px;
+                color: var(--fg-4);
+                text-decoration: none;
+                letter-spacing: 0.02em;
+                transition: color 0.15s;
+                cursor: pointer;
+            }
+            .foot-right a:hover {
+                color: var(--fg-2);
+            }
 
-    /* ── responsive ── */
-    @media (max-width: 640px) {
-      .hero { padding-top: 110px; }
-      .how-grid { grid-template-columns: 1fr; }
-      .how-cell:nth-child(odd) { border-right: none; }
-      .how-cell:nth-last-child(2) { border-bottom: 1px solid var(--line); }
-      .modes-row { grid-template-columns: 1fr; }
-      .tool-row { grid-template-columns: 80px 1fr; }
-      .tool-note { display: none; }
-      .dl { grid-template-columns: 6px 14px 1fr; }
-      .dl-tag { display: none; }
-      .nav-right a:not(:last-child) { display: none; }
-    }
+            /* ── responsive ── */
+            @media (max-width: 640px) {
+                .hero {
+                    padding-top: 110px;
+                }
+                .how-grid {
+                    grid-template-columns: 1fr;
+                }
+                .how-cell:nth-child(odd) {
+                    border-right: none;
+                }
+                .how-cell:nth-last-child(2) {
+                    border-bottom: 1px solid var(--line);
+                }
+                .modes-row {
+                    grid-template-columns: 1fr;
+                }
+                .tool-row {
+                    grid-template-columns: 80px 1fr;
+                }
+                .tool-note {
+                    display: none;
+                }
+                .dl {
+                    grid-template-columns: 6px 14px 1fr;
+                }
+                .dl-tag {
+                    display: none;
+                }
+                .nav-right a:not(:last-child) {
+                    display: none;
+                }
+            }
 
-    @media (prefers-reduced-motion: reduce) {
-      * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-    }
+            @media (prefers-reduced-motion: reduce) {
+                * {
+                    animation-duration: 0.01ms !important;
+                    transition-duration: 0.01ms !important;
+                }
+            }
 
-    /* ── entrance ── */
-    .reveal {
-      opacity: 0;
-      transform: translateY(8px);
-      animation: fadeUp 0.6s ease forwards;
-    }
-    .reveal-d1 { animation-delay: 0.05s; }
-    .reveal-d2 { animation-delay: 0.1s; }
-    .reveal-d3 { animation-delay: 0.15s; }
-    .reveal-d4 { animation-delay: 0.2s; }
-    @keyframes fadeUp {
-      to { opacity: 1; transform: translateY(0); }
-    }
-  </style>
-</head>
-<body>
+            /* ── entrance ── */
+            .reveal {
+                opacity: 0;
+                transform: translateY(8px);
+                animation: fadeUp 0.6s ease forwards;
+            }
+            .reveal-d1 {
+                animation-delay: 0.05s;
+            }
+            .reveal-d2 {
+                animation-delay: 0.1s;
+            }
+            .reveal-d3 {
+                animation-delay: 0.15s;
+            }
+            .reveal-d4 {
+                animation-delay: 0.2s;
+            }
+            @keyframes fadeUp {
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <div class="wrap">
+                <nav class="nav">
+                    <a href="#" class="nav-name"
+                        ><span class="nav-bar"></span> lacy</a
+                    >
+                    <div class="nav-right">
+                        <a href="#how">How it works</a>
+                        <a href="#tools">Tools</a>
+                        <a
+                            href="https://github.com/lacymorrow/lacy"
+                            target="_blank"
+                            rel="noopener"
+                            >GitHub</a
+                        >
+                    </div>
+                </nav>
+            </div>
+        </header>
 
-<header>
-  <div class="wrap">
-    <nav class="nav">
-      <a href="#" class="nav-name"><span class="nav-bar"></span> lacy</a>
-      <div class="nav-right">
-        <a href="#how">How it works</a>
-        <a href="#tools">Tools</a>
-        <a href="https://github.com/lacymorrow/lacy" target="_blank" rel="noopener">GitHub</a>
-      </div>
-    </nav>
-  </div>
-</header>
+        <main>
+            <div class="wrap">
+                <!-- hero -->
+                <section class="hero">
+                    <div class="hero-label reveal">open source</div>
+                    <h1 class="reveal reveal-d1">
+                        Talk to<br />your <em>shell</em>
+                    </h1>
+                    <p class="hero-desc reveal reveal-d2">
+                        Type commands or natural language.
+                        <strong>Commands run in your shell.</strong>
+                        <strong>Questions go to AI.</strong> No context
+                        switching. No prefixes. You type, it figures it out.
+                    </p>
 
-<main>
-  <div class="wrap">
+                    <div class="install reveal reveal-d3">
+                        <div class="install-head" role="tablist">
+                            <button
+                                class="install-tab active"
+                                role="tab"
+                                aria-selected="true"
+                                data-tab="curl"
+                            >
+                                curl
+                            </button>
+                            <button
+                                class="install-tab"
+                                role="tab"
+                                aria-selected="false"
+                                data-tab="brew"
+                            >
+                                brew
+                            </button>
+                            <button
+                                class="install-tab"
+                                role="tab"
+                                aria-selected="false"
+                                data-tab="npm"
+                            >
+                                npx
+                            </button>
+                            <button
+                                class="install-tab"
+                                role="tab"
+                                aria-selected="false"
+                                data-tab="git"
+                            >
+                                git
+                            </button>
+                        </div>
+                        <div class="install-body">
+                            <button
+                                class="copy-btn"
+                                aria-label="Copy to clipboard"
+                            >
+                                copy
+                            </button>
+                            <div class="install-panel active" data-panel="curl">
+                                <code
+                                    ><span class="p">$ </span
+                                    ><span class="cmd">curl</span>
+                                    <span class="flag">-fsSL</span>
+                                    <span class="url"
+                                        >https://lacy.sh/install</span
+                                    >
+                                    <span class="flag">|</span>
+                                    <span class="cmd">bash</span></code
+                                >
+                            </div>
+                            <div class="install-panel" data-panel="brew">
+                                <code
+                                    ><span class="p">$ </span
+                                    ><span class="cmd">brew install</span>
+                                    <span class="url"
+                                        >lacymorrow/tap/lacy</span
+                                    ></code
+                                >
+                            </div>
+                            <div class="install-panel" data-panel="npm">
+                                <code
+                                    ><span class="p">$ </span
+                                    ><span class="cmd">npx</span>
+                                    <span class="url">lacy</span></code
+                                >
+                            </div>
+                            <div class="install-panel" data-panel="git">
+                                <code
+                                    ><span class="p">$ </span
+                                    ><span class="cmd">git clone</span>
+                                    <span class="url"
+                                        >https://github.com/lacymorrow/lacy.git</span
+                                    >
+                                    <span class="flag">~/.lacy</span></code
+                                >
+                                <code
+                                    ><span class="p">$ </span
+                                    ><span class="cmd">echo</span>
+                                    <span class="flag"
+                                        >'source ~/.lacy/lacy.plugin.zsh'</span
+                                    >
+                                    <span class="cmd">&gt;&gt;</span>
+                                    <span class="flag">~/.zshrc</span></code
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-    <!-- hero -->
-    <section class="hero">
-      <div class="hero-label reveal">open source</div>
-      <h1 class="reveal reveal-d1">Talk to<br>your <em>shell</em></h1>
-      <p class="hero-desc reveal reveal-d2">
-        Type commands or natural language. <strong>Commands run in your shell.</strong>
-        <strong>Questions go to AI.</strong> No mode switching. No prefixes.
-        You type, it figures it out.
-      </p>
+                <!-- demo -->
+                <section class="demo" id="demo">
+                    <div class="demo-label">What it looks like</div>
+                    <div class="demo-lines">
+                        <div class="dl">
+                            <div class="dl-bar g"></div>
+                            <span class="dl-prompt">></span>
+                            <span class="dl-input">ls -la</span>
+                            <span class="dl-tag shell">shell</span>
+                        </div>
+                        <div class="dl">
+                            <div
+                                class="dl-bar"
+                                style="background: transparent"
+                            ></div>
+                            <span></span>
+                            <span class="dl-out"
+                                >drwxr-xr-x 12 user staff 384 Feb 3 09:21
+                                .</span
+                            >
+                        </div>
+                        <div class="dl">
+                            <div class="dl-bar m"></div>
+                            <span class="dl-prompt">></span>
+                            <span class="dl-input">what files are here</span>
+                            <span class="dl-tag agent">agent</span>
+                        </div>
+                        <div class="dl">
+                            <div
+                                class="dl-bar"
+                                style="background: transparent"
+                            ></div>
+                            <span></span>
+                            <span class="dl-out"
+                                >You have 12 files including package.json, src/,
+                                ...</span
+                            >
+                        </div>
+                        <div class="dl">
+                            <div class="dl-bar g"></div>
+                            <span class="dl-prompt">></span>
+                            <span class="dl-input">git status</span>
+                            <span class="dl-tag shell">shell</span>
+                        </div>
+                        <div class="dl">
+                            <div class="dl-bar m"></div>
+                            <span class="dl-prompt">></span>
+                            <span class="dl-input"
+                                >fix the build error in src/index.ts</span
+                            >
+                            <span class="dl-tag agent">agent</span>
+                        </div>
+                        <div class="dl">
+                            <div class="dl-bar g"></div>
+                            <span class="dl-prompt">></span>
+                            <span class="dl-input">cd .. && npm test</span>
+                            <span class="dl-tag shell">shell</span>
+                        </div>
+                    </div>
+                </section>
 
-      <div class="install reveal reveal-d3">
-        <div class="install-head" role="tablist">
-          <button class="install-tab active" role="tab" aria-selected="true" data-tab="curl">curl</button>
-          <button class="install-tab" role="tab" aria-selected="false" data-tab="brew">brew</button>
-          <button class="install-tab" role="tab" aria-selected="false" data-tab="npm">npx</button>
-          <button class="install-tab" role="tab" aria-selected="false" data-tab="git">git</button>
-        </div>
-        <div class="install-body">
-          <button class="copy-btn" aria-label="Copy to clipboard">copy</button>
-          <div class="install-panel active" data-panel="curl">
-            <code><span class="p">$ </span><span class="cmd">curl</span> <span class="flag">-fsSL</span> <span class="url">https://lacy.sh/install</span> <span class="flag">|</span> <span class="cmd">bash</span></code>
-          </div>
-          <div class="install-panel" data-panel="brew">
-            <code><span class="p">$ </span><span class="cmd">brew install</span> <span class="url">lacymorrow/tap/lacy</span></code>
-          </div>
-          <div class="install-panel" data-panel="npm">
-            <code><span class="p">$ </span><span class="cmd">npx</span> <span class="url">lacy</span></code>
-          </div>
-          <div class="install-panel" data-panel="git">
-            <code><span class="p">$ </span><span class="cmd">git clone</span> <span class="url">https://github.com/lacymorrow/lacy.git</span> <span class="flag">~/.lacy</span></code>
-            <code><span class="p">$ </span><span class="cmd">echo</span> <span class="flag">'source ~/.lacy/lacy.plugin.zsh'</span> <span class="cmd">&gt;&gt;</span> <span class="flag">~/.zshrc</span></code>
-          </div>
-        </div>
-      </div>
-    </section>
+                <hr class="rule" />
 
-    <!-- demo -->
-    <section class="demo" id="demo">
-      <div class="demo-label">What it looks like</div>
-      <div class="demo-lines">
-        <div class="dl">
-          <div class="dl-bar g"></div>
-          <span class="dl-prompt">></span>
-          <span class="dl-input">ls -la</span>
-          <span class="dl-tag shell">shell</span>
-        </div>
-        <div class="dl">
-          <div class="dl-bar" style="background:transparent;"></div>
-          <span></span>
-          <span class="dl-out">drwxr-xr-x  12 user  staff  384 Feb  3 09:21 .</span>
-        </div>
-        <div class="dl">
-          <div class="dl-bar m"></div>
-          <span class="dl-prompt">></span>
-          <span class="dl-input">what files are here</span>
-          <span class="dl-tag agent">agent</span>
-        </div>
-        <div class="dl">
-          <div class="dl-bar" style="background:transparent;"></div>
-          <span></span>
-          <span class="dl-out">You have 12 files including package.json, src/, ...</span>
-        </div>
-        <div class="dl">
-          <div class="dl-bar g"></div>
-          <span class="dl-prompt">></span>
-          <span class="dl-input">git status</span>
-          <span class="dl-tag shell">shell</span>
-        </div>
-        <div class="dl">
-          <div class="dl-bar m"></div>
-          <span class="dl-prompt">></span>
-          <span class="dl-input">fix the build error in src/index.ts</span>
-          <span class="dl-tag agent">agent</span>
-        </div>
-        <div class="dl">
-          <div class="dl-bar g"></div>
-          <span class="dl-prompt">></span>
-          <span class="dl-input">cd .. && npm test</span>
-          <span class="dl-tag shell">shell</span>
-        </div>
-      </div>
-    </section>
+                <!-- how -->
+                <section class="how" id="how">
+                    <div class="how-label">How it works</div>
+                    <h2>Commands run.<br />Questions route.</h2>
+                    <p class="how-desc">
+                        Lacy intercepts your input before the shell sees it. If
+                        the first word is a valid command, it executes normally.
+                        If it looks like natural language, it goes to your AI
+                        tool.
+                    </p>
+                    <div class="how-grid">
+                        <div class="how-cell">
+                            <div class="how-cell-head">
+                                <span
+                                    class="dot"
+                                    style="background: var(--green)"
+                                ></span>
+                                Auto-detect
+                            </div>
+                            <p>
+                                First word is a valid command? Shell. Multi-word
+                                and not a command? AI. Single unknown word?
+                                Shell (let it error).
+                            </p>
+                        </div>
+                        <div class="how-cell">
+                            <div class="how-cell-head">
+                                <span
+                                    class="dot"
+                                    style="background: var(--magenta)"
+                                ></span>
+                                Live indicator
+                            </div>
+                            <p>
+                                A colored bar at your prompt changes as you
+                                type. Green means shell. Magenta means AI. You
+                                always know.
+                            </p>
+                        </div>
+                        <div class="how-cell">
+                            <div class="how-cell-head">
+                                <span
+                                    class="dot"
+                                    style="background: var(--violet)"
+                                ></span>
+                                Preheated
+                            </div>
+                            <p>
+                                Background servers and session reuse eliminate
+                                cold-start. Your AI tool is ready before you
+                                finish typing.
+                            </p>
+                        </div>
+                        <div class="how-cell">
+                            <div class="how-cell-head">
+                                <span
+                                    class="dot"
+                                    style="background: var(--blue)"
+                                ></span>
+                                No API keys
+                            </div>
+                            <p>
+                                Each AI CLI handles its own auth. Lacy just
+                                routes. Nothing to configure beyond picking a
+                                tool.
+                            </p>
+                        </div>
+                    </div>
+                </section>
 
-    <hr class="rule" />
+                <hr class="rule" />
 
-    <!-- how -->
-    <section class="how" id="how">
-      <div class="how-label">How it works</div>
-      <h2>Commands run.<br>Questions route.</h2>
-      <p class="how-desc">
-        Lacy intercepts your input before the shell sees it. If the first word
-        is a valid command, it executes normally. If it looks like natural
-        language, it goes to your AI tool.
-      </p>
-      <div class="how-grid">
-        <div class="how-cell">
-          <div class="how-cell-head"><span class="dot" style="background:var(--green);"></span> Auto-detect</div>
-          <p>First word is a valid command? Shell. Multi-word and not a command? AI. Single unknown word? Shell (let it error).</p>
-        </div>
-        <div class="how-cell">
-          <div class="how-cell-head"><span class="dot" style="background:var(--magenta);"></span> Live indicator</div>
-          <p>A colored bar at your prompt changes as you type. Green means shell. Magenta means AI. You always know.</p>
-        </div>
-        <div class="how-cell">
-          <div class="how-cell-head"><span class="dot" style="background:var(--violet);"></span> Preheated</div>
-          <p>Background servers and session reuse eliminate cold-start. Your AI tool is ready before you finish typing.</p>
-        </div>
-        <div class="how-cell">
-          <div class="how-cell-head"><span class="dot" style="background:var(--blue);"></span> No API keys</div>
-          <p>Each AI CLI handles its own auth. Lacy just routes. Nothing to configure beyond picking a tool.</p>
-        </div>
-      </div>
-    </section>
+                <!-- tools -->
+                <section class="tools" id="tools">
+                    <div class="tools-label">Supported tools</div>
+                    <div class="tools-list">
+                        <div class="tool-row">
+                            <div class="tool-name">
+                                <span
+                                    class="dot"
+                                    style="background: var(--violet)"
+                                ></span>
+                                lash
+                            </div>
+                            <div class="tool-cmd">lash run -c "query"</div>
+                            <div class="tool-note">recommended</div>
+                        </div>
+                        <div class="tool-row">
+                            <div class="tool-name">
+                                <span
+                                    class="dot"
+                                    style="background: var(--blue)"
+                                ></span>
+                                claude
+                            </div>
+                            <div class="tool-cmd">claude -p "query"</div>
+                            <div class="tool-note">Claude Code</div>
+                        </div>
+                        <div class="tool-row">
+                            <div class="tool-name">
+                                <span
+                                    class="dot"
+                                    style="background: var(--magenta)"
+                                ></span>
+                                opencode
+                            </div>
+                            <div class="tool-cmd">opencode run "query"</div>
+                            <div class="tool-note"></div>
+                        </div>
+                        <div class="tool-row">
+                            <div class="tool-name">
+                                <span
+                                    class="dot"
+                                    style="background: var(--green)"
+                                ></span>
+                                gemini
+                            </div>
+                            <div class="tool-cmd">gemini -p "query"</div>
+                            <div class="tool-note">Google</div>
+                        </div>
+                        <div class="tool-row">
+                            <div class="tool-name">
+                                <span
+                                    class="dot"
+                                    style="background: var(--fg-3)"
+                                ></span>
+                                codex
+                            </div>
+                            <div class="tool-cmd">codex exec "query"</div>
+                            <div class="tool-note">OpenAI</div>
+                        </div>
+                        <div class="tool-row">
+                            <div class="tool-name">
+                                <span
+                                    class="dot"
+                                    style="background: var(--fg-4)"
+                                ></span>
+                                custom
+                            </div>
+                            <div class="tool-cmd">your-command "query"</div>
+                            <div class="tool-note">anything</div>
+                        </div>
+                    </div>
+                </section>
 
-    <hr class="rule" />
+                <hr class="rule" />
 
-    <!-- tools -->
-    <section class="tools" id="tools">
-      <div class="tools-label">Supported tools</div>
-      <div class="tools-list">
-        <div class="tool-row">
-          <div class="tool-name"><span class="dot" style="background:var(--violet);"></span> lash</div>
-          <div class="tool-cmd">lash run -c "query"</div>
-          <div class="tool-note">recommended</div>
-        </div>
-        <div class="tool-row">
-          <div class="tool-name"><span class="dot" style="background:var(--blue);"></span> claude</div>
-          <div class="tool-cmd">claude -p "query"</div>
-          <div class="tool-note">Claude Code</div>
-        </div>
-        <div class="tool-row">
-          <div class="tool-name"><span class="dot" style="background:var(--magenta);"></span> opencode</div>
-          <div class="tool-cmd">opencode run "query"</div>
-          <div class="tool-note"></div>
-        </div>
-        <div class="tool-row">
-          <div class="tool-name"><span class="dot" style="background:var(--green);"></span> gemini</div>
-          <div class="tool-cmd">gemini -p "query"</div>
-          <div class="tool-note">Google</div>
-        </div>
-        <div class="tool-row">
-          <div class="tool-name"><span class="dot" style="background:var(--fg-3);"></span> codex</div>
-          <div class="tool-cmd">codex exec "query"</div>
-          <div class="tool-note">OpenAI</div>
-        </div>
-        <div class="tool-row">
-          <div class="tool-name"><span class="dot" style="background:var(--fg-4);"></span> custom</div>
-          <div class="tool-cmd">your-command "query"</div>
-          <div class="tool-note">anything</div>
-        </div>
-      </div>
-    </section>
+                <!-- modes -->
+                <section class="modes" id="modes">
+                    <div class="modes-label">Modes</div>
+                    <div class="modes-row">
+                        <div class="mode-cell">
+                            <div
+                                class="mode-cell-bar"
+                                style="background: var(--green)"
+                            ></div>
+                            <h3>Shell</h3>
+                            <p>
+                                Everything goes to your shell. Normal terminal.
+                            </p>
+                            <span class="key">Ctrl+Space</span>
+                        </div>
+                        <div class="mode-cell">
+                            <div
+                                class="mode-cell-bar"
+                                style="background: var(--magenta)"
+                            ></div>
+                            <h3>Agent</h3>
+                            <p>
+                                Everything goes to AI. Every line is a prompt.
+                            </p>
+                            <span class="key">Ctrl+Space</span>
+                        </div>
+                        <div class="mode-cell">
+                            <div
+                                class="mode-cell-bar"
+                                style="background: var(--blue)"
+                            ></div>
+                            <h3>Auto</h3>
+                            <p>
+                                Smart routing. Commands to shell, questions to
+                                AI.
+                            </p>
+                            <span class="key">default</span>
+                        </div>
+                    </div>
+                </section>
 
-    <hr class="rule" />
+                <!-- bottom -->
+                <section class="bottom">
+                    <h2>Open terminal.<br />Type naturally.<br />Ship code.</h2>
+                    <div
+                        class="bottom-cmd"
+                        id="bottom-copy"
+                        role="button"
+                        tabindex="0"
+                        aria-label="Copy install command"
+                    >
+                        <span class="p">$ </span>curl -fsSL
+                        https://lacy.sh/install | bash
+                    </div>
+                </section>
+            </div>
+        </main>
 
-    <!-- modes -->
-    <section class="modes" id="modes">
-      <div class="modes-label">Modes</div>
-      <div class="modes-row">
-        <div class="mode-cell">
-          <div class="mode-cell-bar" style="background:var(--green);"></div>
-          <h3>Shell</h3>
-          <p>Everything goes to your shell. Normal terminal.</p>
-          <span class="key">Ctrl+Space</span>
-        </div>
-        <div class="mode-cell">
-          <div class="mode-cell-bar" style="background:var(--magenta);"></div>
-          <h3>Agent</h3>
-          <p>Everything goes to AI. Every line is a prompt.</p>
-          <span class="key">Ctrl+Space</span>
-        </div>
-        <div class="mode-cell">
-          <div class="mode-cell-bar" style="background:var(--blue);"></div>
-          <h3>Auto</h3>
-          <p>Smart routing. Commands to shell, questions to AI.</p>
-          <span class="key">default</span>
-        </div>
-      </div>
-    </section>
+        <footer>
+            <div class="wrap">
+                <div class="foot">
+                    <span class="foot-left">lacy.sh</span>
+                    <div class="foot-right">
+                        <a
+                            href="https://github.com/lacymorrow/lacy"
+                            target="_blank"
+                            rel="noopener"
+                            >source</a
+                        >
+                        <a
+                            href="https://github.com/lacymorrow/lacy/issues"
+                            target="_blank"
+                            rel="noopener"
+                            >issues</a
+                        >
+                        <a
+                            href="https://github.com/lacymorrow/lacy/blob/main/LICENSE"
+                            target="_blank"
+                            rel="noopener"
+                            >mit</a
+                        >
+                    </div>
+                </div>
+            </div>
+        </footer>
 
-    <!-- bottom -->
-    <section class="bottom">
-      <h2>Open terminal.<br>Type naturally.<br>Ship code.</h2>
-      <div class="bottom-cmd" id="bottom-copy" role="button" tabindex="0" aria-label="Copy install command">
-        <span class="p">$ </span>curl -fsSL https://lacy.sh/install | bash
-      </div>
-    </section>
+        <script>
+            // tabs
+            document.querySelectorAll(".install-tab").forEach((tab) => {
+                tab.addEventListener("click", () => {
+                    document.querySelectorAll(".install-tab").forEach((t) => {
+                        t.classList.remove("active");
+                        t.setAttribute("aria-selected", "false");
+                    });
+                    document
+                        .querySelectorAll(".install-panel")
+                        .forEach((p) => p.classList.remove("active"));
+                    tab.classList.add("active");
+                    tab.setAttribute("aria-selected", "true");
+                    document
+                        .querySelector(`[data-panel="${tab.dataset.tab}"]`)
+                        .classList.add("active");
+                });
+            });
 
-  </div>
-</main>
+            // copy
+            function copyActive() {
+                const panel = document.querySelector(".install-panel.active");
+                const text = Array.from(panel.querySelectorAll("code"))
+                    .map((c) => c.textContent.replace(/^\$ /, ""))
+                    .join("\n");
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = document.querySelector(".copy-btn");
+                    btn.textContent = "copied";
+                    setTimeout(() => {
+                        btn.textContent = "copy";
+                    }, 1500);
+                });
+            }
+            document
+                .querySelector(".copy-btn")
+                .addEventListener("click", copyActive);
 
-<footer>
-  <div class="wrap">
-    <div class="foot">
-      <span class="foot-left">lacy.sh</span>
-      <div class="foot-right">
-        <a href="https://github.com/lacymorrow/lacy" target="_blank" rel="noopener">source</a>
-        <a href="https://github.com/lacymorrow/lacy/issues" target="_blank" rel="noopener">issues</a>
-        <a href="https://github.com/lacymorrow/lacy/blob/main/LICENSE" target="_blank" rel="noopener">mit</a>
-      </div>
-    </div>
-  </div>
-</footer>
-
-<script>
-// tabs
-document.querySelectorAll('.install-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.install-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
-    document.querySelectorAll('.install-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    tab.setAttribute('aria-selected', 'true');
-    document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
-  });
-});
-
-// copy
-function copyActive() {
-  const panel = document.querySelector('.install-panel.active');
-  const text = Array.from(panel.querySelectorAll('code')).map(c => c.textContent.replace(/^\$ /, '')).join('\n');
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector('.copy-btn');
-    btn.textContent = 'copied';
-    setTimeout(() => { btn.textContent = 'copy'; }, 1500);
-  });
-}
-document.querySelector('.copy-btn').addEventListener('click', copyActive);
-
-// bottom copy
-document.getElementById('bottom-copy').addEventListener('click', () => {
-  navigator.clipboard.writeText('curl -fsSL https://lacy.sh/install | bash').then(() => {
-    const el = document.getElementById('bottom-copy');
-    const orig = el.innerHTML;
-    el.innerHTML = '<span class="p">$ </span>copied to clipboard';
-    setTimeout(() => { el.innerHTML = orig; }, 1500);
-  });
-});
-document.getElementById('bottom-copy').addEventListener('keydown', e => {
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('bottom-copy').click(); }
-});
-</script>
-
-</body>
+            // bottom copy
+            document
+                .getElementById("bottom-copy")
+                .addEventListener("click", () => {
+                    navigator.clipboard
+                        .writeText("curl -fsSL https://lacy.sh/install | bash")
+                        .then(() => {
+                            const el = document.getElementById("bottom-copy");
+                            const orig = el.innerHTML;
+                            el.innerHTML =
+                                '<span class="p">$ </span>copied to clipboard';
+                            setTimeout(() => {
+                                el.innerHTML = orig;
+                            }, 1500);
+                        });
+                });
+            document
+                .getElementById("bottom-copy")
+                .addEventListener("keydown", (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        document.getElementById("bottom-copy").click();
+                    }
+                });
+        </script>
+    </body>
 </html>

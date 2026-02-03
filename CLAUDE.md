@@ -8,7 +8,7 @@ Enable developers to talk directly to their shell.
 
 ## Project Overview
 
-Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No mode switching required.
+Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No context switching required.
 
 **Install location:** `~/.lacy`
 **Package name:** `lacy` (npm)

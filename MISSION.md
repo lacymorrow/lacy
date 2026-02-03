@@ -4,7 +4,7 @@
 
 ## What This Is
 
-A ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Questions go to the AI. No mode switching. No friction.
+A ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Questions go to the AI. No context switching. No friction.
 
 ## What This Is Not
 
