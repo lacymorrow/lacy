@@ -94,12 +94,13 @@ lacy_preheat_server_query() {
     fi
 
     # Extract result text from JSON response
-    # Try jq first, fall back to grep/sed
+    # Use printf '%s\n' (not echo) — zsh echo interprets \n, \t, etc. in strings
     if command -v jq >/dev/null 2>&1; then
-        echo "$response" | jq -r '.result // .response // .message // .content // empty' 2>/dev/null
+        printf '%s\n' "$response" | jq -r '.result // .response // .message // .content // empty' 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' "$response" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('result',d.get('response',d.get('message',d.get('content','')))))" 2>/dev/null
     else
-        # Best-effort JSON extraction without jq
-        echo "$response" | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//' | sed 's/\\n/\n/g'
+        printf '%s' "$response" | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/","[a-z_]*":.*//' | sed 's/\\n/\'$'\n''/g; s/\\"/"/g; s/\\\\/\\/g'
     fi
 }
 
@@ -153,11 +154,14 @@ lacy_preheat_claude_capture_session() {
     local json="$1"
     local session_id=""
 
+    # Use printf '%s\n' (not echo) — zsh echo interprets \n, \t, etc. in strings
     if command -v jq >/dev/null 2>&1; then
-        session_id=$(echo "$json" | jq -r '.session_id // empty' 2>/dev/null)
+        session_id=$(printf '%s\n' "$json" | jq -r '.session_id // empty' 2>/dev/null)
+    elif command -v python3 >/dev/null 2>&1; then
+        session_id=$(printf '%s\n' "$json" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('session_id',''))" 2>/dev/null)
     else
-        # Fallback: grep for session_id in JSON
-        session_id=$(echo "$json" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//' | sed 's/"//')
+        # session_id is a UUID — no escaped quotes, safe for simple grep
+        session_id=$(printf '%s' "$json" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//' | sed 's/"//')
     fi
 
     if [[ -n "$session_id" ]]; then
@@ -172,11 +176,16 @@ lacy_preheat_claude_capture_session() {
 lacy_preheat_claude_extract_result() {
     local json="$1"
 
+    # Use printf '%s\n' (not echo) — zsh echo interprets \n, \t, etc. in strings,
+    # which mangles JSON before it reaches jq/python/grep
     if command -v jq >/dev/null 2>&1; then
-        echo "$json" | jq -r '.result // empty' 2>/dev/null
+        printf '%s\n' "$json" | jq -r '.result // empty' 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' "$json" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('result',''))" 2>/dev/null
     else
-        # Fallback: extract result field
-        echo "$json" | grep -o '"result"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//' | sed 's/\\n/\n/g'
+        # Last resort: sed extraction (handles escaped quotes in result value)
+        # Match from "result":" to the next ","<key>": pattern
+        printf '%s' "$json" | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/","[a-z_]*":.*//' | sed 's/\\n/\'$'\n''/g; s/\\"/"/g; s/\\\\/\\/g'
     fi
 }
 

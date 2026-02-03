@@ -1,6 +1,6 @@
 {
   "name": "lacy-shell",
-  "version": "1.1.1",
+  "version": "1.3.0",
   "description": "Talk directly to your shell - natural language to AI agent routing",
   "main": "lacy-shell.plugin.zsh",
   "scripts": {

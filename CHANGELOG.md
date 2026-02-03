@@ -5,6 +5,20 @@ All notable changes to Lacy Shell will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-03
+
+### Added
+- Agent preheating to reduce per-query latency
+- Background server mode for lash and opencode — starts `lash serve` / `opencode serve` in background, routes queries via local REST API to eliminate cold-start
+- Claude session reuse — captures `session_id` from `--output-format json` and passes `--resume` on subsequent queries for conversation continuity
+- New `preheat` config section with `eager` (start server on plugin load) and `server_port` (default 4096) options
+- Automatic server lifecycle management: lazy start on first query, health checks, crash recovery, cleanup on quit or tool switch
+
+### Fixed
+- Fixed JSON output parsing in zsh — replaced `echo` with `printf '%s\n'` to prevent zsh from interpreting escape sequences (`\n`, `\"`) in JSON strings
+
+---
+
 ## [1.1.1] - 2026-02-03
 
 ### Fixed
