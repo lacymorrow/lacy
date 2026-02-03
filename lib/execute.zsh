@@ -362,7 +362,11 @@ lacy_shell_tool() {
     case "$1" in
         "")
             echo ""
-            echo "Active tool: ${LACY_ACTIVE_TOOL:-auto-detect}"
+            if [[ "$LACY_ACTIVE_TOOL" == "custom" ]]; then
+                echo "Active tool: custom (${LACY_CUSTOM_TOOL_CMD:-not configured})"
+            else
+                echo "Active tool: ${LACY_ACTIVE_TOOL:-auto-detect}"
+            fi
             echo ""
             echo "Available tools:"
             for t in lash claude opencode gemini codex; do
@@ -372,20 +376,37 @@ lacy_shell_tool() {
                     print -P "  %F{238}○%f $t (not installed)"
                 fi
             done
+            if [[ -n "$LACY_CUSTOM_TOOL_CMD" ]]; then
+                print -P "  %F{34}✓%f custom ($LACY_CUSTOM_TOOL_CMD)"
+            else
+                print -P "  %F{238}○%f custom (not configured)"
+            fi
             echo ""
             echo "Usage: tool set <name>"
+            echo "       tool set custom \"command -flags\""
             echo ""
             ;;
         set)
             if [[ -z "$2" ]]; then
                 echo "Usage: tool set <name>"
-                echo "Options: lash, claude, opencode, gemini, codex, auto"
+                echo "Options: lash, claude, opencode, gemini, codex, custom, auto"
+                echo "  tool set custom \"command -flags\""
                 return 1
             fi
             if [[ "$2" == "auto" ]]; then
                 LACY_ACTIVE_TOOL=""
                 export LACY_ACTIVE_TOOL
                 echo "Tool set to: auto-detect"
+            elif [[ "$2" == "custom" ]]; then
+                if [[ -z "$3" ]]; then
+                    echo "Usage: tool set custom \"command -flags\""
+                    echo "Example: tool set custom \"claude --dangerously-skip-permissions -p\""
+                    return 1
+                fi
+                LACY_ACTIVE_TOOL="custom"
+                LACY_CUSTOM_TOOL_CMD="$3"
+                export LACY_ACTIVE_TOOL LACY_CUSTOM_TOOL_CMD
+                echo "Tool set to: custom ($LACY_CUSTOM_TOOL_CMD)"
             else
                 LACY_ACTIVE_TOOL="$2"
                 export LACY_ACTIVE_TOOL
@@ -394,7 +415,8 @@ lacy_shell_tool() {
             ;;
         *)
             echo "Usage: tool [set <name>]"
-            echo "Options: lash, claude, opencode, gemini, codex, auto"
+            echo "Options: lash, claude, opencode, gemini, codex, custom, auto"
+            echo "  tool set custom \"command -flags\""
             ;;
     esac
 }

@@ -28,6 +28,7 @@ CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 
 # Selected tool (set during installation)
 SELECTED_TOOL=""
+CUSTOM_COMMAND=""
 
 # Check if we should use Node installer
 use_node_installer() {
@@ -142,10 +143,11 @@ select_tool() {
     printf "  5) codex      ${DIM}- OpenAI Codex CLI${NC}\n"
     printf "  6) Auto-detect ${DIM}(use first available)${NC}\n"
     printf "  7) None       ${DIM}- I'll install one later${NC}\n"
+    printf "  8) Custom     ${DIM}- enter your own command${NC}\n"
     printf "\n"
 
     local choice
-    read -p "Select [1-7, default=6]: " choice
+    read -p "Select [1-8, default=6]: " choice
 
     case "$choice" in
         1) SELECTED_TOOL="lash" ;;
@@ -155,10 +157,19 @@ select_tool() {
         5) SELECTED_TOOL="codex" ;;
         6|"") SELECTED_TOOL="" ;;
         7) SELECTED_TOOL="none" ;;
+        8)
+            SELECTED_TOOL="custom"
+            printf "\n"
+            read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND
+            if [[ -z "$CUSTOM_COMMAND" ]]; then
+                printf "${RED}No command entered. Falling back to auto-detect.${NC}\n"
+                SELECTED_TOOL=""
+            fi
+            ;;
         *) SELECTED_TOOL="" ;;
     esac
 
-    if [[ -n "$SELECTED_TOOL" && "$SELECTED_TOOL" != "none" ]]; then
+    if [[ -n "$SELECTED_TOOL" && "$SELECTED_TOOL" != "none" && "$SELECTED_TOOL" != "custom" ]]; then
         printf "\n"
         printf "Selected: ${GREEN}$SELECTED_TOOL${NC}\n"
 
@@ -182,6 +193,9 @@ select_tool() {
                 esac
             fi
         fi
+    elif [[ "$SELECTED_TOOL" == "custom" ]]; then
+        printf "\n"
+        printf "Selected: ${GREEN}custom${NC} (${CUSTOM_COMMAND})\n"
     elif [[ "$SELECTED_TOOL" == "none" ]]; then
         printf "\n"
         printf "No tool selected. Lacy will prompt you to install one when needed.\n"
@@ -276,15 +290,22 @@ create_config() {
         active_tool_value="$SELECTED_TOOL"
     fi
 
+    # Build custom_command line
+    local custom_command_line="  # custom_command: \"your-command -flags\""
+    if [[ "$SELECTED_TOOL" == "custom" && -n "$CUSTOM_COMMAND" ]]; then
+        custom_command_line="  custom_command: \"$CUSTOM_COMMAND\""
+    fi
+
     # Create config file
     cat > "$CONFIG_FILE" << EOF
 # Lacy Shell Configuration
 # https://github.com/lacymorrow/lacy-shell
 
 # AI CLI tool selection
-# Options: lash, claude, opencode, gemini, codex, or empty for auto-detect
+# Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
 agent_tools:
   active: $active_tool_value
+$custom_command_line
 
 # API Keys (optional - only needed if no CLI tool is installed)
 api_keys:
@@ -496,12 +517,13 @@ case "$1" in
         printf "  --help       Show this help message\n"
         printf "  --uninstall  Uninstall Lacy Shell\n"
         printf "  --bash       Force bash installer (skip Node)\n"
-        printf "  --tool X     Pre-select tool (lash, claude, opencode, gemini, codex, auto)\n"
+        printf "  --tool X     Pre-select tool (lash, claude, opencode, gemini, codex, custom, auto)\n"
         printf "\n"
         printf "Examples:\n"
         printf "  curl -fsSL https://lacy.sh/install | bash\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --uninstall\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool claude\n"
+        printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool custom \"claude -p\"\n"
         printf "  npx lacy-sh\n"
         printf "  npx lacy-sh --uninstall\n"
         exit 0
@@ -516,7 +538,17 @@ case "$1" in
         ;;
     "--tool")
         SELECTED_TOOL="$2"
-        shift 2
+        if [[ "$SELECTED_TOOL" == "custom" ]]; then
+            CUSTOM_COMMAND="$3"
+            if [[ -z "$CUSTOM_COMMAND" ]]; then
+                printf "${RED}Error: --tool custom requires a command string.${NC}\n"
+                printf "Usage: $0 --tool custom \"command -flags\"\n"
+                exit 1
+            fi
+            shift 3
+        else
+            shift 2
+        fi
         print_banner
         check_prerequisites
         install_plugin

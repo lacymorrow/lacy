@@ -60,11 +60,43 @@ EOF
         return 1
     fi
 
-    local cmd="${LACY_TOOL_CMD[$tool]}"
+    local cmd
+    if [[ "$tool" == "custom" ]]; then
+        if [[ -z "$LACY_CUSTOM_TOOL_CMD" ]]; then
+            echo "Error: custom tool selected but no command configured."
+            echo "Set one with: tool set custom \"your-command -flags\""
+            echo "Or add to ~/.lacy/config.yaml:"
+            echo "  agent_tools:"
+            echo "    active: custom"
+            echo "    custom_command: \"your-command -flags\""
+            return 1
+        fi
+        cmd="$LACY_CUSTOM_TOOL_CMD"
+    else
+        cmd="${LACY_TOOL_CMD[$tool]}"
+    fi
     echo ""
     lacy_start_spinner
-    eval "$cmd \"\$query\"" </dev/tty
-    local exit_code=$?
+    eval "$cmd \"\$query\"" </dev/tty 2>&1 | {
+        local _spinner_killed=false
+        while IFS= read -r line; do
+            if ! $_spinner_killed; then
+                # First output from tool — kill spinner
+                if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
+                    kill "$LACY_SPINNER_PID" 2>/dev/null
+                    printf '\e[2K\r\e[?25h'
+                fi
+                _spinner_killed=true
+            fi
+            printf '%s\n' "$line"
+        done
+        # Tool exited with no output
+        if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
+            kill "$LACY_SPINNER_PID" 2>/dev/null
+            printf '\e[2K\r\e[?25h'
+        fi
+    }
+    local exit_code=${pipestatus[1]}
     lacy_stop_spinner
     echo ""
     return $exit_code

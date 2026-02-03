@@ -19,6 +19,7 @@ const TOOLS = [
   { value: 'opencode', label: 'opencode', hint: 'OpenCode CLI' },
   { value: 'gemini', label: 'gemini', hint: 'Google Gemini CLI' },
   { value: 'codex', label: 'codex', hint: 'OpenAI Codex CLI' },
+  { value: 'custom', label: 'Custom', hint: 'enter your own command' },
   { value: 'auto', label: 'Auto-detect', hint: 'use first available' },
   { value: 'none', label: 'None', hint: "I'll install one later" },
 ];
@@ -181,6 +182,25 @@ async function install() {
     process.exit(0);
   }
 
+  // Prompt for custom command if selected
+  let customCommand = '';
+  if (selectedTool === 'custom') {
+    customCommand = await p.text({
+      message: 'Enter your custom command (query will be appended as a quoted argument):',
+      placeholder: 'claude --dangerously-skip-permissions -p',
+      validate(value) {
+        if (!value || value.trim().length === 0) return 'Command cannot be empty';
+      },
+    });
+
+    if (p.isCancel(customCommand)) {
+      p.cancel('Installation cancelled');
+      process.exit(0);
+    }
+
+    p.log.info(`Custom command: ${pc.cyan(customCommand)}`);
+  }
+
   // Offer to install lash if selected but not installed
   if (selectedTool === 'lash' && !commandExists('lash')) {
     const installLash = await p.confirm({
@@ -277,13 +297,18 @@ async function install() {
 
   const activeToolValue = selectedTool === 'auto' || selectedTool === 'none' ? '' : selectedTool;
 
+  const customCommandLine = selectedTool === 'custom' && customCommand
+    ? `  custom_command: "${customCommand}"`
+    : `  # custom_command: "your-command -flags"`;
+
   const configContent = `# Lacy Shell Configuration
 # https://github.com/lacymorrow/lacy-shell
 
 # AI CLI tool selection
-# Options: lash, claude, opencode, gemini, codex, or empty for auto-detect
+# Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
 agent_tools:
   active: ${activeToolValue}
+${customCommandLine}
 
 # API Keys (optional - only needed if no CLI tool is installed)
 api_keys:

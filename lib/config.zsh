@@ -73,7 +73,7 @@ lacy_shell_load_config() {
         local api_keys_map="openai:LACY_SHELL_API_OPENAI,anthropic:LACY_SHELL_API_ANTHROPIC"
         local model_map="provider:LACY_SHELL_PROVIDER,name:LACY_SHELL_MODEL_NAME"
         local agent_map="command:LACY_SHELL_AGENT_COMMAND,context_mode:LACY_SHELL_AGENT_CONTEXT_MODE,needs_api_keys:LACY_SHELL_AGENT_NEEDS_API_KEYS"
-        local agent_tools_map="active:LACY_ACTIVE_TOOL"
+        local agent_tools_map="active:LACY_ACTIVE_TOOL,custom_command:LACY_CUSTOM_TOOL_CMD"
 
         # Track current section
         local current_section=""
@@ -160,6 +160,7 @@ lacy_shell_load_config() {
 
     # Active AI tool (empty = auto-detect)
     export LACY_ACTIVE_TOOL
+    export LACY_CUSTOM_TOOL_CMD
 
     # Initialize current mode from default
     LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
@@ -213,8 +214,10 @@ appearance:
 # AI CLI tool selection
 # Lacy auto-detects installed tools, or you can set one explicitly
 agent_tools:
-  # Options: lash, claude, opencode, gemini, codex, or empty for auto-detect
+  # Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
   active:
+  # Custom command (used when active: custom)
+  # custom_command: "your-command -flags"
 
 # Agent CLI configuration (legacy)
 # Configure which CLI tool to use for AI queries

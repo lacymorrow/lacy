@@ -57,6 +57,7 @@ Examples:
 | opencode | `opencode run "query"` | positional |
 | gemini | `gemini -p "query"` | `-p` |
 | codex | `codex exec "query"` | positional |
+| custom | user-defined command | user-defined |
 
 All tools handle their own authentication - no API keys needed from lacy.
 
@@ -90,7 +91,8 @@ packages/lacy-sh/            # npm package for interactive installer
 - `mode [shell|agent|auto]` - Switch modes
 - `mode` - Show current mode and color legend
 - `tool` - Show active AI tool and available tools
-- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, auto)
+- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, custom, auto)
+- `tool set custom "cmd"` - Set a custom command as the AI tool
 - `ask "question"` - Direct query to agent
 - `quit` / `stop` / `exit` - Exit lacy shell
 - `Ctrl+Space` - Toggle between modes
@@ -113,7 +115,8 @@ Config file: `~/.lacy/config.yaml`
 
 ```yaml
 agent_tools:
-  active: claude  # or lash, opencode, gemini, codex, empty for auto
+  active: claude  # or lash, opencode, gemini, codex, custom, empty for auto
+  # custom_command: "your-command -flags"  # used when active: custom
 
 api_keys:
   openai: "sk-..."      # Only needed if no CLI tool
