@@ -146,7 +146,7 @@ lacy_shell_execute_with_confirmation() {
     for pattern in "${dangerous_commands[@]}"; do
         if [[ "$command" == *"$pattern"* ]]; then
             echo ""
-            echo "%F{red}⚠️  Potentially dangerous command detected:%f"
+            print -P "%F{red}⚠️  Potentially dangerous command detected:%f"
             echo "   $command"
             echo ""
             read "response?Continue? (y/N): "
@@ -169,7 +169,7 @@ lacy_shell_suggest_correction() {
     
     if [[ "$LACY_SHELL_CURRENT_MODE" == "auto" || "$LACY_SHELL_CURRENT_MODE" == "agent" ]]; then
         echo ""
-        echo "%F{yellow}💡 Getting AI suggestion for failed command...%f"
+        print -P "%F{yellow}💡 Getting AI suggestion for failed command...%f"
         
         local suggestion_query="The command '$failed_command' failed with exit code $exit_code. Please suggest a corrected version or alternative approach."
         lacy_shell_query_agent "$suggestion_query"
@@ -196,7 +196,7 @@ $recent_history
 
 Please suggest specific commands that would help with '$search_term'."
     
-    echo "%F{blue}🔍 Searching command history with AI...%f"
+    print -P "%F{blue}🔍 Searching command history with AI...%f"
     lacy_shell_query_agent "$query"
 }
 
@@ -219,7 +219,7 @@ Provide 3-5 most likely completions, considering:
 Format as a simple list of completions."
     
     echo ""
-    echo "%F{blue}🔮 AI completion suggestions:%f"
+    print -P "%F{blue}🔮 AI completion suggestions:%f"
     lacy_shell_query_agent "$query"
 }
 
@@ -246,7 +246,7 @@ Please provide:
 4. Related commands
 "
     
-    echo "%F{blue}📖 Context-aware help for: $topic%f"
+    print -P "%F{blue}📖 Context-aware help for: $topic%f"
     lacy_shell_query_agent "$query"
 }
 
@@ -324,21 +324,21 @@ lacy_shell_mode() {
             lacy_shell_set_mode "shell"
             lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            echo "  %F{34}▌%f SHELL mode - all commands execute directly"
+            print -P "  %F{34}▌%f SHELL mode - all commands execute directly"
             echo ""
             ;;
         "agent"|"a")
             lacy_shell_set_mode "agent"
             lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            echo "  %F{200}▌%f AGENT mode - all input goes to AI"
+            print -P "  %F{200}▌%f AGENT mode - all input goes to AI"
             echo ""
             ;;
         "auto"|"u")
             lacy_shell_set_mode "auto"
             lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            echo "  %F{75}▌%f AUTO mode - smart detection"
+            print -P "  %F{75}▌%f AUTO mode - smart detection"
             echo ""
             ;;
         "toggle"|"t")
@@ -347,9 +347,9 @@ lacy_shell_mode() {
             local new_mode="$LACY_SHELL_CURRENT_MODE"
             echo ""
             case "$new_mode" in
-                "shell") echo "  %F{34}▌%f SHELL mode" ;;
-                "agent") echo "  %F{200}▌%f AGENT mode" ;;
-                "auto")  echo "  %F{75}▌%f AUTO mode" ;;
+                "shell") print -P "  %F{34}▌%f SHELL mode" ;;
+                "agent") print -P "  %F{200}▌%f AGENT mode" ;;
+                "auto")  print -P "  %F{75}▌%f AUTO mode" ;;
             esac
             echo ""
             ;;
@@ -362,14 +362,14 @@ lacy_shell_mode() {
             echo ""
             echo -n "Current: "
             case "$LACY_SHELL_CURRENT_MODE" in
-                "shell") echo "%F{34}SHELL%f" ;;
-                "agent") echo "%F{200}AGENT%f" ;;
-                "auto")  echo "%F{75}AUTO%f" ;;
+                "shell") print -P "%F{34}SHELL%f" ;;
+                "agent") print -P "%F{200}AGENT%f" ;;
+                "auto")  print -P "%F{75}AUTO%f" ;;
             esac
             echo ""
             echo "Colors:"
-            echo "  %F{34}▌%f Green  = shell command"
-            echo "  %F{200}▌%f Magenta = agent query"
+            print -P "  %F{34}▌%f Green  = shell command"
+            print -P "  %F{200}▌%f Magenta = agent query"
             echo ""
             ;;
     esac
@@ -385,9 +385,9 @@ lacy_shell_tool() {
             echo "Available tools:"
             for t in lash claude opencode gemini codex; do
                 if command -v "$t" >/dev/null 2>&1; then
-                    echo "  %F{34}✓%f $t"
+                    print -P "  %F{34}✓%f $t"
                 else
-                    echo "  %F{238}○%f $t (not installed)"
+                    print -P "  %F{238}○%f $t (not installed)"
                 fi
             done
             echo ""

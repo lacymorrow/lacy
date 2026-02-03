@@ -62,24 +62,6 @@ lacy_shell_auto_mode() {
     lacy_shell_set_mode "auto"
 }
 
-# Get mode indicator for prompt
-lacy_shell_get_mode_indicator() {
-    case "$LACY_SHELL_CURRENT_MODE" in
-        "shell")
-            echo "%K{235}%F{205}▌ %B%F{205}SHELL%b %k%f"
-            ;;
-        "agent")
-            echo "%K{235}%F{214}▌ %B%F{214}AGENT%b %k%f"
-            ;;
-        "auto")
-            echo "%K{235}%F{141}▌ %B%F{141}AUTO%b  %k%f"
-            ;;
-        *)
-            echo "%K{235}%F{196}▌ %B%F{196}!%b %k%f"
-            ;;
-    esac
-}
-
 # Mode persistence
 lacy_shell_save_mode() {
     mkdir -p "$(dirname "$LACY_SHELL_MODE_FILE")"
@@ -97,4 +79,24 @@ lacy_shell_init_mode() {
     else
         LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
     fi
+}
+
+# Show mode status
+lacy_shell_mode_status() {
+    echo ""
+    echo -n "Current mode: "
+    case "$LACY_SHELL_CURRENT_MODE" in
+        "shell") print -P "%F{34}SHELL%f" ;;
+        "agent") print -P "%F{200}AGENT%f" ;;
+        "auto")  print -P "%F{75}AUTO%f" ;;
+        *)       print -P "%F{238}unknown%f" ;;
+    esac
+    echo ""
+    echo "Description: ${LACY_SHELL_MODE_DESCRIPTIONS[$LACY_SHELL_CURRENT_MODE]}"
+    echo ""
+    echo "Colors:"
+    print -P "  %F{34}▌%f Green   = shell command"
+    print -P "  %F{200}▌%f Magenta = agent query"
+    print -P "  %F{75}▌%f Blue    = auto mode"
+    echo ""
 }

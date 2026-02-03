@@ -124,8 +124,10 @@ modes:
 ## Development Notes
 
 - Install path changed from `~/.lacy-shell` to `~/.lacy`
+- Repo (`lib/`) and install dir (`~/.lacy/lib/`) are separate copies — changes must be applied to both
 - Prompt capture is deferred to first `precmd` so user's shell profile loads first
 - Indicator only updates when type changes (avoids flickering)
 - Colors: Green=34, Magenta=200, Blue=75, Gray=238
+- Use `print -P` (not `echo`) for colored output outside of prompt strings — `%F{...}%f` escapes are only interpreted by ZSH in prompt context or via `print -P`
 - Installer uses `printf` instead of `echo -e` for portability
 - Node installer falls back to bash if npm package not available

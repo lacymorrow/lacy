@@ -85,16 +85,6 @@ lacy_shell_restore_prompt() {
     fi
 }
 
-# Get mode indicator text (for status display)
-lacy_shell_get_mode_indicator() {
-    case "$LACY_SHELL_CURRENT_MODE" in
-        "shell") echo "%F{34}SHELL%f" ;;
-        "agent") echo "%F{200}AGENT%f" ;;
-        "auto")  echo "%F{75}AUTO%f" ;;
-        *)       echo "%F{238}-%f" ;;
-    esac
-}
-
 # Stubs for removed features
 lacy_shell_remove_top_bar() { :; }
 lacy_shell_show_top_bar_message() { :; }
