@@ -303,7 +303,7 @@ lacy_shell_quit() {
     fi
 
     # Unset aliases
-    unalias ask mode tool quit_lacy disable_lacy enable_lacy 2>/dev/null
+    unalias ask mode tool quit_lacy quit stop exit disable_lacy enable_lacy 2>/dev/null
     
     # Restore original prompt
     lacy_shell_restore_prompt
@@ -422,5 +422,8 @@ alias ask="lacy_shell_query_agent"
 alias mode="lacy_shell_mode"
 alias tool="lacy_shell_tool"
 alias quit_lacy="lacy_shell_quit"
+alias quit="lacy_shell_quit"
+alias stop="lacy_shell_quit"
+alias exit="lacy_shell_quit"
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"
