@@ -2,6 +2,12 @@
 
 # Lacy Shell - Smart shell plugin with MCP support
 
+# Prevent multiple sourcing
+if [[ "${LACY_SHELL_LOADED:-}" == "true" ]]; then
+    return 0
+fi
+LACY_SHELL_LOADED=true
+
 # Plugin directory
 LACY_SHELL_DIR="${0:A:h}"
 
@@ -36,6 +42,7 @@ lacy_shell_cleanup() {
     unset IGNOREEOF
     LACY_SHELL_QUITTING=false
     LACY_SHELL_ENABLED=false
+    LACY_SHELL_LOADED=false
 }
 
 # Set up hooks
