@@ -2,56 +2,6 @@
 
 # Command execution logic for Lacy Shell
 
-# === Pink Sparkle Loader ===
-# Background process ID for the loader
-LACY_SHELL_LOADER_PID=""
-
-# Start the pink sparkle loader animation (writes to stderr to not interfere with output)
-lacy_shell_start_loader() {
-    local message="${1:-thinking}"
-
-    # Don't start if already running
-    if [[ -n "$LACY_SHELL_LOADER_PID" ]] && kill -0 "$LACY_SHELL_LOADER_PID" 2>/dev/null; then
-        return 0
-    fi
-
-    # Hide cursor
-    printf '\033[?25l' >&2
-
-    # Run loader in background subshell (suppress job notification with setopt)
-    setopt LOCAL_OPTIONS NO_NOTIFY NO_MONITOR
-    (
-        local frame_idx=0
-        local num_frames=${#LACY_SHELL_LOADER_FRAMES[@]}
-
-        while true; do
-            # Get current frame (zsh arrays are 1-indexed)
-            local frame="${LACY_SHELL_LOADER_FRAMES[$((frame_idx % num_frames + 1))]}"
-
-            # Print loader with pink color to stderr - carriage return to overwrite
-            printf "\r${LACY_SHELL_LOADER_COLOR}  %s ${message}...${LACY_SHELL_LOADER_RESET}  " "$frame" >&2
-
-            frame_idx=$((frame_idx + 1))
-            sleep "$LACY_SHELL_LOADER_SPEED"
-        done
-    ) &!
-
-    LACY_SHELL_LOADER_PID=$!
-}
-
-# Stop the loader animation
-lacy_shell_stop_loader() {
-    if [[ -n "$LACY_SHELL_LOADER_PID" ]]; then
-        # Kill the loader process (disowned, so no wait needed)
-        kill "$LACY_SHELL_LOADER_PID" 2>/dev/null
-        LACY_SHELL_LOADER_PID=""
-
-        # Clear the loader line and show cursor (on stderr)
-        printf "\r\033[K" >&2
-        printf '\033[?25h' >&2
-    fi
-}
-
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
     # If Lacy Shell is disabled, use normal accept-line
@@ -94,6 +44,10 @@ lacy_shell_smart_accept_line() {
             : # Fall through to agent handling below
         # If the first word is a valid command, let shell handle it
         elif command -v "$first_word" >/dev/null 2>&1; then
+            zle .accept-line
+            return
+        # Single word that's not a command = probably a typo, let shell error
+        elif [[ "$input" != *" "* ]]; then
             zle .accept-line
             return
         fi
@@ -155,20 +109,13 @@ lacy_shell_enable_interception() {
 lacy_shell_execute_agent() {
     local query="$1"
 
-    # Start the pink sparkle loader
-    lacy_shell_start_loader "thinking"
-
-    # Query the agent with error handling
     if ! lacy_shell_query_agent "$query"; then
-        lacy_shell_stop_loader
-        echo "❌ Agent request failed or timed out. Try:"
-        echo "   - Check your API keys: lacy_shell_check_api_keys"
-        echo "   - Check internet connection"
-        echo "   - Switch to shell mode: mode shell"
-        echo "   - Run command directly: $query"
+        echo ""
+        echo "❌ Agent request failed. Try:"
+        echo "   - Install lash: npm install -g lash-cli"
+        echo "   - Or configure API keys in ~/.lacy-shell/config.yaml"
+        echo ""
     fi
-    
-    # Do not touch ZLE redraw here; we've already exited ZLE before streaming
 }
 
 # Smart auto execution: only called when first word is not a valid command
@@ -371,10 +318,8 @@ lacy_shell_quit() {
         print -r -- ""
     fi
 
-    # Unset all lacy shell functions and aliases
-    unalias ask suggest aihelp aicomplete hisearch clear_chat show_chat mode mode_style 2>/dev/null
-    unalias mcp_test mcp_check mcp_debug mcp_restart mcp_logs mcp_start mcp_stop 2>/dev/null
-    unalias disable_lacy enable_lacy test_smart_auto quit_lacy lacy_quit 2>/dev/null
+    # Unset aliases
+    unalias ask mode quit_lacy disable_lacy enable_lacy 2>/dev/null
     
     # Restore original prompt
     lacy_shell_restore_prompt
@@ -393,39 +338,34 @@ lacy_shell_mode() {
     case "$1" in
         "shell"|"s")
             lacy_shell_set_mode "shell"
+            lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            echo "  %F{205}▌ Switched to SHELL mode%f"
-            echo "  All commands execute directly in shell"
+            echo "  %F{34}▌%f SHELL mode - all commands execute directly"
             echo ""
             ;;
         "agent"|"a")
             lacy_shell_set_mode "agent"
+            lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            echo "  %F{214}▌ Switched to AGENT mode%f"
-            echo "  All input goes to AI agent"
+            echo "  %F{200}▌%f AGENT mode - all input goes to AI"
             echo ""
             ;;
         "auto"|"u")
             lacy_shell_set_mode "auto"
+            lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            echo "  %F{141}▌ Switched to AUTO mode%f"
-            echo "  Commands run in shell, natural language goes to AI"
+            echo "  %F{75}▌%f AUTO mode - smart detection"
             echo ""
             ;;
         "toggle"|"t")
             lacy_shell_toggle_mode
+            lacy_shell_update_rprompt 2>/dev/null
             local new_mode="$LACY_SHELL_CURRENT_MODE"
             echo ""
             case "$new_mode" in
-                "shell")
-                    echo "  %F{205}▌ Switched to SHELL mode%f"
-                    ;;
-                "agent")
-                    echo "  %F{214}▌ Switched to AGENT mode%f"
-                    ;;
-                "auto")
-                    echo "  %F{141}▌ Switched to AUTO mode%f"
-                    ;;
+                "shell") echo "  %F{34}▌%f SHELL mode" ;;
+                "agent") echo "  %F{200}▌%f AGENT mode" ;;
+                "auto")  echo "  %F{75}▌%f AUTO mode" ;;
             esac
             echo ""
             ;;
@@ -434,84 +374,26 @@ lacy_shell_mode() {
             ;;
         *)
             echo ""
-            echo "Usage: mode [shell|agent|auto|toggle|status] or [s|a|u|t]"
+            echo "Usage: mode [shell|agent|auto|toggle|status]"
             echo ""
-            echo -n "Current mode: "
+            echo -n "Current: "
             case "$LACY_SHELL_CURRENT_MODE" in
-                "shell")
-                    echo "%F{205}▌ SHELL%f"
-                    ;;
-                "agent")
-                    echo "%F{214}▌ AGENT%f"
-                    ;;
-                "auto")
-                    echo "%F{141}▌ AUTO%f"
-                    ;;
+                "shell") echo "%F{34}SHELL%f" ;;
+                "agent") echo "%F{200}AGENT%f" ;;
+                "auto")  echo "%F{75}AUTO%f" ;;
             esac
+            echo ""
+            echo "Colors:"
+            echo "  %F{34}▌%f Green  = shell command"
+            echo "  %F{200}▌%f Magenta = agent query"
             echo ""
             ;;
     esac
 }
 
-# Export functions for direct use
+# Aliases
 alias ask="lacy_shell_query_agent"
-alias suggest="lacy_shell_suggest_correction"
-alias aihelp="lacy_shell_context_help"
-alias aicomplete="lacy_shell_ai_complete"
-alias hisearch="lacy_shell_ai_history_search"
-alias clear_chat="lacy_shell_clear_conversation"
-alias show_chat="lacy_shell_show_conversation"
 alias mode="lacy_shell_mode"
-alias mode_style="lacy_shell_toggle_indicator_style"
-
-# MCP-related aliases
-alias mcp_test="lacy_shell_test_mcp"
-alias mcp_check="lacy_shell_check_mcp_packages"
-alias mcp_debug="lacy_shell_debug_mcp"
-alias mcp_restart="lacy_shell_restart_mcp_server"
-alias mcp_logs="lacy_shell_mcp_logs"
-alias mcp_start="lacy_shell_start_mcp_servers"
-alias mcp_stop="lacy_shell_stop_mcp_servers"
-
-# Emergency aliases for input issues
+alias quit_lacy="lacy_shell_quit"
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"
-
-# Quit aliases
-alias quit_lacy="lacy_shell_quit"
-alias lacy_quit="lacy_shell_quit"
-
-# Testing aliases
-alias test_smart_auto="lacy_shell_test_smart_auto"
-
-# Test smart auto mode
-lacy_shell_test_smart_auto() {
-    echo "Testing Smart Auto Mode"
-    echo "======================"
-    echo
-
-    local test_cases=(
-        "ls -la"
-        "nonexistentcommand123"
-        "hey"
-        "git status"
-        "what files are here"
-        "pwd"
-    )
-
-    echo "Auto mode behavior (command exists = shell, otherwise = agent):"
-    echo
-
-    for test_case in "${test_cases[@]}"; do
-        local first_word="${test_case%% *}"
-        echo -n "  '$test_case' -> "
-        if command -v "$first_word" >/dev/null 2>&1; then
-            echo "shell"
-        else
-            echo "agent"
-        fi
-    done
-
-    echo
-    echo "Switch to auto mode with: mode auto"
-}

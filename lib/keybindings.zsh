@@ -7,6 +7,119 @@ LACY_SHELL_LAST_INTERRUPT_TIME=0
 LACY_SHELL_QUITTING=false
 # Exit timeout configuration is defined in constants.zsh
 
+# Track current input type for real-time indicator
+LACY_SHELL_INPUT_TYPE=""  # "shell" or "agent"
+
+# ============================================================================
+# Real-time Shell/Agent Indicator
+# ============================================================================
+
+# Check if input will go to shell or agent
+# MUST match the logic in execute.zsh lacy_shell_smart_accept_line()
+lacy_shell_detect_input_type() {
+    local input="$1"
+
+    # Empty input = neutral
+    if [[ -z "$input" ]]; then
+        echo "neutral"
+        return
+    fi
+
+    # Emergency bypass prefix (!) = shell
+    if [[ "$input" == !* ]]; then
+        echo "shell"
+        return
+    fi
+
+    # In shell mode, everything goes to shell
+    if [[ "$LACY_SHELL_CURRENT_MODE" == "shell" ]]; then
+        echo "shell"
+        return
+    fi
+
+    # In agent mode, everything goes to agent
+    if [[ "$LACY_SHELL_CURRENT_MODE" == "agent" ]]; then
+        echo "agent"
+        return
+    fi
+
+    # Auto mode: check special cases and commands
+    local first_word="${input%% *}"
+    local first_word_lower="${first_word:l}"
+
+    # Skip if first word is empty
+    if [[ -z "$first_word" ]]; then
+        echo "neutral"
+        return
+    fi
+
+    # "what" always goes to agent (hardcoded override)
+    if [[ "$first_word_lower" == "what" ]]; then
+        echo "agent"
+        return
+    fi
+
+    # Check if it's a valid command
+    if command -v "$first_word" >/dev/null 2>&1; then
+        echo "shell"
+        return
+    fi
+
+    # Single word that's not a command = probably a typo → shell
+    # Multiple words with non-command first word = natural language → agent
+    if [[ "$input" != *" "* ]]; then
+        echo "shell"
+    else
+        echo "agent"
+    fi
+}
+
+# Update the indicator based on current input (called on every keystroke)
+lacy_shell_update_input_indicator() {
+    [[ "$LACY_SHELL_ENABLED" != true ]] && return
+    [[ "$LACY_SHELL_PROMPT_INITIALIZED" != true ]] && return
+    [[ -z "$LACY_SHELL_BASE_PS1" ]] && return
+
+    local input_type=$(lacy_shell_detect_input_type "$BUFFER")
+
+    # Only update prompt if type changed (avoids flickering)
+    if [[ "$input_type" != "$LACY_SHELL_INPUT_TYPE" ]]; then
+        LACY_SHELL_INPUT_TYPE="$input_type"
+
+        # Build new PS1 with colored indicator
+        # Colors chosen for maximum distinction:
+        #   Green (34) = shell command
+        #   Magenta (200) = agent query
+        #   Dark gray (238) = neutral/empty
+        local indicator
+        case "$input_type" in
+            "shell")
+                indicator="%F{34}▌%f"
+                ;;
+            "agent")
+                indicator="%F{200}▌%f"
+                ;;
+            *)
+                indicator="%F{238}▌%f"
+                ;;
+        esac
+
+        # Update prompt with indicator (appended after prompt, before cursor)
+        PS1="${LACY_SHELL_BASE_PS1}${indicator} "
+
+        # Request prompt redraw
+        zle && zle reset-prompt
+    fi
+}
+
+# ZLE widget that runs before each redraw
+lacy_shell_line_pre_redraw() {
+    lacy_shell_update_input_indicator
+}
+
+# Register the pre-redraw hook
+zle -N zle-line-pre-redraw lacy_shell_line_pre_redraw
+
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
     # Only add our custom bindings - don't touch existing terminal shortcuts
@@ -207,18 +320,10 @@ lacy_shell_interrupt_handler() {
         lacy_shell_quit
         return 130
     else
-        # Single Ctrl+C - show message in top bar
+        # Single Ctrl+C - show hint
         LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
-
-        # Show message in top bar if it's active
-        if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
-            # Use pre-calculated timeout in seconds
-            lacy_shell_show_top_bar_message "Press Ctrl-C again to quit" "$LACY_SHELL_EXIT_TIMEOUT_SEC"
-        else
-            # Fallback: just clear the line
-            echo ""
-        fi
-
+        echo ""
+        echo "Press Ctrl-C again to quit"
         return 130
     fi
 }
@@ -257,11 +362,7 @@ lacy_shell_setup_interrupt_handler() {
             # Single Ctrl+C
             LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
             echo ""
-
-            if [[ "$LACY_SHELL_TOP_BAR_ACTIVE" == true ]]; then
-                lacy_shell_show_top_bar_message "Press Ctrl-C again to quit" "$LACY_SHELL_EXIT_TIMEOUT_SEC"
-            fi
-
+            echo "Press Ctrl-C again to quit"
             return 130
         fi
     }
@@ -277,39 +378,22 @@ lacy_shell_setup_eof_handler() {
 
 # Cleanup all keybindings
 lacy_shell_cleanup_keybindings() {
-    # Restore only the keybindings we actually override
+    # Restore keybindings we override
     bindkey '^D' delete-char-or-list
     bindkey '^@' set-mark-command
     bindkey '^T' transpose-chars
 
-    # Remove all custom widgets
+    # Remove real-time indicator hook
+    zle -D zle-line-pre-redraw 2>/dev/null
+
+    # Remove custom widgets
     zle -D lacy_shell_toggle_mode_widget 2>/dev/null
-    zle -D lacy_shell_agent_mode_widget 2>/dev/null
-    zle -D lacy_shell_shell_mode_widget 2>/dev/null
-    zle -D lacy_shell_auto_mode_widget 2>/dev/null
-    zle -D lacy_shell_help_widget 2>/dev/null
-    zle -D lacy_shell_quit_widget 2>/dev/null
     zle -D lacy_shell_delete_char_or_quit_widget 2>/dev/null
-    zle -D lacy_shell_scroll_up_widget 2>/dev/null
-    zle -D lacy_shell_scroll_down_widget 2>/dev/null
-    zle -D lacy_shell_scroll_up_line_widget 2>/dev/null
-    zle -D lacy_shell_scroll_down_line_widget 2>/dev/null
-    zle -D lacy_shell_execute_line_widget 2>/dev/null
 }
 
-# Register all widgets
+# Register widgets
 zle -N lacy_shell_toggle_mode_widget
-zle -N lacy_shell_agent_mode_widget
-zle -N lacy_shell_shell_mode_widget
-zle -N lacy_shell_auto_mode_widget
-zle -N lacy_shell_help_widget
-zle -N lacy_shell_quit_widget
 zle -N lacy_shell_delete_char_or_quit_widget
-zle -N lacy_shell_scroll_up_widget
-zle -N lacy_shell_scroll_down_widget
-zle -N lacy_shell_scroll_up_line_widget
-zle -N lacy_shell_scroll_down_line_widget
-zle -N lacy_shell_execute_line_widget
 
 # Alternative keybindings that don't conflict with system shortcuts
 lacy_shell_setup_safe_keybindings() {

@@ -2,78 +2,80 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mission
+
+Enable developers to talk directly to their shell.
+
 ## Project Overview
 
-Lacy Shell is a zsh plugin that adds an AI agent to the terminal. When `lash` (the recommended CLI tool) is installed, this plugin becomes a thin wrapper delegating model and MCP work to Lash. Without Lash, it falls back to direct OpenAI/Anthropic HTTP calls.
+Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI coding agent (lash). Commands execute normally. Natural language goes to the AI. No mode switching required.
+
+## Visual Feedback
+
+**Real-time indicator** (left of prompt) changes color as you type:
+- **Green (34)** = will execute in shell
+- **Magenta (200)** = will go to AI agent
+
+**Mode indicator** (right prompt) shows current mode:
+- `SHELL` (green) = all input goes to shell
+- `AGENT` (magenta) = all input goes to AI
+- `AUTO` (blue) = smart detection (default)
+
+## Auto Mode Logic
+
+In AUTO mode, routing is determined by:
+
+1. `what ...` → Agent (hardcoded override)
+2. First word is valid command → Shell
+3. Single word, not a command → Shell (typo, let it error)
+4. Multiple words, first not a command → Agent (natural language)
+
+Examples:
+- `ls -la` → Shell (valid command)
+- `what files are here` → Agent ("what" override)
+- `cd..` → Shell (single word typo)
+- `fix the bug` → Agent (multi-word natural language)
+- `!rm -rf` → Shell (emergency bypass with `!` prefix)
 
 ## Architecture
 
-The plugin is structured as modular zsh scripts loaded in a specific order:
-
 ```
-lacy-shell.plugin.zsh    # Entry point - loads modules and initializes
+lacy-shell.plugin.zsh    # Entry point
 lib/
-  constants.zsh          # Global constants, paths, defaults, timeouts
-  config.zsh             # YAML config parsing, API key management
-  modes.zsh              # Mode state (shell/agent/auto) and persistence
-  mcp.zsh                # MCP protocol, AI API calls (OpenAI/Anthropic)
-  detection.zsh          # Auto-detection logic for shell vs agent routing
-  keybindings.zsh        # Keyboard shortcuts, interrupt handlers
-  prompt.zsh             # Prompt/status bar rendering, terminal manipulation
-  execute.zsh            # Command execution, smart routing, loader animation
+  constants.zsh          # Colors, timeouts, paths
+  config.zsh             # YAML config, API key management
+  modes.zsh              # Mode state (shell/agent/auto)
+  mcp.zsh                # Agent query routing (lash/opencode/API fallback)
+  detection.zsh          # Mode detection helpers
+  keybindings.zsh        # Ctrl+Space toggle, real-time indicator
+  prompt.zsh             # Prompt with indicator, mode in right prompt
+  execute.zsh            # Command execution routing
 ```
 
-### Key Concepts
+## Agent Integration
 
-- **Three modes**: `shell` (normal execution), `agent` (AI-powered), `auto` (smart detection)
-- **Smart auto mode**: In auto mode, valid shell commands execute normally; unrecognized input routes to AI
-- **Agent CLI abstraction**: Configurable `agent.command` in config.yaml allows using any CLI tool (default: `lash run {query}`)
-- **MCP servers**: When Lash is absent, the plugin can manage MCP servers directly via named pipes
+When `lash` is installed: `lash run -c "<query>"`
+Fallback: `opencode run -c "<query>"`
+Last resort: Direct OpenAI/Anthropic API calls
 
-### Configuration
+## Key Commands
 
-Config file: `~/.lacy-shell/config.yaml`
+- `mode [shell|agent|auto]` - Switch modes
+- `mode` - Show current mode and color legend
+- `ask "question"` - Direct query to agent
+- `quit_lacy` - Exit lacy shell
+- `Ctrl+Space` - Toggle between modes
+- `Ctrl+C` (2x) - Quit
 
-Key sections:
-- `api_keys`: OpenAI/Anthropic keys (also reads from `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` env vars)
-- `model`: provider and model name for fallback mode
-- `agent`: command template, context mode (stdin/file), needs_api_keys flag
-- `mcp`: server definitions for direct MCP management
+## Key Files
 
-### Terminal UI
+- `keybindings.zsh:lacy_shell_detect_input_type()` - Real-time indicator logic
+- `execute.zsh:lacy_shell_smart_accept_line()` - Routing logic (must match indicator)
+- `prompt.zsh` - Prompt initialization (deferred to first precmd)
+- `mcp.zsh:lacy_shell_query_agent()` - Routes to lash/opencode
 
-The plugin uses terminal escape sequences for:
-- Top status bar (redrawn before each prompt, preserves terminal scrollback)
-- Animated loader (pink sparkle frames)
-- Mode indicator display (top bar, right prompt, or left prompt styles)
+## Development Notes
 
-The top bar is drawn at line 1 of the visible terminal window using cursor positioning, without scroll regions. This allows agent responses to scroll into terminal scrollback for later review.
-
-## Development
-
-This is a pure zsh plugin with no build step. To test changes:
-
-```bash
-# Source the plugin directly
-source lacy-shell.plugin.zsh
-
-# Test mode detection
-lacy_shell_test_detection
-
-# Test smart auto behavior
-test_smart_auto
-
-# Check MCP configuration
-mcp_test
-```
-
-### Key Functions
-
-- `lacy_shell_smart_accept_line`: Main input router (ZLE widget)
-- `lacy_shell_query_agent`: Sends queries to AI (via Lash or direct API)
-- `lacy_shell_detect_mode`: Determines execution path for input
-- `lacy_shell_draw_top_bar`: Renders the status bar
-
-### Aliases Defined
-
-User-facing commands: `ask`, `mode`, `quit_lacy`, `mcp_test`, `mcp_debug`, `disable_lacy`, `enable_lacy`
+- Prompt capture is deferred to first `precmd` so user's shell profile loads first
+- Indicator only updates when type changes (avoids flickering)
+- Colors: Green=34, Magenta=200, Blue=75, Gray=238

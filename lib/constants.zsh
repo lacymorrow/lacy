@@ -55,38 +55,12 @@ readonly LACY_SHELL_MCP_TIMEOUT_SEC
 : ${LACY_SHELL_TOP_BAR_HEIGHT:=1}
 readonly LACY_SHELL_TOP_BAR_HEIGHT
 
-# === Agent CLI Defaults ===
-# Note: Using explicit assignment because {query} braces conflict with zsh ${:-} syntax
-[[ -z "$LACY_SHELL_DEFAULT_AGENT_COMMAND" ]] && LACY_SHELL_DEFAULT_AGENT_COMMAND='lash run {query}'
-readonly LACY_SHELL_DEFAULT_AGENT_COMMAND
+# === Agent CLI ===
+# Primary: lash (npm install -g lash-cli)
+# Fallback: opencode, or direct API calls
 
-: ${LACY_SHELL_DEFAULT_AGENT_CONTEXT_MODE:="stdin"}
-readonly LACY_SHELL_DEFAULT_AGENT_CONTEXT_MODE
-
-: ${LACY_SHELL_DEFAULT_AGENT_NEEDS_API_KEYS:="false"}
-readonly LACY_SHELL_DEFAULT_AGENT_NEEDS_API_KEYS
-
-# === Loader Animation ===
-# Fun pink sparkle loader frames - bright and playful!
-LACY_SHELL_LOADER_FRAMES=(
-    "♡ ✧ ˚ ·"
-    "✧ ♡ ✧ ˚"
-    "˚ ✧ ♡ ✧"
-    "· ˚ ✧ ♡"
-    "✦ ˚ ♥ ·"
-    "˚ ✦ ˚ ♥"
-    "♥ ˚ ✦ ˚"
-    "· ♥ ˚ ✦"
-    "⋆ ✧ · ♡"
-    "✧ ⋆ ✧ ·"
-    "· ✧ ⋆ ✧"
-    "♡ · ✧ ⋆"
-)
-
-# Bright magenta/pink color (ANSI 199 = bright magenta pink)
-LACY_SHELL_LOADER_COLOR="\033[1;38;5;199m"
-LACY_SHELL_LOADER_RESET="\033[0m"
-
-# Loader speed (seconds between frames) - snappy and fun!
-: ${LACY_SHELL_LOADER_SPEED:="0.08"}
-readonly LACY_SHELL_LOADER_SPEED
+# === Colors ===
+# Shell commands: Green (34)
+# Agent queries: Magenta (200)
+# Neutral: Dark gray (238)
+# Auto mode: Blue (75)
