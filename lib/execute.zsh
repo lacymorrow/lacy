@@ -56,14 +56,6 @@ lacy_shell_smart_accept_line() {
     # Handle based on mode (agent or auto with non-command/natural language)
     case "$execution_mode" in
         "agent")
-            # Check if we can actually use the agent (CLI tool or API keys)
-            if ! lacy_shell_check_agent_available >/dev/null 2>&1; then
-                echo "⚠️  No AI agent available - executing as shell command instead"
-                echo "   Install: npm install -g lash-cli"
-                zle .accept-line
-                return
-            fi
-            
             # Add to history before clearing buffer
             print -s -- "$input"
             
@@ -121,16 +113,8 @@ lacy_shell_execute_agent() {
 # Smart auto execution: only called when first word is not a valid command
 lacy_shell_execute_smart_auto() {
     local input="$1"
-    local first_word="${input%% *}"
-
-    # Check if agent is available (CLI tool or API keys)
-    if lacy_shell_check_agent_available >/dev/null 2>&1; then
-        lacy_shell_execute_agent "$input"
-    else
-        echo "❌ Command not found and no AI agent available: $first_word"
-        echo "   Install an AI CLI tool: npm install -g lash-cli"
-        echo "   Or configure API keys in ~/.lacy/config.yaml"
-    fi
+    # Let the agent handle it - mcp.zsh will show appropriate error if no tool available
+    lacy_shell_execute_agent "$input"
 }
 
 # Precmd hook - called before each prompt
