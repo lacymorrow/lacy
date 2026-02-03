@@ -72,6 +72,7 @@ All tools handle their own authentication - no API keys needed from lacy.
     ├── constants.zsh        # Colors, timeouts, paths (LACY_SHELL_HOME=~/.lacy)
     ├── config.zsh           # YAML config, API key management, agent_tools parsing
     ├── modes.zsh            # Mode state (shell/agent/auto)
+    ├── spinner.zsh          # Loading spinner with shimmer text effect
     ├── mcp.zsh              # Multi-tool routing (LACY_TOOL_CMD registry)
     ├── detection.zsh        # Mode detection helpers
     ├── keybindings.zsh      # Ctrl+Space toggle, real-time indicator
@@ -91,7 +92,7 @@ packages/lacy-sh/            # npm package for interactive installer
 - `tool` - Show active AI tool and available tools
 - `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, auto)
 - `ask "question"` - Direct query to agent
-- `quit_lacy` - Exit lacy shell
+- `quit` / `stop` / `exit` - Exit lacy shell
 - `Ctrl+Space` - Toggle between modes
 - `Ctrl+C` (2x) - Quit
 
@@ -101,6 +102,7 @@ packages/lacy-sh/            # npm package for interactive installer
 - `lib/mcp.zsh` - `LACY_TOOL_CMD` registry, `lacy_shell_query_agent()` routing
 - `lib/config.zsh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
 - `lib/execute.zsh` - `lacy_shell_tool()` command, routing logic
+- `lib/spinner.zsh` - Braille spinner + shimmer "Thinking" animation during AI queries
 - `lib/keybindings.zsh` - Real-time indicator logic
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy-sh/index.mjs` - Node installer with @clack/prompts

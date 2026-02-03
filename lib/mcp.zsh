@@ -40,8 +40,10 @@ lacy_shell_query_agent() {
 Current Directory: $(pwd)
 Query: $query
 EOF
+            lacy_start_spinner
             lacy_shell_send_to_ai_streaming "$temp_file" "$query"
             local exit_code=$?
+            lacy_stop_spinner
             rm -f "$temp_file"
             echo ""
             return $exit_code
@@ -60,8 +62,10 @@ EOF
 
     local cmd="${LACY_TOOL_CMD[$tool]}"
     echo ""
+    lacy_start_spinner
     eval "$cmd \"\$query\"" </dev/tty
     local exit_code=$?
+    lacy_stop_spinner
     echo ""
     return $exit_code
 }

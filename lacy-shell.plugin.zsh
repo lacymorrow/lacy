@@ -15,6 +15,7 @@ LACY_SHELL_DIR="${0:A:h}"
 source "$LACY_SHELL_DIR/lib/constants.zsh"
 source "$LACY_SHELL_DIR/lib/config.zsh"
 source "$LACY_SHELL_DIR/lib/modes.zsh"
+source "$LACY_SHELL_DIR/lib/spinner.zsh"
 source "$LACY_SHELL_DIR/lib/mcp.zsh"
 source "$LACY_SHELL_DIR/lib/detection.zsh"
 source "$LACY_SHELL_DIR/lib/keybindings.zsh"
@@ -34,6 +35,7 @@ lacy_shell_init() {
 
 # Cleanup
 lacy_shell_cleanup() {
+    lacy_stop_spinner 2>/dev/null
     lacy_shell_remove_top_bar
     lacy_shell_cleanup_mcp
     lacy_shell_cleanup_keybindings
