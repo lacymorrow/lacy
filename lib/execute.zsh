@@ -56,10 +56,10 @@ lacy_shell_smart_accept_line() {
     # Handle based on mode (agent or auto with non-command/natural language)
     case "$execution_mode" in
         "agent")
-            # Check if we can actually use the agent
-            if ! lacy_shell_check_api_keys >/dev/null 2>&1; then
-                echo "⚠️  No API keys configured - executing as shell command instead"
-                echo "   Configure API keys in ~/.lacy/config.yaml to use AI features"
+            # Check if we can actually use the agent (CLI tool or API keys)
+            if ! lacy_shell_check_agent_available >/dev/null 2>&1; then
+                echo "⚠️  No AI agent available - executing as shell command instead"
+                echo "   Install: npm install -g lash-cli"
                 zle .accept-line
                 return
             fi
@@ -123,13 +123,13 @@ lacy_shell_execute_smart_auto() {
     local input="$1"
     local first_word="${input%% *}"
 
-    # Check if agent is available
-    if lacy_shell_check_api_keys >/dev/null 2>&1; then
+    # Check if agent is available (CLI tool or API keys)
+    if lacy_shell_check_agent_available >/dev/null 2>&1; then
         lacy_shell_execute_agent "$input"
     else
         echo "❌ Command not found and no AI agent available: $first_word"
-        echo "   Configure API keys in ~/.lacy/config.yaml to use AI features"
-        echo "   Or check if the command is spelled correctly"
+        echo "   Install an AI CLI tool: npm install -g lash-cli"
+        echo "   Or configure API keys in ~/.lacy/config.yaml"
     fi
 }
 
