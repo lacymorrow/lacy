@@ -4,7 +4,7 @@
   "description": "Install Lacy Shell - talk directly to your shell",
   "type": "module",
   "bin": {
-    "lacy": "./index.mjs"
+    "lacy": "index.mjs"
   },
   "files": [
     "index.mjs"
@@ -25,7 +25,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lacymorrow/lacy.git",
+    "url": "git+https://github.com/lacymorrow/lacy.git",
     "directory": "packages/lacy"
   },
   "homepage": "https://github.com/lacymorrow/lacy",
