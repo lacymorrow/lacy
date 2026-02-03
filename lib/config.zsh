@@ -74,6 +74,7 @@ lacy_shell_load_config() {
         local model_map="provider:LACY_SHELL_PROVIDER,name:LACY_SHELL_MODEL_NAME"
         local agent_map="command:LACY_SHELL_AGENT_COMMAND,context_mode:LACY_SHELL_AGENT_CONTEXT_MODE,needs_api_keys:LACY_SHELL_AGENT_NEEDS_API_KEYS"
         local agent_tools_map="active:LACY_ACTIVE_TOOL,custom_command:LACY_CUSTOM_TOOL_CMD"
+        local preheat_map="eager:LACY_PREHEAT_EAGER,server_port:LACY_PREHEAT_SERVER_PORT"
 
         # Track current section
         local current_section=""
@@ -88,6 +89,9 @@ lacy_shell_load_config() {
                 continue
             elif [[ "$line" =~ ^agent_tools: ]]; then
                 current_section="agent_tools"
+                continue
+            elif [[ "$line" =~ ^preheat: ]]; then
+                current_section="preheat"
                 continue
             elif [[ "$line" =~ ^agent: ]]; then
                 current_section="agent"
@@ -115,6 +119,9 @@ lacy_shell_load_config() {
                         ;;
                     "agent_tools")
                         lacy_shell_export_config_value "$key" "$value" "$agent_tools_map"
+                        ;;
+                    "preheat")
+                        lacy_shell_export_config_value "$key" "$value" "$preheat_map"
                         ;;
                 esac
             fi
@@ -218,6 +225,11 @@ agent_tools:
   active:
   # Custom command (used when active: custom)
   # custom_command: "your-command -flags"
+
+# Preheat: keep agents warm between queries (lash, opencode)
+# preheat:
+#   eager: false          # Start background server on plugin load
+#   server_port: 4096     # Port for background server
 
 # Agent CLI configuration (legacy)
 # Configure which CLI tool to use for AI queries

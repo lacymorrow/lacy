@@ -75,6 +75,84 @@ EOF
     else
         cmd="${LACY_TOOL_CMD[$tool]}"
     fi
+
+    # === Preheat: lash/opencode background server ===
+    if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
+        if lacy_preheat_server_is_healthy || lacy_preheat_server_start "$tool"; then
+            echo ""
+            lacy_start_spinner
+            local server_result
+            server_result=$(lacy_preheat_server_query "$query")
+            local exit_code=$?
+            lacy_stop_spinner
+            if [[ $exit_code -eq 0 && -n "$server_result" ]]; then
+                printf '%s\n' "$server_result"
+                echo ""
+                return 0
+            fi
+            # Server query failed — fall through to single-shot
+        fi
+    fi
+
+    # === Preheat: claude session reuse ===
+    if [[ "$tool" == "claude" ]]; then
+        local claude_cmd
+        claude_cmd=$(lacy_preheat_claude_build_cmd)
+        echo ""
+        lacy_start_spinner
+        local json_output
+        json_output=$(eval "$claude_cmd \"\$query\"" </dev/tty 2>&1)
+        local exit_code=$?
+        lacy_stop_spinner
+
+        if [[ $exit_code -eq 0 ]]; then
+            # Extract and display result
+            local result_text
+            result_text=$(lacy_preheat_claude_extract_result "$json_output")
+            if [[ -n "$result_text" ]]; then
+                printf '%s\n' "$result_text"
+            else
+                # JSON parsing failed or no result field — show raw output
+                printf '%s\n' "$json_output"
+            fi
+            # Capture session for next query
+            lacy_preheat_claude_capture_session "$json_output"
+            echo ""
+            return 0
+        elif [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]]; then
+            # --resume failed with existing session — retry without it
+            lacy_preheat_claude_reset_session
+            claude_cmd=$(lacy_preheat_claude_build_cmd)
+            lacy_start_spinner
+            json_output=$(eval "$claude_cmd \"\$query\"" </dev/tty 2>&1)
+            exit_code=$?
+            lacy_stop_spinner
+
+            if [[ $exit_code -eq 0 ]]; then
+                local result_text
+                result_text=$(lacy_preheat_claude_extract_result "$json_output")
+                if [[ -n "$result_text" ]]; then
+                    printf '%s\n' "$result_text"
+                else
+                    printf '%s\n' "$json_output"
+                fi
+                lacy_preheat_claude_capture_session "$json_output"
+                echo ""
+                return 0
+            fi
+            # Both attempts failed — show raw output
+            printf '%s\n' "$json_output"
+            echo ""
+            return $exit_code
+        else
+            # No session to reset — show raw output
+            printf '%s\n' "$json_output"
+            echo ""
+            return $exit_code
+        fi
+    fi
+
+    # === Generic path (gemini, codex, custom, and fallback) ===
     echo ""
     lacy_start_spinner
     eval "$cmd \"\$query\"" </dev/tty 2>&1 | {

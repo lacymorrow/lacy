@@ -59,6 +59,10 @@ readonly LACY_SHELL_TOP_BAR_HEIGHT
 # Primary: lash (npm install -g lash-cli)
 # Fallback: opencode, or direct API calls
 
+# === Preheat ===
+: ${LACY_PREHEAT_EAGER:="false"}
+: ${LACY_PREHEAT_SERVER_PORT:="4096"}
+
 # === Colors ===
 # Shell commands: Green (34)
 # Agent queries: Magenta (200)

@@ -276,6 +276,9 @@ lacy_shell_quit() {
     echo -ne "\033[1;1H"  # Move to top-left
     echo -ne "\033[J"  # Clear from cursor to end of screen
     
+    # Stop any preheated servers
+    lacy_preheat_cleanup
+
     # Run cleanup
     lacy_shell_cleanup
     
@@ -394,6 +397,7 @@ lacy_shell_tool() {
                 return 1
             fi
             if [[ "$2" == "auto" ]]; then
+                lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL=""
                 export LACY_ACTIVE_TOOL
                 echo "Tool set to: auto-detect"
@@ -403,11 +407,13 @@ lacy_shell_tool() {
                     echo "Example: tool set custom \"claude --dangerously-skip-permissions -p\""
                     return 1
                 fi
+                lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL="custom"
                 LACY_CUSTOM_TOOL_CMD="$3"
                 export LACY_ACTIVE_TOOL LACY_CUSTOM_TOOL_CMD
                 echo "Tool set to: custom ($LACY_CUSTOM_TOOL_CMD)"
             else
+                lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL="$2"
                 export LACY_ACTIVE_TOOL
                 echo "Tool set to: $2"

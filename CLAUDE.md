@@ -75,6 +75,7 @@ All tools handle their own authentication - no API keys needed from lacy.
     ├── modes.zsh            # Mode state (shell/agent/auto)
     ├── spinner.zsh          # Loading spinner with shimmer text effect
     ├── mcp.zsh              # Multi-tool routing (LACY_TOOL_CMD registry)
+    ├── preheat.zsh          # Agent preheating (background server, session reuse)
     ├── detection.zsh        # Mode detection helpers
     ├── keybindings.zsh      # Ctrl+Space toggle, real-time indicator
     ├── prompt.zsh           # Prompt with indicator, mode in right prompt
@@ -105,6 +106,7 @@ packages/lacy-sh/            # npm package for interactive installer
 - `lib/config.zsh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
 - `lib/execute.zsh` - `lacy_shell_tool()` command, routing logic
 - `lib/spinner.zsh` - Braille spinner + shimmer "Thinking" animation during AI queries
+- `lib/preheat.zsh` - Background server (lash/opencode) + session reuse (claude)
 - `lib/keybindings.zsh` - Real-time indicator logic
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy-sh/index.mjs` - Node installer with @clack/prompts
@@ -124,7 +126,14 @@ api_keys:
 
 modes:
   default: auto
+
+# Preheat: keep agents warm between queries
+# preheat:
+#   eager: false          # Start background server on plugin load
+#   server_port: 4096     # Port for background server
 ```
+
+**Preheating:** lash/opencode use a background server (`lash serve`) to eliminate cold-start. Claude uses `--resume SESSION_ID` for conversation continuity. Other tools have no preheating.
 
 ## Development Notes
 

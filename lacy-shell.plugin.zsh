@@ -17,6 +17,7 @@ source "$LACY_SHELL_DIR/lib/config.zsh"
 source "$LACY_SHELL_DIR/lib/modes.zsh"
 source "$LACY_SHELL_DIR/lib/spinner.zsh"
 source "$LACY_SHELL_DIR/lib/mcp.zsh"
+source "$LACY_SHELL_DIR/lib/preheat.zsh"
 source "$LACY_SHELL_DIR/lib/detection.zsh"
 source "$LACY_SHELL_DIR/lib/keybindings.zsh"
 source "$LACY_SHELL_DIR/lib/prompt.zsh"
@@ -27,6 +28,7 @@ lacy_shell_init() {
     lacy_shell_load_config
     lacy_shell_setup_keybindings
     lacy_shell_init_mcp
+    lacy_preheat_init
     lacy_shell_setup_prompt
     lacy_shell_init_mode
     lacy_shell_setup_interrupt_handler
@@ -37,6 +39,7 @@ lacy_shell_init() {
 lacy_shell_cleanup() {
     lacy_stop_spinner 2>/dev/null
     lacy_shell_remove_top_bar
+    lacy_preheat_cleanup
     lacy_shell_cleanup_mcp
     lacy_shell_cleanup_keybindings
     trap - INT
