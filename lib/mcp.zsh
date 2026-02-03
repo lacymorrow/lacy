@@ -71,22 +71,6 @@ lacy_shell_check_api_keys() {
     [[ -n "$LACY_SHELL_API_OPENAI" || -n "$LACY_SHELL_API_ANTHROPIC" || -n "$OPENAI_API_KEY" || -n "$ANTHROPIC_API_KEY" ]]
 }
 
-# Check if any AI agent is available (CLI tool or API keys)
-lacy_shell_check_agent_available() {
-    # Check for configured tool
-    if [[ -n "$LACY_ACTIVE_TOOL" ]]; then
-        command -v "$LACY_ACTIVE_TOOL" >/dev/null 2>&1 && return 0
-    fi
-
-    # Check for any CLI tool
-    for t in lash claude opencode gemini codex; do
-        command -v "$t" >/dev/null 2>&1 && return 0
-    done
-
-    # Check for API keys as fallback
-    lacy_shell_check_api_keys
-}
-
 # ============================================================================
 # Direct API Fallback (when no CLI tool installed)
 # ============================================================================
