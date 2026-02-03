@@ -1,7 +1,7 @@
 {
   "name": "lacy-shell",
   "version": "1.1.0",
-  "description": "A smart shell plugin with AI agent integration via MCP",
+  "description": "Talk directly to your shell - natural language to AI agent routing",
   "main": "lacy-shell.plugin.zsh",
   "scripts": {
     "install": "./install.sh"
