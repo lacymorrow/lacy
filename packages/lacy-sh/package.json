@@ -1,0 +1,39 @@
+{
+  "name": "lacy-sh",
+  "version": "1.1.0",
+  "description": "Install Lacy Shell - talk directly to your shell",
+  "type": "module",
+  "bin": {
+    "lacy-sh": "./index.mjs"
+  },
+  "files": [
+    "index.mjs"
+  ],
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "keywords": [
+    "lacy",
+    "shell",
+    "zsh",
+    "ai",
+    "cli",
+    "agent",
+    "natural-language"
+  ],
+  "author": "Lacy Morrow",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lacymorrow/lacy-shell.git",
+    "directory": "packages/lacy-sh"
+  },
+  "homepage": "https://github.com/lacymorrow/lacy-shell",
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "picocolors": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -73,6 +73,7 @@ lacy_shell_load_config() {
         local api_keys_map="openai:LACY_SHELL_API_OPENAI,anthropic:LACY_SHELL_API_ANTHROPIC"
         local model_map="provider:LACY_SHELL_PROVIDER,name:LACY_SHELL_MODEL_NAME"
         local agent_map="command:LACY_SHELL_AGENT_COMMAND,context_mode:LACY_SHELL_AGENT_CONTEXT_MODE,needs_api_keys:LACY_SHELL_AGENT_NEEDS_API_KEYS"
+        local agent_tools_map="active:LACY_ACTIVE_TOOL"
 
         # Track current section
         local current_section=""
@@ -84,6 +85,9 @@ lacy_shell_load_config() {
                 continue
             elif [[ "$line" =~ ^model: ]]; then
                 current_section="model"
+                continue
+            elif [[ "$line" =~ ^agent_tools: ]]; then
+                current_section="agent_tools"
                 continue
             elif [[ "$line" =~ ^agent: ]]; then
                 current_section="agent"
@@ -108,6 +112,9 @@ lacy_shell_load_config() {
                         ;;
                     "agent")
                         lacy_shell_export_config_value "$key" "$value" "$agent_map"
+                        ;;
+                    "agent_tools")
+                        lacy_shell_export_config_value "$key" "$value" "$agent_tools_map"
                         ;;
                 esac
             fi
@@ -150,6 +157,9 @@ lacy_shell_load_config() {
     : ${LACY_SHELL_AGENT_CONTEXT_MODE:="$LACY_SHELL_DEFAULT_AGENT_CONTEXT_MODE"}
     : ${LACY_SHELL_AGENT_NEEDS_API_KEYS:="$LACY_SHELL_DEFAULT_AGENT_NEEDS_API_KEYS"}
     export LACY_SHELL_AGENT_COMMAND LACY_SHELL_AGENT_CONTEXT_MODE LACY_SHELL_AGENT_NEEDS_API_KEYS
+
+    # Active AI tool (empty = auto-detect)
+    export LACY_ACTIVE_TOOL
 
     # Initialize current mode from default
     LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
@@ -200,7 +210,13 @@ appearance:
 # Model selection (used when agent CLI is not installed)
 
 
-# Agent CLI configuration
+# AI CLI tool selection
+# Lacy auto-detects installed tools, or you can set one explicitly
+agent_tools:
+  # Options: lash, claude, opencode, gemini, codex, or empty for auto-detect
+  active:
+
+# Agent CLI configuration (legacy)
 # Configure which CLI tool to use for AI queries
 agent:
   # Command to run. Variables: {query}, {context_file}

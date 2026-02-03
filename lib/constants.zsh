@@ -7,7 +7,7 @@ LACY_SHELL_ENABLED=true
 LACY_SHELL_DEFER_QUIT=false
 
 # === Paths ===
-: ${LACY_SHELL_HOME:="${HOME}/.lacy-shell"}
+: ${LACY_SHELL_HOME:="${HOME}/.lacy"}
 readonly LACY_SHELL_HOME
 
 : ${LACY_SHELL_CONFIG_FILE:="${LACY_SHELL_HOME}/config.yaml"}

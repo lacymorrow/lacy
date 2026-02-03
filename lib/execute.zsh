@@ -59,7 +59,7 @@ lacy_shell_smart_accept_line() {
             # Check if we can actually use the agent
             if ! lacy_shell_check_api_keys >/dev/null 2>&1; then
                 echo "⚠️  No API keys configured - executing as shell command instead"
-                echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
+                echo "   Configure API keys in ~/.lacy/config.yaml to use AI features"
                 zle .accept-line
                 return
             fi
@@ -113,7 +113,7 @@ lacy_shell_execute_agent() {
         echo ""
         echo "❌ Agent request failed. Try:"
         echo "   - Install lash: npm install -g lash-cli"
-        echo "   - Or configure API keys in ~/.lacy-shell/config.yaml"
+        echo "   - Or configure API keys in ~/.lacy/config.yaml"
         echo ""
     fi
 }
@@ -128,7 +128,7 @@ lacy_shell_execute_smart_auto() {
         lacy_shell_execute_agent "$input"
     else
         echo "❌ Command not found and no AI agent available: $first_word"
-        echo "   Configure API keys in ~/.lacy-shell/config.yaml to use AI features"
+        echo "   Configure API keys in ~/.lacy/config.yaml to use AI features"
         echo "   Or check if the command is spelled correctly"
     fi
 }
@@ -319,7 +319,7 @@ lacy_shell_quit() {
     fi
 
     # Unset aliases
-    unalias ask mode quit_lacy disable_lacy enable_lacy 2>/dev/null
+    unalias ask mode tool quit_lacy disable_lacy enable_lacy 2>/dev/null
     
     # Restore original prompt
     lacy_shell_restore_prompt
@@ -391,9 +391,52 @@ lacy_shell_mode() {
     esac
 }
 
+# Tool management command
+lacy_shell_tool() {
+    case "$1" in
+        "")
+            echo ""
+            echo "Active tool: ${LACY_ACTIVE_TOOL:-auto-detect}"
+            echo ""
+            echo "Available tools:"
+            for t in lash claude opencode gemini codex; do
+                if command -v "$t" >/dev/null 2>&1; then
+                    echo "  %F{34}✓%f $t"
+                else
+                    echo "  %F{238}○%f $t (not installed)"
+                fi
+            done
+            echo ""
+            echo "Usage: tool set <name>"
+            echo ""
+            ;;
+        set)
+            if [[ -z "$2" ]]; then
+                echo "Usage: tool set <name>"
+                echo "Options: lash, claude, opencode, gemini, codex, auto"
+                return 1
+            fi
+            if [[ "$2" == "auto" ]]; then
+                LACY_ACTIVE_TOOL=""
+                export LACY_ACTIVE_TOOL
+                echo "Tool set to: auto-detect"
+            else
+                LACY_ACTIVE_TOOL="$2"
+                export LACY_ACTIVE_TOOL
+                echo "Tool set to: $2"
+            fi
+            ;;
+        *)
+            echo "Usage: tool [set <name>]"
+            echo "Options: lash, claude, opencode, gemini, codex, auto"
+            ;;
+    esac
+}
+
 # Aliases
 alias ask="lacy_shell_query_agent"
 alias mode="lacy_shell_mode"
+alias tool="lacy_shell_tool"
 alias quit_lacy="lacy_shell_quit"
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"

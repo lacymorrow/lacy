@@ -1,47 +1,67 @@
 #!/usr/bin/env zsh
 
 # Agent query functions for Lacy Shell
-# MCP is handled by lash - this file just routes queries
+# Routes queries to configured AI CLI tools
 
-# Send query to AI agent (lash/opencode or fallback)
+# Tool registry with command patterns
+# Format: tool_name -> "command args" where query is appended or uses quoting
+typeset -gA LACY_TOOL_CMD=(
+    [lash]="lash run -c"
+    [claude]="claude -p"
+    [opencode]="opencode run"
+    [gemini]="gemini -p"
+    [codex]="codex exec"
+)
+
+# Active tool (set during install or via config)
+: ${LACY_ACTIVE_TOOL:=""}
+
+# Send query to AI agent (configurable tool or fallback)
 lacy_shell_query_agent() {
     local query="$1"
+    local tool="${LACY_ACTIVE_TOOL}"
 
-    # Check if lash is available
-    if command -v lash >/dev/null 2>&1; then
-        echo ""
-        lash run -c "$query" </dev/tty
-        local exit_code=$?
-        echo ""
-        return $exit_code
+    # Auto-detect if not set
+    if [[ -z "$tool" ]]; then
+        for t in lash claude opencode gemini codex; do
+            if command -v "$t" >/dev/null 2>&1; then
+                tool="$t"
+                break
+            fi
+        done
     fi
 
-    # Check if opencode is available as fallback
-    if command -v opencode >/dev/null 2>&1; then
-        echo ""
-        opencode run -c "$query" </dev/tty
-        local exit_code=$?
-        echo ""
-        return $exit_code
-    fi
-
-    # Fallback to direct API calls if no CLI tool available
-    if ! lacy_shell_check_api_keys; then
-        echo "Error: No agent CLI (lash/opencode) found and no API keys configured."
-        echo "Install lash: npm install -g lash-cli"
-        return 1
-    fi
-
-    # Fallback: Direct API calls (when lash/opencode not installed)
-    echo ""
-    local temp_file=$(mktemp)
-    cat > "$temp_file" << EOF
+    # If still no tool, try API fallback
+    if [[ -z "$tool" ]]; then
+        if lacy_shell_check_api_keys; then
+            echo ""
+            local temp_file=$(mktemp)
+            cat > "$temp_file" << EOF
 Current Directory: $(pwd)
 Query: $query
 EOF
-    lacy_shell_send_to_ai_streaming "$temp_file" "$query"
+            lacy_shell_send_to_ai_streaming "$temp_file" "$query"
+            local exit_code=$?
+            rm -f "$temp_file"
+            echo ""
+            return $exit_code
+        fi
+
+        echo "No AI CLI tool found. Install one of: lash, claude, opencode, gemini, codex"
+        echo ""
+        echo "Install options:"
+        echo "  lash:     npm install -g lash-cli"
+        echo "  claude:   brew install claude"
+        echo "  opencode: brew install opencode"
+        echo "  gemini:   brew install gemini"
+        echo "  codex:    npm install -g @openai/codex"
+        return 1
+    fi
+
+    local cmd="${LACY_TOOL_CMD[$tool]}"
+    echo ""
+    eval "$cmd \"\$query\"" </dev/tty
     local exit_code=$?
-    rm -f "$temp_file"
     echo ""
     return $exit_code
 }
@@ -52,7 +72,7 @@ lacy_shell_check_api_keys() {
 }
 
 # ============================================================================
-# Direct API Fallback (when lash not installed)
+# Direct API Fallback (when no CLI tool installed)
 # ============================================================================
 
 lacy_shell_send_to_ai_streaming() {
