@@ -43,8 +43,20 @@ lacy.plugin.zsh (entry point)
 **→ Shell** when input:
 - First word is a valid command (checked via `command -v`)
 
+**→ Shell → Agent** (post-execution reroute):
+- First word is a valid command, but the input has 3+ bare words after it with a strong NL marker (article, pronoun, question word, or "please")
+- Shell executes first; if the command fails (non-zero exit, excluding signals ≥ 128), the input is automatically re-sent to the AI agent
+- Only active in auto mode — explicit `mode shell` never reroutes
+- Examples: `kill the process on localhost:3000` (reroutes), `kill -9 my baby` (stays in shell — only 2 bare words), `git push origin main` (stays in shell — no NL markers)
+
 **→ Agent** (fallback):
 - First word is not a recognized command
+
+### First-word highlighting
+
+The first word in the input buffer is syntax-highlighted in real-time via ZSH `region_highlight`:
+- **Green (34, bold)** — shell command
+- **Magenta (200, bold)** — agent query
 
 ---
 
@@ -108,8 +120,9 @@ mcp:
 | `Ctrl+C` (2x) | Emergency quit |
 
 **Zsh Hooks**:
-- `accept-line` → Routes input based on mode
-- `precmd` → Updates prompt indicator
+- `accept-line` → Routes input based on mode; flags NL reroute candidates
+- `zle-line-pre-redraw` → Updates indicator color and first-word syntax highlighting
+- `precmd` → Captures `$?` (must be first operation), checks reroute candidates, updates prompt
 - `TRAPINT` → Double Ctrl+C detection
 - `WINCH` → Terminal resize handling
 

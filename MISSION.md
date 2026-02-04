@@ -16,23 +16,30 @@ A shell plugin that detects natural language and routes it to an AI coding agent
 
 ```
 You type: ls -la
-→ Green indicator (shell command)
+→ "ls" highlighted green (valid command)
 → Executes in shell
 
 You type: fix the authentication bug
-→ Magenta indicator (natural language)
+→ "fix" highlighted magenta (not a command)
 → Routes to lash/AI agent
 → AI responds in terminal
+
+You type: kill the process on localhost:3000
+→ "kill" highlighted green (valid command)
+→ Shell tries it, fails
+→ Detects natural language ("the", 4 bare words)
+→ Automatically reroutes to AI agent
 ```
 
 ## Design Principles
 
 1. **Shell-native** — Works in your existing terminal
 2. **Zero friction** — Auto-detects intent, no special syntax needed
-3. **Visual feedback** — Real-time indicator shows where input will go
-4. **Typo-friendly** — Single-word typos go to shell (not AI)
-5. **Provider-agnostic** — Works with lash, opencode, or direct API calls
-6. **Open source** — No vendor lock-in
+3. **Visual feedback** — Real-time indicator and first-word highlighting show where input will go
+4. **Typo-friendly** — Single-word typos go to shell (not AI); ambiguous multi-word commands (2 bare words) also stay in shell
+5. **Smart fallback** — Commands with clear natural language that fail in shell are automatically rerouted to the AI agent
+6. **Provider-agnostic** — Works with lash, opencode, or direct API calls
+7. **Open source** — No vendor lock-in
 
 ## The Stack
 

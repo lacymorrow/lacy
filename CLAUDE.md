@@ -27,6 +27,10 @@ Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI 
 - **Green (34)** = will execute in shell
 - **Magenta (200)** = will go to AI agent
 
+**First-word syntax highlighting** via ZSH `region_highlight`:
+- First word is highlighted **green bold** for shell commands, **magenta bold** for agent queries
+- Updates on every `zle-line-pre-redraw` (accounts for leading whitespace)
+
 **Mode indicator** (right prompt) shows current mode:
 - `SHELL` (green) = all input goes to shell
 - `AGENT` (magenta) = all input goes to AI
@@ -40,12 +44,18 @@ In AUTO mode, routing is determined by:
 2. First word is valid command → Shell
 3. Single word, not a command → Shell (typo, let it error)
 4. Multiple words, first not a command → Agent (natural language)
+5. Valid command + 3+ bare words + NL marker → Shell first, then agent on failure (post-execution reroute)
+
+Rule 5 detail: `lacy_shell_has_nl_markers()` counts bare words after the first word (excluding flags, paths, numbers, variables). If there are 3+ bare words and at least one is a strong NL marker (articles, pronouns, question words, "please"), the command is flagged via `LACY_SHELL_REROUTE_CANDIDATE`. In `precmd`, if the command exited non-zero with code < 128 (not signal-based), it reroutes to the agent. Only active in auto mode.
 
 Examples:
 - `ls -la` → Shell (valid command)
 - `what files are here` → Agent ("what" override)
 - `cd..` → Shell (single word typo)
 - `fix the bug` → Agent (multi-word natural language)
+- `kill the process on localhost:3000` → Shell → Agent (4 bare words, "the" marker, fails)
+- `kill -9 my baby` → Shell only (2 bare words, below threshold)
+- `echo the quick brown fox` → Shell only (succeeds, no reroute)
 - `!rm -rf` → Shell (emergency bypass with `!` prefix)
 
 ## Supported AI CLI Tools
@@ -76,10 +86,10 @@ All tools handle their own authentication - no API keys needed from lacy.
     ├── spinner.zsh          # Loading spinner with shimmer text effect
     ├── mcp.zsh              # Multi-tool routing (LACY_TOOL_CMD registry)
     ├── preheat.zsh          # Agent preheating (background server, session reuse)
-    ├── detection.zsh        # Mode detection helpers
-    ├── keybindings.zsh      # Ctrl+Space toggle, real-time indicator
+    ├── detection.zsh        # Mode detection, lacy_shell_has_nl_markers() NL analysis
+    ├── keybindings.zsh      # Ctrl+Space toggle, indicator, first-word region_highlight
     ├── prompt.zsh           # Prompt with indicator, mode in right prompt
-    └── execute.zsh          # Command execution routing, tool command
+    └── execute.zsh          # Execution routing, LACY_SHELL_REROUTE_CANDIDATE logic
 
 packages/lacy/               # npm package for interactive installer
 ├── package.json
@@ -107,7 +117,8 @@ packages/lacy/               # npm package for interactive installer
 - `lib/execute.zsh` - `lacy_shell_tool()` command, routing logic
 - `lib/spinner.zsh` - Braille spinner + shimmer "Thinking" animation during AI queries
 - `lib/preheat.zsh` - Background server (lash/opencode) + session reuse (claude)
-- `lib/keybindings.zsh` - Real-time indicator logic
+- `lib/detection.zsh` - `lacy_shell_has_nl_markers()` for NL bare-word counting + marker check
+- `lib/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy/index.mjs` - Node installer with @clack/prompts
 

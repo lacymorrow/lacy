@@ -46,7 +46,12 @@ Commands execute in your shell. Natural language goes to your AI agent. No prefi
 | `what files are here` | AI | Natural language |
 | `git status` | Shell | Valid command |
 | `fix the bug` | AI | Multi-word, not a command |
+| `kill the process on 3000` | Shell → AI | Valid command, but fails — rerouted |
 | `!rm -rf *` | Shell | `!` prefix forces shell |
+
+The first word of your input is also syntax-highlighted in real-time: **green** for shell commands, **magenta** for AI queries.
+
+**Smart rerouting** (auto mode): When a valid command contains natural language patterns (3+ bare words with articles, pronouns, etc.) and fails, lacy automatically re-sends it to the AI agent.
 
 ## Modes
 
@@ -121,6 +126,8 @@ api_keys:
 **No AI response** — Check `tool` to see if a tool is detected. Install one: `npm i -g lash-cli` or `brew install claude`.
 
 **Colors not showing** — Ensure your terminal supports 256 colors (green=34, magenta=200, blue=75).
+
+**Command rerouted unexpectedly** — In auto mode, commands with natural language patterns that fail are re-sent to the AI. Switch to `mode shell` to disable this, or prefix with `!`.
 
 **Emergency bypass** — Prefix any command with `!` to force shell execution: `!rm -rf node_modules`
 
