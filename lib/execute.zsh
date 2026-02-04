@@ -46,6 +46,14 @@ lacy_shell_smart_accept_line() {
                 return
             fi
 
+            # In auto mode, flag commands with NL markers as reroute candidates.
+            # Explicit "mode shell" should never re-route.
+            if [[ "$LACY_SHELL_CURRENT_MODE" == "auto" ]] && lacy_shell_has_nl_markers "$trimmed"; then
+                LACY_SHELL_REROUTE_CANDIDATE="$trimmed"
+            else
+                LACY_SHELL_REROUTE_CANDIDATE=""
+            fi
+
             zle .accept-line
             return
             ;;
@@ -99,15 +107,33 @@ lacy_shell_execute_smart_auto() {
 
 # Precmd hook - called before each prompt
 lacy_shell_precmd() {
+    # Capture exit code immediately — must be the first line
+    local last_exit=$?
+
     # Ensure cursor is visible (safety net for interrupted spinners)
     printf '\e[?25h'
+
+    # Check reroute candidate: if the command failed with a non-signal exit
+    # code (< 128), re-route to agent. Exit codes >= 128 are signal-based
+    # (e.g. 130=Ctrl+C, 137=SIGKILL) and should not trigger re-routing.
+    if [[ -n "$LACY_SHELL_REROUTE_CANDIDATE" ]]; then
+        local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
+        LACY_SHELL_REROUTE_CANDIDATE=""
+        if (( last_exit != 0 && last_exit < 128 )); then
+            lacy_shell_execute_agent "$candidate"
+            return
+        fi
+    fi
+
     # Don't run if disabled or quitting
     if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
+        LACY_SHELL_REROUTE_CANDIDATE=""
         return
     fi
     # Handle deferred quit triggered by Ctrl-D without letting EOF propagate
     if [[ "$LACY_SHELL_DEFER_QUIT" == true ]]; then
         LACY_SHELL_DEFER_QUIT=false
+        LACY_SHELL_REROUTE_CANDIDATE=""
         lacy_shell_quit
         return
     fi

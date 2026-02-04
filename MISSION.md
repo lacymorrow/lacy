@@ -4,7 +4,7 @@
 
 ## What This Is
 
-A ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Questions go to the AI. No context switching. No friction.
+A shell plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Questions go to the AI. No context switching. No friction.
 
 ## What This Is Not
 
@@ -27,7 +27,7 @@ You type: fix the authentication bug
 
 ## Design Principles
 
-1. **Shell-native** — Works in your existing ZSH terminal
+1. **Shell-native** — Works in your existing terminal
 2. **Zero friction** — Auto-detects intent, no special syntax needed
 3. **Visual feedback** — Real-time indicator shows where input will go
 4. **Typo-friendly** — Single-word typos go to shell (not AI)
@@ -38,7 +38,7 @@ You type: fix the authentication bug
 
 ```
 ┌─────────────────────────────────┐
-│  Your Terminal (ZSH)            │
+│  Your Terminal                   │
 │  ┌───────────────────────────┐  │
 │  │  lacy                      │  │
 │  │  Real-time detection      │  │

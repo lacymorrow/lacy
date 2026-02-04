@@ -39,3 +39,4 @@ agent/*.bun-build
 agent/.*-bun-build
 # Built binaries
 agent/lacy-agent
+.vercel

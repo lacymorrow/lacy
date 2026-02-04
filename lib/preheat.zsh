@@ -8,6 +8,7 @@
 LACY_PREHEAT_SERVER_PID=""
 LACY_PREHEAT_SERVER_PASSWORD=""
 LACY_PREHEAT_SERVER_PID_FILE="$LACY_SHELL_HOME/.server.pid"
+LACY_PREHEAT_SERVER_SESSION_ID=""
 LACY_PREHEAT_CLAUDE_SESSION_ID=""
 LACY_PREHEAT_SESSION_FILE="$LACY_SHELL_HOME/.claude_session_id"
 
@@ -32,8 +33,10 @@ lacy_preheat_server_start() {
     LACY_PREHEAT_SERVER_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || date +%s%N)
 
     # Start server in background
+    setopt LOCAL_OPTIONS NO_MONITOR
     "$tool" serve --port "$LACY_PREHEAT_SERVER_PORT" >/dev/null 2>&1 &
     LACY_PREHEAT_SERVER_PID=$!
+    disown 2>/dev/null
 
     # Save PID to file for crash recovery
     echo "$LACY_PREHEAT_SERVER_PID" > "$LACY_PREHEAT_SERVER_PID_FILE"
@@ -68,39 +71,100 @@ lacy_preheat_server_is_healthy() {
     kill -0 "$LACY_PREHEAT_SERVER_PID" 2>/dev/null || return 1
 
     # HTTP health check
-    curl -sf --max-time 1 "http://localhost:${LACY_PREHEAT_SERVER_PORT}/health" >/dev/null 2>&1
+    curl -sf --max-time 1 "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1
 }
 
 # Send query to background server via REST API
 # Usage: lacy_preheat_server_query <query>
 # Outputs: response text to stdout
+#
+# The lash/opencode server requires:
+#   1. POST /session          → create a session (reused across queries)
+#   2. POST /session/{id}/message → send message (blocks until AI responds)
 lacy_preheat_server_query() {
     local query="$1"
-    local response
+
+    # Create session if we don't have one yet
+    if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
+        local session_json
+        session_json=$(curl -sf --max-time 10 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
+        [[ $? -ne 0 ]] && return 1
+
+        # Extract session ID
+        if command -v jq >/dev/null 2>&1; then
+            LACY_PREHEAT_SERVER_SESSION_ID=$(printf '%s\n' "$session_json" | jq -r '.id // empty' 2>/dev/null)
+        elif command -v python3 >/dev/null 2>&1; then
+            LACY_PREHEAT_SERVER_SESSION_ID=$(printf '%s\n' "$session_json" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('id',''))" 2>/dev/null)
+        else
+            LACY_PREHEAT_SERVER_SESSION_ID=$(printf '%s' "$session_json" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"id"[[:space:]]*:[[:space:]]*"//' | sed 's/"//')
+        fi
+        [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
+    fi
 
     # JSON-escape the query (handle quotes and backslashes)
     local escaped_query
     escaped_query=$(printf '%s' "$query" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')
 
+    # Send message to session (sync — blocks until AI finishes)
+    local response
     response=$(curl -sf --max-time 120 \
         -X POST \
         -H "Content-Type: application/json" \
-        -d "{\"prompt\": \"${escaped_query}\"}" \
-        "http://localhost:${LACY_PREHEAT_SERVER_PORT}/api/chat" 2>/dev/null)
+        -d "{\"parts\": [{\"type\": \"text\", \"text\": \"${escaped_query}\"}]}" \
+        "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session/${LACY_PREHEAT_SERVER_SESSION_ID}/message" 2>/dev/null)
 
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
+        # Session may be stale — reset so next attempt creates a fresh one
+        LACY_PREHEAT_SERVER_SESSION_ID=""
         return 1
     fi
 
-    # Extract result text from JSON response
+    # Extract assistant text from response
     # Use printf '%s\n' (not echo) — zsh echo interprets \n, \t, etc. in strings
     if command -v jq >/dev/null 2>&1; then
-        printf '%s\n' "$response" | jq -r '.result // .response // .message // .content // empty' 2>/dev/null
+        printf '%s\n' "$response" | jq -r '
+            # Handle array of messages — pick last assistant message
+            if type == "array" then
+                [.[] | select(.role == "assistant") | .parts[]? | select(.type == "text") | .text] | last // empty
+            # Handle single message object with parts
+            elif .parts then
+                [.parts[] | select(.type == "text") | .text] | join("\n") // empty
+            # Fallback fields
+            else
+                .result // .content // .text // .response // .message // empty
+            end' 2>/dev/null
     elif command -v python3 >/dev/null 2>&1; then
-        printf '%s\n' "$response" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('result',d.get('response',d.get('message',d.get('content','')))))" 2>/dev/null
+        printf '%s\n' "$response" | python3 -c "
+import json, sys
+data = sys.stdin.read().strip()
+# Handle NDJSON (multiple JSON objects per line)
+for line in reversed(data.split('\n')):
+    line = line.strip()
+    if not line: continue
+    try:
+        obj = json.loads(line)
+        if isinstance(obj, list):
+            for msg in reversed(obj):
+                if msg.get('role') == 'assistant':
+                    texts = [p['text'] for p in msg.get('parts', []) if p.get('type') == 'text']
+                    if texts: print('\n'.join(texts)); sys.exit(0)
+        elif isinstance(obj, dict):
+            parts = obj.get('parts', [])
+            texts = [p['text'] for p in parts if p.get('type') == 'text']
+            if texts: print('\n'.join(texts)); sys.exit(0)
+            for key in ('result', 'content', 'text', 'response', 'message'):
+                val = obj.get(key)
+                if val and isinstance(val, str): print(val); sys.exit(0)
+    except (json.JSONDecodeError, KeyError, TypeError): continue
+print(data)" 2>/dev/null
     else
-        printf '%s' "$response" | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/","[a-z_]*":.*//' | sed 's/\\n/\'$'\n''/g; s/\\"/"/g; s/\\\\/\\/g'
+        # Last resort: extract text from parts
+        printf '%s' "$response" | sed 's/.*"text"[[:space:]]*:[[:space:]]*"//' | sed 's/"[[:space:]]*[,}\]].*//' | sed 's/\\n/\'$'\n''/g; s/\\"/"/g; s/\\\\/\\/g'
     fi
 }
 
@@ -125,6 +189,7 @@ lacy_preheat_server_stop() {
     fi
 
     LACY_PREHEAT_SERVER_PASSWORD=""
+    LACY_PREHEAT_SERVER_SESSION_ID=""
 }
 
 # ============================================================================

@@ -5,6 +5,20 @@ All notable changes to Lacy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-04
+
+### Added
+- Post-execution error fallback for smart command routing — when a valid command has 3+ bare words with natural language markers (e.g. `kill the process on localhost:3000`), shell executes first; if it fails, input is automatically re-routed to the agent
+- `lacy_shell_has_nl_markers()` — NL detection function that counts bare words (excluding flags, paths, numbers, variables) and checks for strong markers (articles, pronouns, question words, "please")
+- First-word syntax highlighting via ZSH `region_highlight` — the first word is highlighted green for shell commands and magenta for agent queries in real-time as you type
+
+### Changed
+- `lacy_shell_precmd()` now captures `$?` as its first operation to support exit code checking for reroute candidates
+- Exit codes >= 128 (signal-based: Ctrl+C, SIGKILL) are excluded from reroute triggering
+- Explicit `mode shell` never triggers rerouting — only auto mode
+
+---
+
 ## [1.3.0] - 2026-02-03
 
 ### Added

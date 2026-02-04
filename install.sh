@@ -147,7 +147,7 @@ select_tool() {
     printf "\n"
 
     local choice
-    read -p "Select [1-8, default=6]: " choice
+    read -p "Select [1-8, default=6]: " choice < /dev/tty
 
     case "$choice" in
         1) SELECTED_TOOL="lash" ;;
@@ -160,7 +160,7 @@ select_tool() {
         8)
             SELECTED_TOOL="custom"
             printf "\n"
-            read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND
+            read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND < /dev/tty
             if [[ -z "$CUSTOM_COMMAND" ]]; then
                 printf "${RED}No command entered. Falling back to auto-detect.${NC}\n"
                 SELECTED_TOOL=""
@@ -179,7 +179,7 @@ select_tool() {
 
             if [[ "$SELECTED_TOOL" == "lash" ]]; then
                 printf "\n"
-                read -p "Would you like to install lash now? [y/N]: " install_lash
+                read -p "Would you like to install lash now? [y/N]: " install_lash < /dev/tty
                 if [[ "$install_lash" =~ ^[Yy]$ ]]; then
                     install_lash_cli
                 fi
@@ -352,9 +352,9 @@ show_success() {
 # Restart shell to apply changes
 restart_shell() {
     # Only restart if we're in an interactive terminal
-    if [[ -t 0 ]]; then
+    if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
         printf "\n"
-        read -p "Restart shell now to apply changes? [Y/n]: " restart
+        read -p "Restart shell now to apply changes? [Y/n]: " restart < /dev/tty
         if [[ ! "$restart" =~ ^[Nn]$ ]]; then
             printf "${BLUE}Restarting shell...${NC}\n"
             exec zsh -l
@@ -397,9 +397,9 @@ do_uninstall() {
     printf "${GREEN}Lacy Shell uninstalled${NC}\n"
 
     # Restart shell
-    if [[ -t 0 ]]; then
+    if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
         printf "\n"
-        read -p "Restart shell now? [Y/n]: " restart
+        read -p "Restart shell now? [Y/n]: " restart < /dev/tty
         if [[ ! "$restart" =~ ^[Nn]$ ]]; then
             exec zsh -l
         else
@@ -424,7 +424,7 @@ check_existing_installation() {
         printf "\n"
 
         local choice
-        read -p "Select [1-4]: " choice
+        read -p "Select [1-4]: " choice < /dev/tty
 
         case "$choice" in
             1)
@@ -480,7 +480,7 @@ main_bash() {
 # Main entry point
 main() {
     # Check for existing installation first (interactive menu)
-    if [[ -t 0 ]]; then
+    if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
         check_existing_installation
     fi
 

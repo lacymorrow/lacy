@@ -34,7 +34,7 @@ Options:
 
 ## What is Lacy Shell?
 
-Lacy Shell is a ZSH plugin that routes natural language to AI and commands to your shell — automatically.
+Lacy routes natural language to AI and commands to your shell — automatically.
 
 ```
 ❯ ls -la                → runs in shell

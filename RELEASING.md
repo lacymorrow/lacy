@@ -24,7 +24,7 @@ Set your version and run each block in order. The entire process takes under 2 m
 
 ```bash
 # ── Set version ──────────────────────────────────────────────
-VERSION="1.3.0"  # ← Change this
+VERSION="1.4.0"  # ← Change this
 ```
 
 ### 1. Bump versions

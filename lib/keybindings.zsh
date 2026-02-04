@@ -56,6 +56,33 @@ lacy_shell_update_input_indicator() {
         # Request prompt redraw
         zle && zle reset-prompt
     fi
+
+    # Highlight the first word in the buffer based on classification.
+    # Runs on every pre-redraw (not just type changes) because the
+    # first word boundaries shift as the user types.
+    region_highlight=()
+    if [[ -n "$BUFFER" ]]; then
+        # Find start of first word (skip leading whitespace)
+        local i=0
+        while (( i < ${#BUFFER} )) && [[ "${BUFFER:$i:1}" == [[:space:]] ]]; do
+            (( i++ ))
+        done
+        # Find end of first word
+        local j=$i
+        while (( j < ${#BUFFER} )) && [[ "${BUFFER:$j:1}" != [[:space:]] ]]; do
+            (( j++ ))
+        done
+        if (( j > i )); then
+            case "$input_type" in
+                "shell")
+                    region_highlight+=("$i $j fg=34,bold")
+                    ;;
+                "agent")
+                    region_highlight+=("$i $j fg=200,bold")
+                    ;;
+            esac
+        fi
+    fi
 }
 
 # ZLE widget that runs before each redraw

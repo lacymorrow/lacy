@@ -21,6 +21,58 @@ lacy_shell_is_valid_command() {
     return $LACY_CMD_CACHE_RESULT
 }
 
+# Check if input starting with a valid command has natural language markers.
+# Returns 0 (true) if 3+ bare words exist after the first word AND at least
+# one is a strong NL marker. Used to flag reroute candidates.
+lacy_shell_has_nl_markers() {
+    local input="$1"
+
+    # Bail if single word (no spaces)
+    [[ "$input" != *" "* ]] && return 1
+
+    # Bail if input contains shell operators — clearly shell syntax
+    [[ "$input" == *"|"* || "$input" == *"&&"* || "$input" == *"||"* || \
+       "$input" == *";"* || "$input" == *">"* ]] && return 1
+
+    # Extract tokens after the first word
+    local rest="${input#* }"
+    local -a tokens=( ${=rest} )
+
+    # Filter to bare words only (skip flags, paths, numbers, variables)
+    local -a bare_words=()
+    local token
+    for token in "${tokens[@]}"; do
+        # Skip flags (-x, --flag)
+        [[ "$token" == -* ]] && continue
+        # Skip paths (/foo, ./bar, ~/dir)
+        [[ "$token" == /* || "$token" == ./* || "$token" == ~/* ]] && continue
+        # Skip pure numbers
+        [[ "$token" =~ ^[0-9]+$ ]] && continue
+        # Skip variables ($VAR, ${VAR})
+        [[ "$token" == \$* ]] && continue
+        bare_words+=( "${token:l}" )
+    done
+
+    # Need 3+ bare words to be considered NL
+    (( ${#bare_words} < 3 )) && return 1
+
+    # Check for strong NL markers
+    local -a nl_markers=(
+        the a an
+        my your this that these those
+        please
+        how why where when
+    )
+    local word marker
+    for word in "${bare_words[@]}"; do
+        for marker in "${nl_markers[@]}"; do
+            [[ "$word" == "$marker" ]] && return 0
+        done
+    done
+
+    return 1
+}
+
 # Canonical detection function. Prints "neutral", "shell", or "agent".
 # All detection flows (indicator, execution) must go through this function.
 lacy_shell_classify_input() {
@@ -137,5 +189,30 @@ lacy_shell_test_detection() {
     for test_case in "${test_cases[@]}"; do
         local result=$(lacy_shell_classify_input "$test_case")
         printf "%-40s -> %s\n" "$test_case" "$result"
+    done
+
+    echo ""
+    echo "Testing NL marker detection:"
+    echo "============================="
+
+    local -a nl_tests=(
+        "kill the process on localhost:3000"
+        "kill -9 my baby"
+        "kill -9 my baby girl"
+        "kill -9"
+        "echo the quick brown fox"
+        "echo hello | grep the"
+        "find my large files"
+        "make the tests pass"
+        "git push origin main"
+        "docker run -it ubuntu"
+    )
+
+    for test_case in "${nl_tests[@]}"; do
+        if lacy_shell_has_nl_markers "$test_case"; then
+            printf "%-40s -> nl_markers: YES\n" "$test_case"
+        else
+            printf "%-40s -> nl_markers: NO\n" "$test_case"
+        fi
     done
 }
