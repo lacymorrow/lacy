@@ -58,6 +58,33 @@ Examples:
 - `echo the quick brown fox` → Shell only (succeeds, no reroute)
 - `!rm -rf` → Shell (emergency bypass with `!` prefix)
 
+## Canonical Functions
+
+### `lacy_shell_classify_input(input)` — The Single Source of Truth
+
+**File:** `lib/detection.zsh`
+
+All input classification MUST go through this function. It returns one of three strings:
+- `"shell"` → route to shell (indicator: green)
+- `"agent"` → route to AI agent (indicator: magenta)
+- `"neutral"` → no routing decision yet (indicator: gray)
+
+**Mode-aware behavior:**
+1. **Empty input** → returns mode color (`shell`/`agent`) in locked modes, `neutral` in auto
+2. **Shell mode** → always returns `shell` (after empty check)
+3. **Agent mode** → always returns `agent` (after empty check)
+4. **Auto mode** → applies detection heuristics
+
+**Why this matters:**
+- The indicator, execution, and highlighting ALL call this function
+- Never create parallel detection logic — always extend this function
+- The empty-input behavior ensures the indicator shows the correct mode color when idle
+
+**Consumers:**
+- `keybindings.zsh:lacy_shell_update_input_indicator()` — real-time indicator color
+- `execute.zsh:lacy_shell_smart_accept_line()` — execution routing
+- `keybindings.zsh:lacy_shell_update_first_word_highlight()` — syntax highlighting
+
 ## Supported AI CLI Tools
 
 | Tool | Command | Prompt Flag |
@@ -117,7 +144,7 @@ packages/lacy/               # npm package for interactive installer
 - `lib/execute.zsh` - `lacy_shell_tool()` command, routing logic
 - `lib/spinner.zsh` - Braille spinner + shimmer "Thinking" animation during AI queries
 - `lib/preheat.zsh` - Background server (lash/opencode) + session reuse (claude)
-- `lib/detection.zsh` - `lacy_shell_has_nl_markers()` for NL bare-word counting + marker check
+- `lib/detection.zsh` - **`lacy_shell_classify_input()`** (canonical classifier), `lacy_shell_has_nl_markers()` for NL detection
 - `lib/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy/index.mjs` - Node installer with @clack/prompts
