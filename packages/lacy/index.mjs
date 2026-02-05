@@ -151,7 +151,7 @@ async function install() {
   prerequisites.stop('Prerequisites OK');
 
   // Detect installed tools
-  const detected = [];
+  let detected = [];
   for (const tool of ['lash', 'claude', 'opencode', 'gemini', 'codex']) {
     if (commandExists(tool)) {
       detected.push(tool);
@@ -162,6 +162,40 @@ async function install() {
     p.log.info(`Detected: ${detected.map(t => pc.green(t)).join(', ')}`);
   } else {
     p.log.warn('No AI CLI tools detected');
+    p.log.info('Lacy Shell requires an AI CLI tool to work.');
+
+    const installLashNow = await p.confirm({
+      message: `Would you like to install ${pc.green('lash')} (recommended)?`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(installLashNow)) {
+      p.cancel('Installation cancelled');
+      process.exit(0);
+    }
+
+    if (installLashNow) {
+      const lashSpinner = p.spinner();
+      lashSpinner.start('Installing lash');
+
+      try {
+        if (commandExists('npm')) {
+          execSync('npm install -g lash-cli', { stdio: 'pipe' });
+          lashSpinner.stop('lash installed');
+          detected.push('lash');
+        } else if (commandExists('brew')) {
+          execSync('brew tap lacymorrow/tap && brew install lash', { stdio: 'pipe' });
+          lashSpinner.stop('lash installed');
+          detected.push('lash');
+        } else {
+          lashSpinner.stop('Could not install lash');
+          p.log.warn('Please install npm or homebrew, then run: npm install -g lash-cli');
+        }
+      } catch (e) {
+        lashSpinner.stop('lash installation failed');
+        p.log.warn('You can install it manually later: npm install -g lash-cli');
+      }
+    }
   }
 
   // Tool selection

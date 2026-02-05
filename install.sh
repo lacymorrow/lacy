@@ -127,6 +127,19 @@ detect_tools() {
 
     if [[ $found -eq 0 ]]; then
         printf "  ${YELLOW}○${NC} No AI CLI tools found\n"
+        printf "\n"
+        printf "${YELLOW}Lacy Shell requires an AI CLI tool to work.${NC}\n"
+        printf "Would you like to install ${GREEN}lash${NC} (recommended)?\n"
+        printf "\n"
+        read -p "Install lash now? [Y/n]: " install_now < /dev/tty
+        if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
+            install_lash_cli
+            printf "\n"
+            # Re-check if lash was installed successfully
+            if command -v lash >/dev/null 2>&1; then
+                printf "  ${GREEN}✓${NC} lash\n"
+            fi
+        fi
     fi
 
     printf "\n"
