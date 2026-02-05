@@ -111,11 +111,14 @@ lacy_shell_classify_input() {
     local first_word="${input%% *}"
     local first_word_lower="${first_word:l}"
 
-    # "what" always goes to agent (hardcoded override)
-    if [[ "$first_word_lower" == "what" ]]; then
-        echo "agent"
-        return
-    fi
+    # Hard agent indicators — always route to agent
+    # "what" = questions, "yes/no" = conversational responses
+    case "$first_word_lower" in
+        what|yes|no)
+            echo "agent"
+            return
+            ;;
+    esac
 
     # Check if it's a valid command (cached)
     if lacy_shell_is_valid_command "$first_word"; then
@@ -181,6 +184,9 @@ lacy_shell_test_detection() {
         "  ls -la"
         "  what files"
         "  !rm /tmp/test"
+        "yes lets go"
+        "no I dont want that"
+        "yes"
     )
 
     echo "Testing auto-detection logic:"
