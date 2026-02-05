@@ -63,8 +63,37 @@ readonly LACY_SHELL_TOP_BAR_HEIGHT
 : ${LACY_PREHEAT_EAGER:="false"}
 : ${LACY_PREHEAT_SERVER_PORT:="4096"}
 
-# === Colors ===
-# Shell commands: Green (34)
-# Agent queries: Magenta (200)
-# Neutral: Dark gray (238)
-# Auto mode: Blue (75)
+# === Colors (256-color palette) ===
+LACY_COLOR_SHELL=34        # Green - shell commands
+LACY_COLOR_AGENT=200       # Magenta - agent queries
+LACY_COLOR_AUTO=75         # Blue - auto mode
+LACY_COLOR_NEUTRAL=238     # Dark gray - neutral/dim
+LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
+
+# === Detection ===
+LACY_HARD_AGENT_INDICATORS=(what yes no)
+LACY_NL_MARKERS=(the a an my your this that these those please how why where when)
+LACY_SHELL_OPERATORS=('|' '&&' '||' ';' '>')
+
+# === UI ===
+LACY_INDICATOR_CHAR="▌"
+LACY_SPINNER_FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+LACY_SPINNER_TEXT='Thinking'
+
+# === Timing (seconds) ===
+LACY_SPINNER_FRAME_DELAY=0.08
+LACY_TERMINAL_FLUSH_DELAY=0.02
+LACY_HEALTH_CHECK_ATTEMPTS=30
+LACY_HEALTH_CHECK_INTERVAL=0.1
+LACY_SESSION_CREATE_TIMEOUT=10
+LACY_SESSION_MESSAGE_TIMEOUT=120
+
+# === Thresholds ===
+LACY_SIGNAL_EXIT_THRESHOLD=128  # Exit codes >= this are signal-based
+
+# === API Models (fallback only) ===
+LACY_API_MODEL_OPENAI="gpt-4o-mini"
+LACY_API_MODEL_ANTHROPIC="claude-3-5-sonnet-20241022"
+
+# === Dangerous Commands ===
+LACY_DANGEROUS_PATTERNS=("rm -rf" "sudo rm" "mkfs" "dd if=" ">" "truncate")

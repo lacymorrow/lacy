@@ -119,7 +119,7 @@ lacy_shell_precmd() {
     if [[ -n "$LACY_SHELL_REROUTE_CANDIDATE" ]]; then
         local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
         LACY_SHELL_REROUTE_CANDIDATE=""
-        if (( last_exit != 0 && last_exit < 128 )); then
+        if (( last_exit != 0 && last_exit < LACY_SIGNAL_EXIT_THRESHOLD )); then
             lacy_shell_execute_agent "$candidate"
             return
         fi
@@ -148,10 +148,9 @@ lacy_shell_precmd() {
 # Enhanced command execution with confirmation for dangerous commands
 lacy_shell_execute_with_confirmation() {
     local command="$1"
-    local dangerous_commands=("rm -rf" "sudo rm" "mkfs" "dd if=" ">" "truncate")
-    
+
     # Check if command contains dangerous patterns
-    for pattern in "${dangerous_commands[@]}"; do
+    for pattern in "${LACY_DANGEROUS_PATTERNS[@]}"; do
         if [[ "$command" == *"$pattern"* ]]; then
             echo ""
             print -P "%F{red}⚠️  Potentially dangerous command detected:%f"
@@ -335,21 +334,21 @@ lacy_shell_mode() {
             lacy_shell_set_mode "shell"
             lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            print -P "  %F{34}▌%f SHELL mode - all commands execute directly"
+            print -P "  %F{${LACY_COLOR_SHELL}}${LACY_INDICATOR_CHAR}%f SHELL mode - all commands execute directly"
             echo ""
             ;;
         "agent"|"a")
             lacy_shell_set_mode "agent"
             lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            print -P "  %F{200}▌%f AGENT mode - all input goes to AI"
+            print -P "  %F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f AGENT mode - all input goes to AI"
             echo ""
             ;;
         "auto"|"u")
             lacy_shell_set_mode "auto"
             lacy_shell_update_rprompt 2>/dev/null
             echo ""
-            print -P "  %F{75}▌%f AUTO mode - smart detection"
+            print -P "  %F{${LACY_COLOR_AUTO}}${LACY_INDICATOR_CHAR}%f AUTO mode - smart detection"
             echo ""
             ;;
         "toggle"|"t")
@@ -358,9 +357,9 @@ lacy_shell_mode() {
             local new_mode="$LACY_SHELL_CURRENT_MODE"
             echo ""
             case "$new_mode" in
-                "shell") print -P "  %F{34}▌%f SHELL mode" ;;
-                "agent") print -P "  %F{200}▌%f AGENT mode" ;;
-                "auto")  print -P "  %F{75}▌%f AUTO mode" ;;
+                "shell") print -P "  %F{${LACY_COLOR_SHELL}}${LACY_INDICATOR_CHAR}%f SHELL mode" ;;
+                "agent") print -P "  %F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f AGENT mode" ;;
+                "auto")  print -P "  %F{${LACY_COLOR_AUTO}}${LACY_INDICATOR_CHAR}%f AUTO mode" ;;
             esac
             echo ""
             ;;
@@ -373,14 +372,14 @@ lacy_shell_mode() {
             echo ""
             echo -n "Current: "
             case "$LACY_SHELL_CURRENT_MODE" in
-                "shell") print -P "%F{34}SHELL%f" ;;
-                "agent") print -P "%F{200}AGENT%f" ;;
-                "auto")  print -P "%F{75}AUTO%f" ;;
+                "shell") print -P "%F{${LACY_COLOR_SHELL}}SHELL%f" ;;
+                "agent") print -P "%F{${LACY_COLOR_AGENT}}AGENT%f" ;;
+                "auto")  print -P "%F{${LACY_COLOR_AUTO}}AUTO%f" ;;
             esac
             echo ""
             echo "Colors:"
-            print -P "  %F{34}▌%f Green  = shell command"
-            print -P "  %F{200}▌%f Magenta = agent query"
+            print -P "  %F{${LACY_COLOR_SHELL}}${LACY_INDICATOR_CHAR}%f Green  = shell command"
+            print -P "  %F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f Magenta = agent query"
             echo ""
             ;;
     esac

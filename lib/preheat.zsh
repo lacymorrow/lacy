@@ -43,11 +43,11 @@ lacy_preheat_server_start() {
 
     # Wait for server to become healthy (up to 3 seconds)
     local attempts=0
-    while (( attempts < 30 )); do
+    while (( attempts < LACY_HEALTH_CHECK_ATTEMPTS )); do
         if lacy_preheat_server_is_healthy; then
             return 0
         fi
-        sleep 0.1
+        sleep "$LACY_HEALTH_CHECK_INTERVAL"
         (( attempts++ ))
     done
 
@@ -87,7 +87,7 @@ lacy_preheat_server_query() {
     # Create session if we don't have one yet
     if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
         local session_json
-        session_json=$(curl -sf --max-time 10 \
+        session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
             -X POST \
             -H "Content-Type: application/json" \
             -d '{}' \
@@ -111,7 +111,7 @@ lacy_preheat_server_query() {
 
     # Send message to session (sync — blocks until AI finishes)
     local response
-    response=$(curl -sf --max-time 120 \
+    response=$(curl -sf --max-time "$LACY_SESSION_MESSAGE_TIMEOUT" \
         -X POST \
         -H "Content-Type: application/json" \
         -d "{\"parts\": [{\"type\": \"text\", \"text\": \"${escaped_query}\"}]}" \

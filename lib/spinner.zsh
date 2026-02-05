@@ -36,11 +36,11 @@ lacy_start_spinner() {
         # Hide cursor
         printf '\e[?25l'
 
-        local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-        local text='Thinking'
+        local frames="$LACY_SPINNER_FRAMES"
+        local text="$LACY_SPINNER_TEXT"
         local text_len=${#text}
         local frame_num=0
-        local -a shimmer_colors=(255 219 213 200 141)
+        local -a shimmer_colors=("${LACY_COLOR_SHIMMER[@]}")
         local spinner_idx spinner_char shimmer center i char dist color dots_phase dots
 
         while true; do
@@ -79,13 +79,13 @@ lacy_start_spinner() {
             esac
 
             # Render: clear line, carriage return, draw
-            printf "\e[2K\r \e[38;5;200m%s\e[0m %b\e[38;5;238m%s\e[0m" \
+            printf "\e[2K\r \e[38;5;${LACY_COLOR_AGENT}m%s\e[0m %b\e[38;5;${LACY_COLOR_NEUTRAL}m%s\e[0m" \
                 "$spinner_char" "$shimmer" "$dots"
 
             frame_num=$(( frame_num + 1 ))
 
             # ~12.5fps using zsh builtin read timeout
-            read -t 0.08 -r 2>/dev/null || true
+            read -t "$LACY_SPINNER_FRAME_DELAY" -r 2>/dev/null || true
         done
     } &
 
@@ -116,7 +116,7 @@ lacy_stop_spinner() {
         wait "$LACY_SPINNER_PID" 2>/dev/null
         # Brief delay to ensure spinner's final terminal output is flushed
         # (prevents race where spinner's \e[2K clears our output)
-        sleep 0.02
+        sleep "$LACY_TERMINAL_FLUSH_DELAY"
         # Only clear line when we're the ones stopping the spinner
         printf '\e[2K\r'
     fi

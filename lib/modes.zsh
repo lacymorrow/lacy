@@ -86,17 +86,17 @@ lacy_shell_mode_status() {
     echo ""
     echo -n "Current mode: "
     case "$LACY_SHELL_CURRENT_MODE" in
-        "shell") print -P "%F{34}SHELL%f" ;;
-        "agent") print -P "%F{200}AGENT%f" ;;
-        "auto")  print -P "%F{75}AUTO%f" ;;
-        *)       print -P "%F{238}unknown%f" ;;
+        "shell") print -P "%F{${LACY_COLOR_SHELL}}SHELL%f" ;;
+        "agent") print -P "%F{${LACY_COLOR_AGENT}}AGENT%f" ;;
+        "auto")  print -P "%F{${LACY_COLOR_AUTO}}AUTO%f" ;;
+        *)       print -P "%F{${LACY_COLOR_NEUTRAL}}unknown%f" ;;
     esac
     echo ""
     echo "Description: ${LACY_SHELL_MODE_DESCRIPTIONS[$LACY_SHELL_CURRENT_MODE]}"
     echo ""
     echo "Colors:"
-    print -P "  %F{34}▌%f Green   = shell command"
-    print -P "  %F{200}▌%f Magenta = agent query"
-    print -P "  %F{75}▌%f Blue    = auto mode"
+    print -P "  %F{${LACY_COLOR_SHELL}}${LACY_INDICATOR_CHAR}%f Green   = shell command"
+    print -P "  %F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f Magenta = agent query"
+    print -P "  %F{${LACY_COLOR_AUTO}}${LACY_INDICATOR_CHAR}%f Blue    = auto mode"
     echo ""
 }

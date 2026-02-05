@@ -31,8 +31,10 @@ lacy_shell_has_nl_markers() {
     [[ "$input" != *" "* ]] && return 1
 
     # Bail if input contains shell operators — clearly shell syntax
-    [[ "$input" == *"|"* || "$input" == *"&&"* || "$input" == *"||"* || \
-       "$input" == *";"* || "$input" == *">"* ]] && return 1
+    local op
+    for op in "${LACY_SHELL_OPERATORS[@]}"; do
+        [[ "$input" == *"$op"* ]] && return 1
+    done
 
     # Extract tokens after the first word
     local rest="${input#* }"
@@ -57,15 +59,9 @@ lacy_shell_has_nl_markers() {
     (( ${#bare_words} < 3 )) && return 1
 
     # Check for strong NL markers
-    local -a nl_markers=(
-        the a an
-        my your this that these those
-        please
-        how why where when
-    )
     local word marker
     for word in "${bare_words[@]}"; do
-        for marker in "${nl_markers[@]}"; do
+        for marker in "${LACY_NL_MARKERS[@]}"; do
             [[ "$word" == "$marker" ]] && return 0
         done
     done
@@ -113,12 +109,13 @@ lacy_shell_classify_input() {
 
     # Hard agent indicators — always route to agent
     # "what" = questions, "yes/no" = conversational responses
-    case "$first_word_lower" in
-        what|yes|no)
+    local indicator
+    for indicator in "${LACY_HARD_AGENT_INDICATORS[@]}"; do
+        if [[ "$first_word_lower" == "$indicator" ]]; then
             echo "agent"
             return
-            ;;
-    esac
+        fi
+    done
 
     # Check if it's a valid command (cached)
     if lacy_shell_is_valid_command "$first_word"; then

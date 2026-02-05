@@ -27,7 +27,7 @@ lacy_shell_init_prompt_once() {
 
     # Initialize with neutral indicator (appended after prompt, before cursor)
     LACY_SHELL_INPUT_TYPE="neutral"
-    PS1="${LACY_SHELL_BASE_PS1}%F{238}▌%f "
+    PS1="${LACY_SHELL_BASE_PS1}%F{${LACY_COLOR_NEUTRAL}}${LACY_INDICATOR_CHAR}%f "
 
     # Set right prompt with mode indicator
     lacy_shell_update_rprompt
@@ -41,23 +41,23 @@ lacy_shell_update_rprompt() {
     case "$LACY_SHELL_CURRENT_MODE" in
         "shell")
             mode_text="SHELL"
-            mode_color="34"  # Green
+            mode_color="$LACY_COLOR_SHELL"
             ;;
         "agent")
             mode_text="AGENT"
-            mode_color="200"  # Magenta
+            mode_color="$LACY_COLOR_AGENT"
             ;;
         "auto")
             mode_text="AUTO"
-            mode_color="75"  # Blue
+            mode_color="$LACY_COLOR_AUTO"
             ;;
         *)
             mode_text="?"
-            mode_color="238"
+            mode_color="$LACY_COLOR_NEUTRAL"
             ;;
     esac
 
-    RPS1="%F{${mode_color}}${mode_text}%f %F{238}[Ctrl+Space]%f"
+    RPS1="%F{${mode_color}}${mode_text}%f %F{${LACY_COLOR_NEUTRAL}}[Ctrl+Space]%f"
 }
 
 # Update prompt (called by precmd)
@@ -67,7 +67,7 @@ lacy_shell_update_prompt() {
 
     # Reset to neutral indicator (appended after prompt, before cursor)
     LACY_SHELL_INPUT_TYPE="neutral"
-    PS1="${LACY_SHELL_BASE_PS1}%F{238}▌%f "
+    PS1="${LACY_SHELL_BASE_PS1}%F{${LACY_COLOR_NEUTRAL}}${LACY_INDICATOR_CHAR}%f "
 
     # Update mode in right prompt
     lacy_shell_update_rprompt

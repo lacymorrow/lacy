@@ -33,20 +33,17 @@ lacy_shell_update_input_indicator() {
         LACY_SHELL_INPUT_TYPE="$input_type"
 
         # Build new PS1 with colored indicator
-        # Colors chosen for maximum distinction:
-        #   Green (34) = shell command
-        #   Magenta (200) = agent query
-        #   Dark gray (238) = neutral/empty
+        # Colors chosen for maximum distinction (see constants.zsh)
         local indicator
         case "$input_type" in
             "shell")
-                indicator="%F{34}▌%f"
+                indicator="%F{${LACY_COLOR_SHELL}}${LACY_INDICATOR_CHAR}%f"
                 ;;
             "agent")
-                indicator="%F{200}▌%f"
+                indicator="%F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f"
                 ;;
             *)
-                indicator="%F{238}▌%f"
+                indicator="%F{${LACY_COLOR_NEUTRAL}}${LACY_INDICATOR_CHAR}%f"
                 ;;
         esac
 
@@ -75,10 +72,10 @@ lacy_shell_update_input_indicator() {
         if (( j > i )); then
             case "$input_type" in
                 "shell")
-                    region_highlight+=("$i $j fg=34,bold")
+                    region_highlight+=("$i $j fg=${LACY_COLOR_SHELL},bold")
                     ;;
                 "agent")
-                    region_highlight+=("$i $j fg=200,bold")
+                    region_highlight+=("$i $j fg=${LACY_COLOR_AGENT},bold")
                     ;;
             esac
         fi

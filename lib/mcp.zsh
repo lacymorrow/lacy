@@ -163,7 +163,7 @@ EOF
                 if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
                     kill "$LACY_SPINNER_PID" 2>/dev/null
                     # Brief delay for spinner's terminal output to flush
-                    sleep 0.02
+                    sleep "$LACY_TERMINAL_FLUSH_DELAY"
                     printf '\e[2K\r\e[?25h'
                 fi
                 _spinner_killed=true
@@ -173,7 +173,7 @@ EOF
         # Tool exited with no output
         if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
             kill "$LACY_SPINNER_PID" 2>/dev/null
-            sleep 0.02
+            sleep "$LACY_TERMINAL_FLUSH_DELAY"
             printf '\e[2K\r\e[?25h'
         fi
     }
@@ -219,7 +219,7 @@ lacy_shell_query_openai() {
 
     local response=$(curl -s -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
-        -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_tokens\":1500}" \
+        -d "{\"model\":\"${LACY_API_MODEL_OPENAI}\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_tokens\":1500}" \
         "https://api.openai.com/v1/chat/completions")
 
     echo "$response" | grep -o '"content":"[^"]*' | sed 's/"content":"//' | head -1
@@ -233,7 +233,7 @@ lacy_shell_query_anthropic() {
     local response=$(curl -s -H "Content-Type: application/json" \
         -H "x-api-key: $api_key" \
         -H "anthropic-version: 2023-06-01" \
-        -d "{\"model\":\"claude-3-5-sonnet-20241022\",\"max_tokens\":1500,\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}]}" \
+        -d "{\"model\":\"${LACY_API_MODEL_ANTHROPIC}\",\"max_tokens\":1500,\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}]}" \
         "https://api.anthropic.com/v1/messages")
 
     echo "$response" | grep -o '"text":"[^"]*' | sed 's/"text":"//' | head -1
