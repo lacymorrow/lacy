@@ -162,6 +162,8 @@ EOF
                 # First output from tool — kill spinner
                 if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
                     kill "$LACY_SPINNER_PID" 2>/dev/null
+                    # Brief delay for spinner's terminal output to flush
+                    sleep 0.02
                     printf '\e[2K\r\e[?25h'
                 fi
                 _spinner_killed=true
@@ -171,6 +173,7 @@ EOF
         # Tool exited with no output
         if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
             kill "$LACY_SPINNER_PID" 2>/dev/null
+            sleep 0.02
             printf '\e[2K\r\e[?25h'
         fi
     }

@@ -5,6 +5,7 @@
 
 LACY_SPINNER_PID=""
 LACY_SPINNER_MONITOR_WAS_SET=""
+LACY_SPINNER_NOTIFY_WAS_SET=""
 
 lacy_start_spinner() {
     # Guard against double-start
@@ -12,16 +13,24 @@ lacy_start_spinner() {
         lacy_stop_spinner
     fi
 
-    # Save and suppress job control messages
+    # Save and suppress job control messages (must persist until lacy_stop_spinner)
     if [[ -o monitor ]]; then
         LACY_SPINNER_MONITOR_WAS_SET=1
+        setopt NO_MONITOR
     else
         LACY_SPINNER_MONITOR_WAS_SET=""
     fi
-    set +m
+    # Also suppress async completion notifications
+    if [[ -o notify ]]; then
+        LACY_SPINNER_NOTIFY_WAS_SET=1
+        setopt NO_NOTIFY
+    else
+        LACY_SPINNER_NOTIFY_WAS_SET=""
+    fi
 
     {
-        trap 'printf "\e[2K\r\e[?25h"' EXIT
+        # Only show cursor on exit - don't clear line (caller handles that to avoid race)
+        trap 'printf "\e[?25h"' EXIT
         trap 'exit 0' TERM INT HUP
 
         # Hide cursor
@@ -88,24 +97,39 @@ lacy_stop_spinner() {
     printf '\e[?25h'
 
     if [[ -z "$LACY_SPINNER_PID" ]]; then
+        # Restore job control if it was previously enabled (even if spinner already dead)
+        if [[ -n "$LACY_SPINNER_MONITOR_WAS_SET" ]]; then
+            setopt MONITOR
+            LACY_SPINNER_MONITOR_WAS_SET=""
+        fi
+        if [[ -n "$LACY_SPINNER_NOTIFY_WAS_SET" ]]; then
+            setopt NOTIFY
+            LACY_SPINNER_NOTIFY_WAS_SET=""
+        fi
         return
     fi
 
-    # Kill if still running
+    # Kill if still running — only clear line if we actually kill it
+    # This prevents clearing output when spinner was already killed elsewhere
     if kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
         kill "$LACY_SPINNER_PID" 2>/dev/null
         wait "$LACY_SPINNER_PID" 2>/dev/null
+        # Brief delay to ensure spinner's final terminal output is flushed
+        # (prevents race where spinner's \e[2K clears our output)
+        sleep 0.02
+        # Only clear line when we're the ones stopping the spinner
+        printf '\e[2K\r'
     fi
-
-    # Clean up terminal
-    printf '\e[2K\r'
-    printf '\e[?25h'
 
     LACY_SPINNER_PID=""
 
     # Restore job control if it was previously enabled
     if [[ -n "$LACY_SPINNER_MONITOR_WAS_SET" ]]; then
-        set -m
+        setopt MONITOR
         LACY_SPINNER_MONITOR_WAS_SET=""
+    fi
+    if [[ -n "$LACY_SPINNER_NOTIFY_WAS_SET" ]]; then
+        setopt NOTIFY
+        LACY_SPINNER_NOTIFY_WAS_SET=""
     fi
 }

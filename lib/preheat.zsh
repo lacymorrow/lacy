@@ -32,8 +32,8 @@ lacy_preheat_server_start() {
     # Generate random password for this session
     LACY_PREHEAT_SERVER_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || date +%s%N)
 
-    # Start server in background
-    setopt LOCAL_OPTIONS NO_MONITOR
+    # Start server in background (suppress all job notifications)
+    setopt LOCAL_OPTIONS NO_MONITOR NO_NOTIFY
     "$tool" serve --port "$LACY_PREHEAT_SERVER_PORT" >/dev/null 2>&1 &
     LACY_PREHEAT_SERVER_PID=$!
     disown 2>/dev/null
@@ -275,6 +275,8 @@ lacy_preheat_init() {
 
         # Only start for tools that support serve
         if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
+            # Suppress job control notification for backgrounded function
+            setopt LOCAL_OPTIONS NO_MONITOR NO_NOTIFY
             lacy_preheat_server_start "$tool" &
             # Don't wait — let it start in background
             disown 2>/dev/null
