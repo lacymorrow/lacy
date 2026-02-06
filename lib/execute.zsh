@@ -143,9 +143,13 @@ lacy_shell_precmd() {
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
         LACY_SHELL_PENDING_QUERY=""
-        # Echo the query so the user can see what was sent to the agent
-        # (The typed text was cleared from BUFFER to prevent shell execution)
-        print -P "  %F{${LACY_COLOR_AGENT}}▸%f $pending"
+        # Restore query text on the prompt line above.
+        # accept-line cleared it (BUFFER was emptied to prevent shell execution),
+        # so we move up, rewrite the last prompt line + query, then move back down.
+        local prompt_last="${LACY_SHELL_BASE_PS1##*$'\n'}%F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f "
+        printf '\e[A\e[2K\r'
+        print -Pn "$prompt_last"
+        printf '%s\n' "$pending"
         lacy_shell_execute_agent "$pending"
     fi
 

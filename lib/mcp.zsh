@@ -34,12 +34,12 @@ lacy_shell_query_agent() {
     # If still no tool, try API fallback
     if [[ -z "$tool" ]]; then
         if lacy_shell_check_api_keys; then
-            echo ""
             local temp_file=$(mktemp)
             cat > "$temp_file" << EOF
 Current Directory: $(pwd)
 Query: $query
 EOF
+            echo ""
             lacy_start_spinner
             lacy_shell_send_to_ai_streaming "$temp_file" "$query"
             local exit_code=$?
@@ -86,6 +86,7 @@ EOF
             local exit_code=$?
             lacy_stop_spinner
             if [[ $exit_code -eq 0 && -n "$server_result" ]]; then
+                while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
                 printf '%s\n' "$server_result"
                 echo ""
                 return 0
@@ -109,6 +110,8 @@ EOF
             # Extract and display result
             local result_text
             result_text=$(lacy_preheat_claude_extract_result "$json_output")
+            # Strip leading blank lines (Claude API responses often start with \n\n)
+            while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
             if [[ -n "$result_text" ]]; then
                 printf '%s\n' "$result_text"
             else
@@ -131,6 +134,7 @@ EOF
             if [[ $exit_code -eq 0 ]]; then
                 local result_text
                 result_text=$(lacy_preheat_claude_extract_result "$json_output")
+                while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
                 if [[ -n "$result_text" ]]; then
                     printf '%s\n' "$result_text"
                 else
