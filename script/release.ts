@@ -90,9 +90,8 @@ function errorText(err: unknown): string {
 
 async function publishNpm(cwd: string): Promise<boolean> {
 	const MAX_ATTEMPTS = 5;
-	let needsOtp = false;
 
-	// First attempt: without OTP (works if 2FA isn't required)
+	// First attempt: without OTP (works if token is valid and 2FA isn't required)
 	const spinner = p.spinner();
 	spinner.start("Publishing to npm");
 	try {
@@ -100,11 +99,38 @@ async function publishNpm(cwd: string): Promise<boolean> {
 		spinner.stop(pc.green("Published to npm"));
 		return true;
 	} catch (err: unknown) {
-		if (isOtpError(err)) {
-			spinner.stop("npm requires OTP");
-			needsOtp = true;
-		} else {
-			spinner.stop(pc.red("npm publish failed"));
+		spinner.stop(pc.yellow("npm publish requires authentication"));
+		p.log.message(pc.dim(errorText(err)));
+	}
+
+	// Auth/OTP required — prompt for OTP interactively (the common case)
+	p.log.info("Enter your npm OTP to publish, or press Ctrl+C to skip.");
+	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+		const otp = await p.text({
+			message: `npm OTP${attempt > 1 ? pc.dim(` (attempt ${attempt}/${MAX_ATTEMPTS})`) : ""}`,
+			placeholder: "123456",
+			validate: (v) => {
+				if (!v || !/^\d{6}$/.test(v.trim())) return "OTP must be 6 digits";
+			},
+		});
+
+		if (p.isCancel(otp)) {
+			p.log.warn("Skipping npm publish");
+			return false;
+		}
+
+		const retrySpinner = p.spinner();
+		retrySpinner.start("Publishing to npm");
+		try {
+			run(`npm publish --access public --otp ${otp}`, { cwd });
+			retrySpinner.stop(pc.green("Published to npm"));
+			return true;
+		} catch (err: unknown) {
+			if (isOtpError(err)) {
+				retrySpinner.stop(pc.yellow("OTP expired or invalid"));
+				continue;
+			}
+			retrySpinner.stop(pc.red("npm publish failed"));
 			p.log.error(errorText(err));
 
 			const skip = await p.confirm({
@@ -116,52 +142,10 @@ async function publishNpm(cwd: string): Promise<boolean> {
 		}
 	}
 
-	// OTP required — prompt interactively
-	if (needsOtp) {
-		for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-			const otp = await p.text({
-				message: `Enter npm OTP${attempt > 1 ? pc.dim(` (attempt ${attempt}/${MAX_ATTEMPTS})`) : ""}`,
-				placeholder: "123456",
-				validate: (v) => {
-					if (!v || !/^\d{6}$/.test(v.trim())) return "OTP must be 6 digits";
-				},
-			});
-
-			if (p.isCancel(otp)) {
-				p.log.warn("Skipping npm publish");
-				return false;
-			}
-
-			const retrySpinner = p.spinner();
-			retrySpinner.start("Publishing to npm");
-			try {
-				run(`npm publish --access public --otp ${otp}`, { cwd });
-				retrySpinner.stop(pc.green("Published to npm"));
-				return true;
-			} catch (err: unknown) {
-				if (isOtpError(err)) {
-					retrySpinner.stop(pc.yellow("OTP expired or invalid"));
-					continue;
-				}
-				retrySpinner.stop(pc.red("npm publish failed"));
-				p.log.error(errorText(err));
-
-				const skip = await p.confirm({
-					message: "Skip npm publish and continue?",
-					initialValue: true,
-				});
-				if (p.isCancel(skip) || !skip) cancelled();
-				return false;
-			}
-		}
-
-		p.log.error(`Failed after ${MAX_ATTEMPTS} OTP attempts`);
-		p.log.info(
-			`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
-		);
-		return false;
-	}
-
+	p.log.error(`Failed after ${MAX_ATTEMPTS} OTP attempts`);
+	p.log.info(
+		`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
+	);
 	return false;
 }
 
