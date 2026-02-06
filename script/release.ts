@@ -10,10 +10,11 @@
  *   bun run release 1.6.0        # explicit version
  */
 
+import * as p from "@clack/prompts";
+import pc from "picocolors";
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createInterface } from "node:readline";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const PACKAGE_JSONS = [
@@ -24,16 +25,11 @@ const PACKAGE_JSONS = [
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function run(cmd: string, opts?: { cwd?: string; stdio?: "inherit" | "pipe" }) {
-	console.log(`  $ ${cmd}`);
 	return execSync(cmd, {
 		cwd: opts?.cwd ?? ROOT,
-		stdio: opts?.stdio ?? "inherit",
+		stdio: opts?.stdio ?? "pipe",
 		encoding: "utf-8",
 	});
-}
-
-function runQuiet(cmd: string): string {
-	return execSync(cmd, { cwd: ROOT, encoding: "utf-8" }).trim();
 }
 
 function readJson(path: string) {
@@ -42,16 +38,6 @@ function readJson(path: string) {
 
 function writeJson(path: string, data: Record<string, unknown>) {
 	writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
-}
-
-function ask(question: string): Promise<string> {
-	const rl = createInterface({ input: process.stdin, output: process.stdout });
-	return new Promise((res) =>
-		rl.question(question, (answer) => {
-			rl.close();
-			res(answer.trim());
-		}),
-	);
 }
 
 function bumpVersion(
@@ -69,78 +55,110 @@ function bumpVersion(
 	}
 }
 
+function cancelled(): never {
+	p.cancel("Release cancelled.");
+	process.exit(0);
+}
+
 // ── npm publish with OTP ─────────────────────────────────────────────────────
 
 async function publishNpm(cwd: string) {
 	const MAX_ATTEMPTS = 5;
+	const spinner = p.spinner();
 
-	// First attempt: without OTP (works if auth token has no 2FA requirement)
+	// First attempt: without OTP
+	spinner.start("Publishing to npm");
 	try {
-		run("npm publish --access public", { cwd, stdio: "pipe" });
-		console.log("  ✓ Published to npm");
+		run("npm publish --access public", { cwd });
+		spinner.stop(pc.green("Published to npm"));
 		return;
 	} catch (err: unknown) {
 		const msg = err instanceof Error ? err.message : String(err);
-		// If the error isn't OTP-related, surface it and bail
 		if (!msg.includes("EOTP") && !msg.includes("one-time pass")) {
-			console.error(`  ✗ npm publish failed: ${msg}`);
-			console.error(`    Retry manually: cd packages/lacy && npm publish --access public`);
+			spinner.stop(pc.red("npm publish failed"));
+			p.log.error(msg);
+			p.log.info(
+				`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
+			);
 			return;
 		}
+		spinner.stop("OTP required");
 	}
 
 	// OTP required — prompt interactively
 	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-		const otp = await ask(`  Enter npm OTP (attempt ${attempt}/${MAX_ATTEMPTS}): `);
-		if (!otp) {
-			console.error("  ✗ Skipping npm publish (no OTP provided)");
+		const otp = await p.text({
+			message: `Enter npm OTP${attempt > 1 ? pc.dim(` (attempt ${attempt}/${MAX_ATTEMPTS})`) : ""}`,
+			placeholder: "123456",
+			validate: (v) => {
+				if (!v || !/^\d{6}$/.test(v.trim())) return "OTP must be 6 digits";
+			},
+		});
+
+		if (p.isCancel(otp)) {
+			p.log.warn("Skipping npm publish");
 			return;
 		}
+
+		const spinner = p.spinner();
+		spinner.start("Publishing to npm");
 		try {
-			run(`npm publish --access public --otp ${otp}`, { cwd, stdio: "pipe" });
-			console.log("  ✓ Published to npm");
+			run(`npm publish --access public --otp ${otp}`, { cwd });
+			spinner.stop(pc.green("Published to npm"));
 			return;
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
 			if (msg.includes("EOTP") || msg.includes("one-time pass")) {
-				console.error("  ✗ OTP expired or invalid, try again");
+				spinner.stop(pc.yellow("OTP expired or invalid"));
 				continue;
 			}
-			console.error(`  ✗ npm publish failed: ${msg}`);
-			console.error(`    Retry manually: cd packages/lacy && npm publish --access public`);
+			spinner.stop(pc.red("npm publish failed"));
+			p.log.error(msg);
+			p.log.info(
+				`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
+			);
 			return;
 		}
 	}
 
-	console.error(`  ✗ Failed after ${MAX_ATTEMPTS} OTP attempts`);
-	console.error(`    Retry manually: cd packages/lacy && npm publish --access public`);
+	p.log.error(`Failed after ${MAX_ATTEMPTS} OTP attempts`);
+	p.log.info(
+		`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
+	);
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-	// Ensure clean working tree
-	const status = runQuiet("git status --porcelain");
+	console.clear();
+	p.intro(pc.magenta(pc.bold("  Lacy Shell — Release  ")));
+
+	// Preflight checks
+	const preflight = p.spinner();
+	preflight.start("Running preflight checks");
+
+	const status = run("git status --porcelain").trim();
 	if (status) {
-		console.error("Error: working tree is not clean. Commit or stash changes first.");
-		console.error(status);
+		preflight.stop(pc.red("Working tree is not clean"));
+		p.log.error("Commit or stash changes first:");
+		console.log(pc.dim(status));
 		process.exit(1);
 	}
 
-	// Ensure on main
-	const branch = runQuiet("git branch --show-current");
+	const branch = run("git branch --show-current").trim();
 	if (branch !== "main") {
-		console.error(`Error: must be on 'main' branch (currently on '${branch}')`);
+		preflight.stop(pc.red(`On branch '${branch}', not 'main'`));
 		process.exit(1);
 	}
 
-	// Current version from root package.json
+	preflight.stop("Preflight OK");
+
+	// Current version
 	const rootPkg = readJson(PACKAGE_JSONS[0]);
 	const currentVersion: string = rootPkg.version;
-	console.log(`\nCurrent version: ${currentVersion}`);
 
 	// Determine new version
-	let arg = process.argv[2];
+	const arg = process.argv[2];
 	let newVersion: string;
 
 	if (arg === "patch" || arg === "minor" || arg === "major") {
@@ -148,91 +166,98 @@ async function main() {
 	} else if (arg && /^\d+\.\d+\.\d+$/.test(arg)) {
 		newVersion = arg;
 	} else {
-		// Interactive
-		console.log(`\n  1) patch → ${bumpVersion(currentVersion, "patch")}`);
-		console.log(`  2) minor → ${bumpVersion(currentVersion, "minor")}`);
-		console.log(`  3) major → ${bumpVersion(currentVersion, "major")}`);
-		const choice = await ask("\nBump type [1/2/3]: ");
-		const map: Record<string, "patch" | "minor" | "major"> = {
-			"1": "patch",
-			"2": "minor",
-			"3": "major",
-			patch: "patch",
-			minor: "minor",
-			major: "major",
-		};
-		const type = map[choice];
-		if (!type) {
-			console.error("Invalid choice");
-			process.exit(1);
-		}
-		newVersion = bumpVersion(currentVersion, type);
+		const selected = await p.select({
+			message: `Current version: ${pc.cyan(currentVersion)}. Bump type?`,
+			options: [
+				{
+					value: "patch" as const,
+					label: "patch",
+					hint: `${currentVersion} → ${bumpVersion(currentVersion, "patch")}`,
+				},
+				{
+					value: "minor" as const,
+					label: "minor",
+					hint: `${currentVersion} → ${bumpVersion(currentVersion, "minor")}`,
+				},
+				{
+					value: "major" as const,
+					label: "major",
+					hint: `${currentVersion} → ${bumpVersion(currentVersion, "major")}`,
+				},
+			],
+		});
+
+		if (p.isCancel(selected)) cancelled();
+		newVersion = bumpVersion(currentVersion, selected);
 	}
 
 	const tag = `v${newVersion}`;
-	console.log(`\nReleasing: ${currentVersion} → ${newVersion} (${tag})\n`);
 
-	// 1. Update all package.json files
-	console.log("Updating package.json versions...");
+	const proceed = await p.confirm({
+		message: `Release ${pc.cyan(currentVersion)} → ${pc.green(newVersion)} (${tag})?`,
+	});
+	if (p.isCancel(proceed) || !proceed) cancelled();
+
+	// 1. Bump versions
+	const bumpSpinner = p.spinner();
+	bumpSpinner.start("Bumping versions");
 	for (const path of PACKAGE_JSONS) {
 		const pkg = readJson(path);
 		pkg.version = newVersion;
 		writeJson(path, pkg);
-		console.log(`  ✓ ${path.replace(ROOT + "/", "")}`);
 	}
-
-	// 2. Build changelog from commits since last tag
-	const lastTag = runQuiet("git describe --tags --abbrev=0 2>/dev/null || echo ''");
-	let changelog = "";
-	if (lastTag) {
-		const log = runQuiet(
-			`git log ${lastTag}..HEAD --pretty=format:"- %s (%h)" --no-merges`,
-		);
-		if (log) {
-			changelog = log;
-		}
-	}
-	if (!changelog) {
-		changelog = "- Release " + tag;
-	}
-
-	console.log(`\nChangelog:\n${changelog}\n`);
-
-	// 3. Commit
-	console.log("Committing...");
-	run(`git add package.json packages/lacy/package.json`);
-	run(
-		`git commit -m "release: ${tag}" --no-verify`,
+	bumpSpinner.stop(
+		`Updated ${pc.cyan("package.json")} → ${pc.green(newVersion)}`,
 	);
 
-	// 4. Tag
-	console.log("Tagging...");
+	// 2. Changelog
+	const lastTag = run(
+		"git describe --tags --abbrev=0 2>/dev/null || echo ''",
+	).trim();
+	let changelog = "";
+	if (lastTag) {
+		changelog = run(
+			`git log ${lastTag}..HEAD --pretty=format:"- %s (%h)" --no-merges`,
+		).trim();
+	}
+	if (!changelog) changelog = `- Release ${tag}`;
+
+	p.note(changelog, "Changelog");
+
+	// 3. Commit + tag
+	const gitSpinner = p.spinner();
+	gitSpinner.start("Committing and tagging");
+	run("git add package.json packages/lacy/package.json");
+	run(`git commit -m "release: ${tag}" --no-verify`);
 	run(`git tag ${tag}`);
+	gitSpinner.stop(`Committed and tagged ${pc.green(tag)}`);
 
-	// 5. Push
-	console.log("Pushing...");
-	run(`git push origin main --no-verify`);
+	// 4. Push
+	const pushSpinner = p.spinner();
+	pushSpinner.start("Pushing to GitHub");
+	run("git push origin main --no-verify");
 	run(`git push origin ${tag}`);
+	pushSpinner.stop("Pushed to GitHub");
 
-	// 6. GitHub release
-	console.log("Creating GitHub release...");
+	// 5. GitHub release
+	const releaseSpinner = p.spinner();
+	releaseSpinner.start("Creating GitHub release");
 	const releaseNotes = `## Changes\n\n${changelog}`;
 	run(
 		`gh release create ${tag} --title "${tag}" --notes "${releaseNotes.replace(/"/g, '\\"')}"`,
 	);
+	releaseSpinner.stop("GitHub release created");
 
-	// 7. Publish npm package (with interactive OTP retry)
-	console.log("\nPublishing to npm...");
-	const npmPkgDir = resolve(ROOT, "packages/lacy");
-	await publishNpm(npmPkgDir);
+	// 6. npm publish
+	await publishNpm(resolve(ROOT, "packages/lacy"));
 
-	console.log(`\n✓ Released ${tag}`);
-	console.log(
-		`  https://github.com/lacymorrow/lacy/releases/tag/${tag}`,
+	// Done
+	p.outro(
+		`${pc.green("✓")} Released ${pc.green(tag)} — ${pc.cyan(`https://github.com/lacymorrow/lacy/releases/tag/${tag}`)}`,
 	);
 }
 
 main().catch((err) => {
-	console.error(err);
+	p.log.error(err.message ?? err);
 	process.exit(1);
 });

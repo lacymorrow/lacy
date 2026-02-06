@@ -19,7 +19,10 @@
   "author": "Lacy Shell Team",
   "license": "MIT",
   "dependencies": {},
-  "devDependencies": {},
+  "devDependencies": {
+    "@clack/prompts": "^1.0.0",
+    "picocolors": "^1.0.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
