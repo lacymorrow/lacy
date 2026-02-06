@@ -69,6 +69,53 @@ function bumpVersion(
 	}
 }
 
+// ── npm publish with OTP ─────────────────────────────────────────────────────
+
+async function publishNpm(cwd: string) {
+	const MAX_ATTEMPTS = 5;
+
+	// First attempt: without OTP (works if auth token has no 2FA requirement)
+	try {
+		run("npm publish --access public", { cwd, stdio: "pipe" });
+		console.log("  ✓ Published to npm");
+		return;
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : String(err);
+		// If the error isn't OTP-related, surface it and bail
+		if (!msg.includes("EOTP") && !msg.includes("one-time pass")) {
+			console.error(`  ✗ npm publish failed: ${msg}`);
+			console.error(`    Retry manually: cd packages/lacy && npm publish --access public`);
+			return;
+		}
+	}
+
+	// OTP required — prompt interactively
+	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+		const otp = await ask(`  Enter npm OTP (attempt ${attempt}/${MAX_ATTEMPTS}): `);
+		if (!otp) {
+			console.error("  ✗ Skipping npm publish (no OTP provided)");
+			return;
+		}
+		try {
+			run(`npm publish --access public --otp ${otp}`, { cwd, stdio: "pipe" });
+			console.log("  ✓ Published to npm");
+			return;
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			if (msg.includes("EOTP") || msg.includes("one-time pass")) {
+				console.error("  ✗ OTP expired or invalid, try again");
+				continue;
+			}
+			console.error(`  ✗ npm publish failed: ${msg}`);
+			console.error(`    Retry manually: cd packages/lacy && npm publish --access public`);
+			return;
+		}
+	}
+
+	console.error(`  ✗ Failed after ${MAX_ATTEMPTS} OTP attempts`);
+	console.error(`    Retry manually: cd packages/lacy && npm publish --access public`);
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -174,18 +221,10 @@ async function main() {
 		`gh release create ${tag} --title "${tag}" --notes "${releaseNotes.replace(/"/g, '\\"')}"`,
 	);
 
-	// 7. Publish npm package
+	// 7. Publish npm package (with interactive OTP retry)
 	console.log("\nPublishing to npm...");
 	const npmPkgDir = resolve(ROOT, "packages/lacy");
-	try {
-		run("npm publish --access public", { cwd: npmPkgDir });
-		console.log("  ✓ Published to npm");
-	} catch {
-		console.error(
-			"  ✗ npm publish failed (may need `npm login` or OTP). You can retry with:",
-		);
-		console.error(`    cd packages/lacy && npm publish --access public`);
-	}
+	await publishNpm(npmPkgDir);
 
 	console.log(`\n✓ Released ${tag}`);
 	console.log(

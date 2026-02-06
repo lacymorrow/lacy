@@ -131,6 +131,25 @@ api_keys:
 
 **Emergency bypass** — Prefix any command with `!` to force shell execution: `!rm -rf node_modules`
 
+## Releasing
+
+Requires [Bun](https://bun.sh), [gh](https://cli.github.com), and `npm login`.
+
+```bash
+bun run release          # interactive — prompts for patch/minor/major
+bun run release patch    # patch bump  (1.5.3 → 1.5.4)
+bun run release minor    # minor bump  (1.5.3 → 1.6.0)
+bun run release major    # major bump  (1.5.3 → 2.0.0)
+bun run release 2.0.0    # explicit version
+```
+
+The script handles the full release flow:
+
+1. Bumps version in both `package.json` files
+2. Commits with `release: v<version>` and tags
+3. Pushes to GitHub and creates a GitHub release
+4. Publishes the npm package (prompts for OTP if required)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
