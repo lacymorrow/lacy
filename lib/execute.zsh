@@ -143,7 +143,9 @@ lacy_shell_precmd() {
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
         LACY_SHELL_PENDING_QUERY=""
-        print -r -- ""
+        # Echo the query so the user can see what was sent to the agent
+        # (The typed text was cleared from BUFFER to prevent shell execution)
+        print -P "  %F{${LACY_COLOR_AGENT}}▸%f $pending"
         lacy_shell_execute_agent "$pending"
     fi
 
