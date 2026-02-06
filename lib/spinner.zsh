@@ -84,7 +84,7 @@ lacy_start_spinner() {
 
             frame_num=$(( frame_num + 1 ))
 
-            # ~12.5fps using zsh builtin read timeout
+            # ~4fps using zsh builtin read timeout
             read -t "$LACY_SPINNER_FRAME_DELAY" -r 2>/dev/null || true
         done
     } &
@@ -93,8 +93,9 @@ lacy_start_spinner() {
 }
 
 lacy_stop_spinner() {
-    # Unconditional cursor restore — safety net even if PID is empty (e.g. Ctrl+C race)
-    printf '\e[?25h'
+    # Unconditional terminal state restore — safety net even if PID is empty (e.g. Ctrl+C race)
+    printf '\e[?25h'   # Cursor visible
+    printf '\e[?7h'    # Line wrapping enabled (agent tools may disable it)
 
     if [[ -z "$LACY_SPINNER_PID" ]]; then
         # Restore job control if it was previously enabled (even if spinner already dead)

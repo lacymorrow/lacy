@@ -35,8 +35,9 @@ use_node_installer() {
     # Skip Node installer if --bash flag is passed
     [[ "$LACY_FORCE_BASH" == "1" ]] && return 1
 
-    # Check if npx is available and we're in an interactive terminal
-    if command -v npx >/dev/null 2>&1 && [[ -t 0 ]]; then
+    # Check if npx is available and we have an interactive terminal
+    # Note: when piped (curl | bash), -t 0 is false but /dev/tty is still available
+    if command -v npx >/dev/null 2>&1 && { [[ -t 0 ]] || [[ -c /dev/tty ]]; }; then
         return 0
     fi
     return 1
@@ -51,7 +52,9 @@ run_node_installer() {
 
     printf "${BLUE}Using interactive installer...${NC}\n"
     printf "\n"
-    if npx --yes lacy@latest; then
+    # Redirect stdin from /dev/tty so the Node process gets an interactive TTY
+    # even when this script is piped (curl | bash)
+    if npx --yes lacy@latest < /dev/tty; then
         exit 0
     fi
 
@@ -492,17 +495,17 @@ main_bash() {
 
 # Main entry point
 main() {
+    # Try Node installer first (better UX) — it handles existing installations too
+    if use_node_installer && run_node_installer; then
+        return
+    fi
+
+    # Bash installer (fallback)
     # Check for existing installation first (interactive menu)
     if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
         check_existing_installation
     fi
 
-    # Try Node installer first (better UX), fall back to bash on failure
-    if use_node_installer && run_node_installer; then
-        return
-    fi
-
-    # Bash installer
     main_bash
 }
 

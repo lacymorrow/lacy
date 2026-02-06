@@ -483,8 +483,11 @@ ${pc.dim('https://github.com/lacymorrow/lacy')}
       const updateSpinner = p.spinner();
       updateSpinner.start('Updating Lacy');
 
+      // Determine which directory actually exists
+      const updateDir = existsSync(INSTALL_DIR) ? INSTALL_DIR : INSTALL_DIR_OLD;
+
       try {
-        execSync('git pull origin main', { cwd: INSTALL_DIR, stdio: 'pipe' });
+        execSync('git pull origin main', { cwd: updateDir, stdio: 'pipe' });
         updateSpinner.stop('Lacy updated');
         p.log.success('Update complete!');
 

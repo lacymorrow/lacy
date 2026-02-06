@@ -164,7 +164,7 @@ EOF
                     kill "$LACY_SPINNER_PID" 2>/dev/null
                     # Brief delay for spinner's terminal output to flush
                     sleep "$LACY_TERMINAL_FLUSH_DELAY"
-                    printf '\e[2K\r\e[?25h'
+                    printf '\e[2K\r\e[?25h\e[?7h'
                 fi
                 _spinner_killed=true
             fi
@@ -174,7 +174,7 @@ EOF
         if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
             kill "$LACY_SPINNER_PID" 2>/dev/null
             sleep "$LACY_TERMINAL_FLUSH_DELAY"
-            printf '\e[2K\r\e[?25h'
+            printf '\e[2K\r\e[?25h\e[?7h'
         fi
     }
     local exit_code=${pipestatus[1]}

@@ -110,8 +110,9 @@ lacy_shell_precmd() {
     # Capture exit code immediately — must be the first line
     local last_exit=$?
 
-    # Ensure cursor is visible (safety net for interrupted spinners)
-    printf '\e[?25h'
+    # Ensure terminal state is clean (safety net for interrupted spinners / agent tools)
+    printf '\e[?25h'   # Cursor visible
+    printf '\e[?7h'    # Line wrapping enabled
 
     # Check reroute candidate: if the command failed with a non-signal exit
     # code (< 128), re-route to agent. Exit codes >= 128 are signal-based
