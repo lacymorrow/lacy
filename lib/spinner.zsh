@@ -84,8 +84,7 @@ lacy_start_spinner() {
 
             frame_num=$(( frame_num + 1 ))
 
-            # ~4fps using zsh builtin read timeout
-            read -t "$LACY_SPINNER_FRAME_DELAY" -r 2>/dev/null || true
+            sleep "$LACY_SPINNER_FRAME_DELAY"
         done
     } &
 

@@ -61,11 +61,12 @@ lacy_shell_smart_accept_line() {
             # Add to history before clearing buffer
             print -s -- "$input"
 
-            # Clear the line, accept to exit ZLE, then stream below a fresh line
+            # Defer agent execution to precmd — output produced inside a ZLE
+            # widget (after zle .accept-line) confuses ZLE's cursor tracking,
+            # causing the prompt to overwrite short (one-line) results.
+            LACY_SHELL_PENDING_QUERY="$input"
             BUFFER=""
             zle .accept-line
-            print -r -- ""
-            lacy_shell_execute_agent "$input"
             ;;
     esac
 }
@@ -138,6 +139,14 @@ lacy_shell_precmd() {
         lacy_shell_quit
         return
     fi
+    # Handle pending agent query (deferred from ZLE widget for clean cursor tracking)
+    if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
+        local pending="$LACY_SHELL_PENDING_QUERY"
+        LACY_SHELL_PENDING_QUERY=""
+        print -r -- ""
+        lacy_shell_execute_agent "$pending"
+    fi
+
     # If a Ctrl-C message is currently displayed, skip redraw to preserve it
     if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]] && kill -0 "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null; then
         return
