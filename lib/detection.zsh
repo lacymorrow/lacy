@@ -79,9 +79,13 @@ lacy_shell_classify_input() {
     # Trim trailing whitespace
     input="${input%"${input##*[^[:space:]]}"}"
 
-    # Empty input = neutral
+    # Empty input - show mode color in shell/agent, neutral in auto
     if [[ -z "$input" ]]; then
-        echo "neutral"
+        case "$LACY_SHELL_CURRENT_MODE" in
+            "shell") echo "shell" ;;
+            "agent") echo "agent" ;;
+            *) echo "neutral" ;;
+        esac
         return
     fi
 
