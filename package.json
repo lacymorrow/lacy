@@ -1,6 +1,6 @@
 {
   "name": "lacy",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Talk to your terminal — AI agent routing for your shell",
   "main": "lacy.plugin.zsh",
   "scripts": {
