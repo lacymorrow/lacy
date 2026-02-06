@@ -4,7 +4,8 @@
   "description": "Talk to your terminal — AI agent routing for your shell",
   "main": "lacy.plugin.zsh",
   "scripts": {
-    "install": "./install.sh"
+    "install": "./install.sh",
+    "release": "bun run script/release.ts"
   },
   "keywords": [
     "shell",
