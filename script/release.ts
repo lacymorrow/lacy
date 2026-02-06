@@ -13,7 +13,7 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -21,6 +21,8 @@ const PACKAGE_JSONS = [
 	resolve(ROOT, "package.json"),
 	resolve(ROOT, "packages/lacy/package.json"),
 ];
+const HOMEBREW_TAP = resolve(ROOT, "../homebrew-tap");
+const HOMEBREW_FORMULA = resolve(HOMEBREW_TAP, "Formula/lacy.rb");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,71 +62,169 @@ function cancelled(): never {
 	process.exit(0);
 }
 
-// ── npm publish with OTP ─────────────────────────────────────────────────────
+/** Check if an execSync error is an npm OTP error */
+function isOtpError(err: unknown): boolean {
+	const check = (s: string) =>
+		s.includes("EOTP") || s.includes("one-time pass");
+	if (err instanceof Error) {
+		if (check(err.message)) return true;
+		if ("stderr" in err && typeof err.stderr === "string" && check(err.stderr))
+			return true;
+		if ("stdout" in err && typeof err.stdout === "string" && check(err.stdout))
+			return true;
+	}
+	return check(String(err));
+}
 
-async function publishNpm(cwd: string) {
+/** Get a human-readable error message from an execSync error */
+function errorText(err: unknown): string {
+	if (err instanceof Error) {
+		if ("stderr" in err && typeof err.stderr === "string" && err.stderr.trim())
+			return err.stderr.trim();
+		return err.message;
+	}
+	return String(err);
+}
+
+// ── npm publish ──────────────────────────────────────────────────────────────
+
+async function publishNpm(cwd: string): Promise<boolean> {
 	const MAX_ATTEMPTS = 5;
-	const spinner = p.spinner();
+	let needsOtp = false;
 
-	// First attempt: without OTP
+	// First attempt: without OTP (works if 2FA isn't required)
+	const spinner = p.spinner();
 	spinner.start("Publishing to npm");
 	try {
 		run("npm publish --access public", { cwd });
 		spinner.stop(pc.green("Published to npm"));
-		return;
+		return true;
 	} catch (err: unknown) {
-		const msg = err instanceof Error ? err.message : String(err);
-		if (!msg.includes("EOTP") && !msg.includes("one-time pass")) {
+		if (isOtpError(err)) {
+			spinner.stop("npm requires OTP");
+			needsOtp = true;
+		} else {
 			spinner.stop(pc.red("npm publish failed"));
-			p.log.error(msg);
-			p.log.info(
-				`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
-			);
-			return;
+			p.log.error(errorText(err));
+
+			const skip = await p.confirm({
+				message: "Skip npm publish and continue?",
+				initialValue: true,
+			});
+			if (p.isCancel(skip) || !skip) cancelled();
+			return false;
 		}
-		spinner.stop("OTP required");
 	}
 
 	// OTP required — prompt interactively
-	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-		const otp = await p.text({
-			message: `Enter npm OTP${attempt > 1 ? pc.dim(` (attempt ${attempt}/${MAX_ATTEMPTS})`) : ""}`,
-			placeholder: "123456",
-			validate: (v) => {
-				if (!v || !/^\d{6}$/.test(v.trim())) return "OTP must be 6 digits";
-			},
-		});
+	if (needsOtp) {
+		for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+			const otp = await p.text({
+				message: `Enter npm OTP${attempt > 1 ? pc.dim(` (attempt ${attempt}/${MAX_ATTEMPTS})`) : ""}`,
+				placeholder: "123456",
+				validate: (v) => {
+					if (!v || !/^\d{6}$/.test(v.trim())) return "OTP must be 6 digits";
+				},
+			});
 
-		if (p.isCancel(otp)) {
-			p.log.warn("Skipping npm publish");
-			return;
-		}
-
-		const spinner = p.spinner();
-		spinner.start("Publishing to npm");
-		try {
-			run(`npm publish --access public --otp ${otp}`, { cwd });
-			spinner.stop(pc.green("Published to npm"));
-			return;
-		} catch (err: unknown) {
-			const msg = err instanceof Error ? err.message : String(err);
-			if (msg.includes("EOTP") || msg.includes("one-time pass")) {
-				spinner.stop(pc.yellow("OTP expired or invalid"));
-				continue;
+			if (p.isCancel(otp)) {
+				p.log.warn("Skipping npm publish");
+				return false;
 			}
-			spinner.stop(pc.red("npm publish failed"));
-			p.log.error(msg);
-			p.log.info(
-				`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
-			);
-			return;
+
+			const retrySpinner = p.spinner();
+			retrySpinner.start("Publishing to npm");
+			try {
+				run(`npm publish --access public --otp ${otp}`, { cwd });
+				retrySpinner.stop(pc.green("Published to npm"));
+				return true;
+			} catch (err: unknown) {
+				if (isOtpError(err)) {
+					retrySpinner.stop(pc.yellow("OTP expired or invalid"));
+					continue;
+				}
+				retrySpinner.stop(pc.red("npm publish failed"));
+				p.log.error(errorText(err));
+
+				const skip = await p.confirm({
+					message: "Skip npm publish and continue?",
+					initialValue: true,
+				});
+				if (p.isCancel(skip) || !skip) cancelled();
+				return false;
+			}
 		}
+
+		p.log.error(`Failed after ${MAX_ATTEMPTS} OTP attempts`);
+		p.log.info(
+			`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
+		);
+		return false;
 	}
 
-	p.log.error(`Failed after ${MAX_ATTEMPTS} OTP attempts`);
-	p.log.info(
-		`Retry manually: ${pc.cyan("cd packages/lacy && npm publish --access public")}`,
-	);
+	return false;
+}
+
+// ── Homebrew ─────────────────────────────────────────────────────────────────
+
+async function publishHomebrew(tag: string, version: string) {
+	if (!existsSync(HOMEBREW_FORMULA)) {
+		p.log.warn(
+			`Homebrew tap not found at ${pc.dim(HOMEBREW_FORMULA)}. Skipping.`,
+		);
+		return;
+	}
+
+	const doHomebrew = await p.confirm({
+		message: "Update Homebrew formula?",
+		initialValue: true,
+	});
+	if (p.isCancel(doHomebrew) || !doHomebrew) {
+		p.log.info("Skipping Homebrew");
+		return;
+	}
+
+	const brewSpinner = p.spinner();
+	brewSpinner.start("Updating Homebrew formula");
+
+	try {
+		// Download the release tarball and compute SHA256
+		const tarballUrl = `https://github.com/lacymorrow/lacy/archive/refs/tags/${tag}.tar.gz`;
+		const sha256 = run(
+			`curl -sL "${tarballUrl}" | shasum -a 256 | cut -d' ' -f1`,
+		).trim();
+
+		if (!sha256 || sha256.length !== 64) {
+			brewSpinner.stop(pc.red("Failed to compute SHA256"));
+			p.log.error(`Got: ${sha256}`);
+			return;
+		}
+
+		// Update the formula
+		let formula = readFileSync(HOMEBREW_FORMULA, "utf-8");
+		formula = formula.replace(
+			/url "https:\/\/github\.com\/lacymorrow\/lacy\/archive\/refs\/tags\/v[^"]+\.tar\.gz"/,
+			`url "${tarballUrl}"`,
+		);
+		formula = formula.replace(
+			/sha256 "[a-f0-9]+"/,
+			`sha256 "${sha256}"`,
+		);
+		writeFileSync(HOMEBREW_FORMULA, formula);
+
+		// Commit and push
+		run("git add Formula/lacy.rb", { cwd: HOMEBREW_TAP });
+		run(`git commit -m "lacy: update to ${tag}"`, { cwd: HOMEBREW_TAP });
+		run("git push", { cwd: HOMEBREW_TAP });
+
+		brewSpinner.stop(`Homebrew formula updated to ${pc.green(tag)}`);
+	} catch (err: unknown) {
+		brewSpinner.stop(pc.red("Homebrew update failed"));
+		p.log.error(errorText(err));
+		p.log.info(
+			`Update manually: ${pc.cyan(`edit ${HOMEBREW_FORMULA}`)}`,
+		);
+	}
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -250,6 +350,9 @@ async function main() {
 
 	// 6. npm publish
 	await publishNpm(resolve(ROOT, "packages/lacy"));
+
+	// 7. Homebrew
+	await publishHomebrew(tag, newVersion);
 
 	// Done
 	p.outro(
