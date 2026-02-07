@@ -42,7 +42,7 @@ Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and
 
 In AUTO mode, routing is determined by:
 
-1. **Agent words** (~150 common conversational words like `perfect`, `thanks`, `yes`, `no`, `explain`, `help`) → Agent (always, even single-word). Defined in `LACY_AGENT_WORDS` in `lib/core/constants.sh`.
+1. **Agent words** (~150 common conversational words like `perfect`, `thanks`, `yes`, `no`, `explain`, `why`) → Agent (always, even single-word). Defined in `LACY_AGENT_WORDS` in `lib/core/constants.sh`.
 2. **Shell reserved words** (`do`, `done`, `then`, `else`, `elif`, `fi`, `esac`, `in`, `select`, `function`, `coproc`, `{`, `}`, `!`, `[[`) → Agent (Layer 1 — these pass `command -v` but are never standalone commands)
 3. First word is valid command → Shell
 4. Single word, not a command → Shell (typo, let it error)

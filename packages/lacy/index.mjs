@@ -24,7 +24,7 @@ function detectShell() {
   const shell = process.env.SHELL || "";
   const base = shell.split("/").pop();
   if (base === "bash") return "bash";
-  return "zsh"; // default (fish not yet supported)
+  return "zsh"; // default
 }
 
 function getShellConfig(shell) {
@@ -481,7 +481,7 @@ async function install() {
   const sourceLine = `source ${INSTALL_DIR}/${pluginFile}`;
   const pathLine = `export PATH="${INSTALL_DIR}/bin:$PATH"`;
 
-  // Ensure parent directory exists (for fish: ~/.config/fish/conf.d/)
+  // Ensure parent directory exists
   const rcDir = rcFile.substring(0, rcFile.lastIndexOf("/"));
   mkdirSync(rcDir, { recursive: true });
 
