@@ -2,7 +2,7 @@
 
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import {
   existsSync,
   mkdirSync,
@@ -18,6 +18,37 @@ const INSTALL_DIR = join(homedir(), ".lacy");
 const INSTALL_DIR_OLD = join(homedir(), ".lacy-shell");
 const CONFIG_FILE = join(INSTALL_DIR, "config.yaml");
 const REPO_URL = "https://github.com/lacymorrow/lacy.git";
+
+// ============================================================================
+// Terminal state safety net
+// ============================================================================
+// @clack/prompts puts stdin into raw mode during interactive prompts. If the
+// process exits abnormally (unhandled error, SIGINT during a prompt, etc.),
+// raw mode is never restored and the parent shell's tty is left corrupted —
+// breaking Ctrl+C, paste, and other keyboard shortcuts until a new terminal
+// window is opened. These handlers ensure we always clean up.
+
+function restoreTerminalState() {
+  try {
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
+    }
+  } catch {
+    // stdin may already be destroyed
+  }
+  // Restore cursor visibility and line wrapping
+  process.stdout.write("\x1b[?25h\x1b[?7h");
+}
+
+process.on("exit", restoreTerminalState);
+
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    restoreTerminalState();
+    // Re-raise so the parent process sees the correct exit code
+    process.exit(128 + ({ SIGINT: 2, SIGTERM: 15, SIGHUP: 1 }[signal]));
+  });
+}
 
 // Shell detection and per-shell configuration
 function detectShell() {
@@ -135,15 +166,34 @@ async function restartShell(
 
   if (restart) {
     const cmd = shellCmd || getShellConfig(detectShell()).shellCmd;
-    // Use exec to replace the current process (no nested shell)
     p.log.info(`Restarting ${cmd}...`);
-    try {
-      execSync(`exec ${cmd} -l`, { stdio: "inherit" });
-    } catch {
-      // exec replaces the process so this only runs if it fails
-      p.log.warn(`Could not restart. Please run: ${cmd} -l`);
-    }
-    process.exit(0);
+
+    // Restore terminal state before handing off to the new shell
+    restoreTerminalState();
+
+    // Spawn a new login shell that inherits our stdio, then exit Node.
+    // We use spawn (not execSync) to avoid creating a nested shell —
+    // execSync("exec ...") only replaces the *child* process, not Node,
+    // leaving the user in a nested shell with corrupted terminal state.
+    const child = spawn(cmd, ["-l"], {
+      stdio: "inherit",
+      // Let the child own the terminal
+      detached: false,
+    });
+
+    child.on("error", () => {
+      p.log.warn(`Could not restart. Please run: exec ${cmd} -l`);
+      process.exit(0);
+    });
+
+    // When the spawned shell exits (user typed 'exit'), exit Node too
+    child.on("exit", (code) => {
+      process.exit(code ?? 0);
+    });
+
+    // Prevent Node from exiting while the shell is running
+    // (the child keeps the event loop alive via stdio, but be explicit)
+    return new Promise(() => {});
   }
 }
 
@@ -900,6 +950,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
 }
 
 main().catch((e) => {
+  restoreTerminalState();
   p.log.error(e.message);
   process.exit(1);
 });

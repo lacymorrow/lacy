@@ -127,10 +127,16 @@ run_node_installer() {
     # Redirect stdin from /dev/tty so the Node process gets an interactive TTY
     # even when this script is piped (curl | bash)
     if npx --yes "$pkg" < /dev/tty; then
+        # Restore terminal state — the Node process uses @clack/prompts which
+        # toggles raw mode on the tty. If Node exits without restoring it
+        # (crash, SIGINT, etc.), the parent shell's tty is left corrupted.
+        stty sane 2>/dev/null
         exit 0
     fi
 
     # npx failed for some reason, fall back
+    # Restore terminal state in case Node corrupted it before failing
+    stty sane 2>/dev/null
     printf "\n"
     printf "${YELLOW}Falling back to standard installer...${NC}\n"
     printf "\n"
