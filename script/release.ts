@@ -23,6 +23,7 @@ const PACKAGE_JSONS = [
 	resolve(ROOT, "package.json"),
 	resolve(ROOT, "packages/lacy/package.json"),
 ];
+const BIN_LACY = resolve(ROOT, "bin/lacy");
 const HOMEBREW_TAP = resolve(ROOT, "../homebrew-tap");
 const HOMEBREW_FORMULA = resolve(HOMEBREW_TAP, "Formula/lacy.rb");
 
@@ -216,6 +217,10 @@ async function publishHomebrew(tag: string, version: string) {
 	brewSpinner.start("Updating Homebrew formula");
 
 	try {
+		// Pull first to avoid rebase conflicts with unstaged changes
+		run("git checkout main", { cwd: HOMEBREW_TAP });
+		run("git pull --rebase origin main", { cwd: HOMEBREW_TAP });
+
 		// Download the release tarball and compute SHA256
 		const tarballUrl = `https://github.com/lacymorrow/lacy/archive/refs/tags/${tag}.tar.gz`;
 		const sha256 = run(
@@ -240,8 +245,7 @@ async function publishHomebrew(tag: string, version: string) {
 		);
 		writeFileSync(HOMEBREW_FORMULA, formula);
 
-		// Commit and push (pull first to avoid rejected pushes)
-		run("git pull --rebase origin main", { cwd: HOMEBREW_TAP });
+		// Commit and push
 		run("git add Formula/lacy.rb", { cwd: HOMEBREW_TAP });
 		run(`git commit -m "lacy: update to ${tag}"`, { cwd: HOMEBREW_TAP });
 		run("git push", { cwd: HOMEBREW_TAP });
@@ -409,8 +413,17 @@ async function main() {
 		pkg.version = newVersion;
 		writeJson(path, pkg);
 	}
+	// Also bump the fallback version in bin/lacy
+	if (existsSync(BIN_LACY)) {
+		let binContent = readFileSync(BIN_LACY, "utf-8");
+		binContent = binContent.replace(
+			/^VERSION_FALLBACK="[^"]*"/m,
+			`VERSION_FALLBACK="${newVersion}"`,
+		);
+		writeFileSync(BIN_LACY, binContent);
+	}
 	bumpSpinner.stop(
-		`Updated ${pc.cyan("package.json")} → ${pc.green(newVersion)}`,
+		`Updated ${pc.cyan("package.json")} + ${pc.cyan("bin/lacy")} → ${pc.green(newVersion)}`,
 	);
 
 	// 2. Changelog
@@ -430,7 +443,7 @@ async function main() {
 	// 3. Commit + tag
 	const gitSpinner = p.spinner();
 	gitSpinner.start("Committing and tagging");
-	run("git add package.json packages/lacy/package.json");
+	run("git add package.json packages/lacy/package.json bin/lacy");
 	run(`git commit -m "release: ${tag}" --no-verify`);
 	run(`git tag ${tag}`);
 	gitSpinner.stop(`Committed and tagged ${pc.green(tag)}`);

@@ -3,7 +3,16 @@
 # Lacy Shell - Info command
 # Shows basic information and guides users to setup
 
-printf '\e[38;5;75m%s\e[0m\n' "🔧 Lacy Shell v0.1.0"
+_lacy_info_version() {
+    local pkg="${HOME}/.lacy/package.json"
+    if [[ -f "$pkg" ]]; then
+        grep '"version"' "$pkg" 2>/dev/null | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//'
+    else
+        echo "unknown"
+    fi
+}
+
+printf '\e[38;5;75m%s\e[0m\n' "🔧 Lacy Shell v$(_lacy_info_version)"
 echo
 printf '%s\n' "Lacy Shell detects natural language and routes it to AI coding agents."
 echo

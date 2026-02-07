@@ -12,12 +12,37 @@ import {
   rmSync,
 } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const INSTALL_DIR = join(homedir(), ".lacy");
 const INSTALL_DIR_OLD = join(homedir(), ".lacy-shell");
 const CONFIG_FILE = join(INSTALL_DIR, "config.yaml");
 const REPO_URL = "https://github.com/lacymorrow/lacy.git";
+
+// Version — read from installed package.json (single source of truth),
+// fall back to this npm package's own package.json
+function getVersion() {
+  // Try the installed copy first
+  for (const dir of [INSTALL_DIR, INSTALL_DIR_OLD]) {
+    const pkgPath = join(dir, "package.json");
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+        if (pkg.version) return pkg.version;
+      } catch {}
+    }
+  }
+  // Fall back to this package's own version
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const pkg = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
+    if (pkg.version) return pkg.version;
+  } catch {}
+  return "unknown";
+}
+
+const VERSION = getVersion();
 
 // ============================================================================
 // Terminal state safety net
@@ -273,7 +298,7 @@ async function doUninstall({ askConfirm = true } = {}) {
 
 async function uninstall() {
   console.clear();
-  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)));
+  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)) + pc.dim(` v${VERSION}`));
 
   if (!isInstalled()) {
     p.log.warn("Lacy Shell is not installed");
@@ -292,7 +317,7 @@ async function uninstall() {
 
 async function install() {
   console.clear();
-  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)));
+  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)) + pc.dim(` v${VERSION}`));
 
   // Detect shell
   const shell = detectShell();
@@ -597,8 +622,11 @@ auto_detection:
     configSpinner.stop("Configuration created");
   }
 
+  // Re-read version after install (repo was just cloned/updated)
+  const installedVersion = getVersion();
+
   // Success message
-  p.log.success(pc.green("Installation complete!"));
+  p.log.success(pc.green(`Installation complete!`) + pc.dim(` v${installedVersion}`));
 
   p.note(
     `${pc.cyan("what files are here")}  ${pc.dim("→ AI answers")}
@@ -639,7 +667,7 @@ async function main() {
       const content = readFileSync(infoPath, "utf-8");
       console.log(content);
     } else {
-      console.log(`\n${pc.magenta(pc.bold("🔧 Lacy Shell"))} v${require("./package.json").version || "1.6.5"}\n`);
+      console.log(`\n${pc.magenta(pc.bold("🔧 Lacy Shell"))} v${VERSION}\n`);
       console.log("Lacy Shell detects natural language and routes it to AI coding agents.\n");
       console.log("Quick tips:");
       console.log("  • Type normally for shell commands");
@@ -664,7 +692,7 @@ async function main() {
 
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-${pc.magenta(pc.bold("Lacy Shell"))} - Talk directly to your shell
+${pc.magenta(pc.bold("Lacy Shell"))} ${pc.dim(`v${VERSION}`)} - Talk directly to your shell
 
 ${pc.bold("Usage:")}
   npx lacy              Install Lacy Shell
@@ -691,7 +719,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
   // If already installed, show dashboard + menu
   if (isInstalled()) {
     console.clear();
-    p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)));
+    p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)) + pc.dim(` v${VERSION}`));
 
     // Show current status
     const active = readConfigValue("active");
@@ -851,7 +879,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
 
         const lines = [
           `  Installed:  ${pc.green(dir)}`,
-          sha ? `  Version:    git ${pc.dim(sha)}` : null,
+          `  Version:    ${pc.cyan("v" + VERSION)}${sha ? pc.dim(` (${sha})`) : ""}`,
           `  Shell:      ${pc.cyan(shell)} ${rcConfigured ? pc.green("configured") : pc.yellow("not configured")}`,
           `  Config:     ${hasConfig ? pc.green("exists") : pc.yellow("missing")}`,
           `  Tool:       ${pc.cyan(active || "auto-detect")}`,
@@ -882,7 +910,8 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           : INSTALL_DIR_OLD;
         try {
           execSync("git pull origin main", { cwd: updateDir, stdio: "pipe" });
-          updateSpinner.stop("Lacy updated");
+          const updatedVersion = getVersion();
+          updateSpinner.stop(`Lacy updated to v${updatedVersion}`);
           p.log.success("Update complete!");
           await restartShell();
           p.outro("Restart your terminal to apply changes.");

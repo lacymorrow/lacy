@@ -35,6 +35,14 @@ if [[ ! "$LACY_CHANNEL" =~ ^[a-zA-Z0-9._-]+$ ]]; then
     exit 1
 fi
 
+# Version — read from installed or repo package.json
+get_installed_version() {
+    local pkg_file="${INSTALL_DIR}/package.json"
+    if [[ -f "$pkg_file" ]]; then
+        grep '"version"' "$pkg_file" 2>/dev/null | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//'
+    fi
+}
+
 # Selected tool (set during installation)
 SELECTED_TOOL=""
 CUSTOM_COMMAND=""
@@ -154,6 +162,11 @@ print_banner() {
     printf "                  |___/  \n"
     printf "${NC}"
     printf "${CYAN}Talk directly to your shell${NC}\n"
+    local version
+    version=$(get_installed_version)
+    if [[ -n "$version" ]]; then
+        printf "${DIM}  v${version}${NC}\n"
+    fi
     if [[ "$LACY_CHANNEL" != "latest" ]]; then
         printf "${MAGENTA}${BOLD}  [${LACY_CHANNEL}]${NC}\n"
     fi
@@ -389,8 +402,11 @@ install_plugin() {
         }
     fi
 
-    printf "${GREEN}✓ Lacy installed to $INSTALL_DIR${NC}\n"
-    printf "\n"
+    local version
+    version=$(get_installed_version)
+    printf "${GREEN}✓ Lacy installed to $INSTALL_DIR${NC}"
+    [[ -n "$version" ]] && printf " ${DIM}(v${version})${NC}"
+    printf "\n\n"
 }
 
 # Configure shell integration (multi-shell aware)
@@ -537,7 +553,11 @@ EOF
 
 # Show success message
 show_success() {
-    printf "${GREEN}${BOLD}Installation complete!${NC}\n"
+    local version
+    version=$(get_installed_version)
+    printf "${GREEN}${BOLD}Installation complete!${NC}"
+    [[ -n "$version" ]] && printf " ${DIM}v${version}${NC}"
+    printf "\n"
     printf "\n"
     printf "${BOLD}Try it:${NC}\n"
     printf "  ${CYAN}what files are here${NC}  ${DIM}→ AI answers${NC}\n"
@@ -671,7 +691,11 @@ check_existing_installation() {
                     exit 1
                 }
                 if git pull origin main 2>/dev/null || git pull 2>/dev/null; then
-                    printf "${GREEN}✓ Lacy updated${NC}\n"
+                    local updated_version
+                    updated_version=$(get_installed_version)
+                    printf "${GREEN}✓ Lacy updated${NC}"
+                    [[ -n "$updated_version" ]] && printf " ${DIM}(v${updated_version})${NC}"
+                    printf "\n"
                     restart_shell
                 else
                     printf "${RED}Update failed. Try reinstalling.${NC}\n"

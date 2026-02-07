@@ -9,7 +9,7 @@
 
 set -e
 
-VERSION="1.6.5"
+VERSION_FALLBACK="1.7.2"
 INSTALL_DIR="${HOME}/.lacy"
 INSTALL_DIR_OLD="${HOME}/.lacy-shell"
 CONFIG_FILE="${INSTALL_DIR}/config.yaml"
@@ -25,6 +25,21 @@ CYAN=$'\033[0;36m'
 BOLD=$'\033[1m'
 DIM=$'\033[2m'
 NC=$'\033[0m'
+
+# ============================================================================
+# Version — single source of truth is package.json
+# ============================================================================
+
+get_version() {
+    local pkg_file="${INSTALL_DIR}/package.json"
+    if [[ -f "$pkg_file" ]]; then
+        # Extract "version": "x.y.z" without jq (pure bash/grep/sed)
+        grep '"version"' "$pkg_file" 2>/dev/null | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//'
+    fi
+}
+
+VERSION="$(get_version)"
+VERSION="${VERSION:-$VERSION_FALLBACK}"
 
 # ============================================================================
 # Helpers
@@ -205,7 +220,10 @@ cmd_update() {
 
     if [[ -d "${dir}/.git" ]]; then
         if git -C "$dir" pull origin main 2>/dev/null || git -C "$dir" pull 2>/dev/null; then
-            success "Lacy Shell updated"
+            # Re-read version after update
+            VERSION="$(get_version)"
+            VERSION="${VERSION:-$VERSION_FALLBACK}"
+            success "Lacy Shell updated to v${VERSION}"
         else
             die "Update failed. Try: lacy reinstall"
         fi
@@ -242,7 +260,10 @@ cmd_reinstall() {
         success "Configuration preserved"
     fi
 
-    success "Lacy Shell reinstalled"
+    # Re-read version after reinstall
+    VERSION="$(get_version)"
+    VERSION="${VERSION:-$VERSION_FALLBACK}"
+    success "Lacy Shell reinstalled (v${VERSION})"
 
     # Ensure shell is configured
     local rc_file plugin_file source_line
@@ -328,8 +349,8 @@ cmd_status() {
 }
 
 cmd_info() {
-    if [[ -f "$LACY_BASE_DIR/lib/commands/info.sh" ]]; then
-        cat "$LACY_BASE_DIR/lib/commands/info.sh"
+    if [[ -f "${INSTALL_DIR}/lib/commands/info.sh" ]]; then
+        bash "${INSTALL_DIR}/lib/commands/info.sh"
     else
         printf '\e[38;5;75m%s\e[0m\n' "🔧 Lacy Shell v$VERSION"
         echo
@@ -346,7 +367,7 @@ cmd_info() {
 }
 
 cmd_doctor() {
-    printf "\n${BOLD}Lacy Shell Doctor${NC}\n\n"
+    printf "\n${BOLD}Lacy Shell Doctor${NC} ${DIM}v${VERSION}${NC}\n\n"
 
     local issues=0
 
@@ -486,7 +507,7 @@ cmd_setup_bash() {
         active=$(yaml_value "$CONFIG_FILE" "active")
         mode=$(yaml_value "$CONFIG_FILE" "default")
 
-        printf "\n${BOLD}Lacy Shell Settings${NC}\n\n"
+        printf "\n${BOLD}Lacy Shell${NC} ${DIM}v${VERSION}${NC}\n\n"
         printf "  1) Change AI tool     ${DIM}(current: ${active:-auto-detect})${NC}\n"
         printf "  2) Change mode        ${DIM}(current: ${mode:-auto})${NC}\n"
         printf "  3) Edit config        ${DIM}(open in \$EDITOR)${NC}\n"
@@ -607,7 +628,7 @@ cmd_help() {
     fi
 
     cat <<EOF
-${BOLD}Lacy Shell${NC} — Talk directly to your shell
+${BOLD}Lacy Shell${NC} ${DIM}v${VERSION}${NC} — Talk directly to your shell
 
 ${BOLD}Usage:${NC}
   lacy                Enter Lacy Shell (or re-enter after quit)
