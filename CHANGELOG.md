@@ -5,23 +5,45 @@ All notable changes to Lacy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0] - 2026-02-07
+## [1.7.0] - 2026-02-07
 
 ### Added
 
-- **Layer 1: Shell reserved word filtering** — words like `do`, `done`, `then`, `else`, `in`, `select`, `function` that pass `command -v` but are never standalone commands are now routed directly to the agent. Prevents inputs like `do we have a way to uninstall?` from causing shell parse errors
-- **Layer 2: Post-execution natural language detection** — `lacy_shell_detect_natural_language()` analyzes failed command output against 17 error patterns and checks for natural language signals (second word check, 5+ word parse errors). Covers `go ahead`, `make sure`, `find out`, `git me`, etc.
-- `LACY_SHELL_RESERVED_WORDS` constant (15 shell reserved words)
-- `LACY_SHELL_ERROR_PATTERNS` constant (17 error patterns including `unknown command`, `no such command`, `parse error`, `syntax error`, etc.)
-- Expanded `LACY_NL_MARKERS` from 14 to ~108 common English words (articles, pronouns, prepositions, conjunctions, verbs, adverbs, question words, directional words)
-- Hint message shown before auto-reroute: "This looks like a question for the agent — routing automatically."
+- **Bash 4+ adapter** — Lacy Shell now works in Bash 4+ in addition to ZSH. Uses `bind -x` for Enter override, `PROMPT_COMMAND` for post-execution hooks, and `PS1` badge for mode display. Requires Bash 4+ (macOS: `brew install bash`); shows a clear error on Bash 3.2
+- **Standalone CLI** (`bin/lacy`) — pure-bash CLI with zero dependencies. Commands: `lacy setup`, `lacy status`, `lacy doctor`, `lacy update`, `lacy uninstall`, `lacy reinstall`, `lacy config`, `lacy version`, `lacy help`. Delegates to `npx lacy@latest` for rich UI when Node is available, falls back to bash
+- **Multi-shell architecture** — `lib/core/*.sh` (portable Bash 4+/ZSH shared logic), `lib/zsh/*.zsh` (ZLE widgets, `region_highlight`, `print -P`), `lib/bash/*.bash` (`bind -x`, `PROMPT_COMMAND`, `printf` ANSI). Old `lib/*.zsh` files are thin backward-compat wrappers
+- `lacy.plugin.bash` entry point — sets `LACY_SHELL_TYPE=bash`, `_LACY_ARR_OFFSET=0`, loads bash adapter modules
+- `tests/test_bash.bash` — 16 Bash-specific integration tests (detection, prompt, modes, command functions)
+- `tests/test_core.sh` — 81 cross-shell tests (runs under both ZSH and Bash 4+)
+- **Layer 1: Shell reserved word filtering** — words like `do`, `done`, `then`, `else`, `in`, `select`, `function` that pass `command -v` but are never standalone commands are now routed directly to the agent
+- **Layer 2: Post-execution natural language detection** — `lacy_shell_detect_natural_language()` analyzes failed command output against 17 error patterns and checks for NL signals
+- `LACY_SHELL_RESERVED_WORDS`, `LACY_SHELL_ERROR_PATTERNS` constants
+- Expanded `LACY_NL_MARKERS` from 14 to ~108 common English words
 - `NATURAL_LANGUAGE_DETECTION.md` — shared spec for NL detection (synced with lash)
-- Tests for reserved word filtering, NL markers, and `detect_natural_language()` in `tests/test_core.sh`
+- npm installer (`packages/lacy/index.mjs`) rewritten with `@clack/prompts` — interactive setup, tool selection, mode picker, doctor diagnostics
 
 ### Changed
 
-- Reorganized `lib/` into `lib/core/` (shared Bash 4+/ZSH), `lib/zsh/`, `lib/bash/` with backward-compat wrappers
+- Reorganized `lib/` into `lib/core/` (shared), `lib/zsh/`, `lib/bash/` with backward-compat wrappers in old `lib/*.zsh` locations
 - `lacy_shell_classify_input()` now checks `LACY_SHELL_RESERVED_WORDS` before `command -v`
+- `install.sh` now detects Bash vs ZSH and sources the appropriate plugin file
+- `uninstall.sh` cleans up both `~/.lacy` and legacy `~/.lacy-shell` paths
+
+### Fixed
+
+- **Tool invocation with special characters** — replaced `eval` with array-based `_lacy_run_tool_cmd()` so queries containing double quotes (e.g. `what does "map" do`) no longer break command parsing
+- **Ctrl+Space history pollution** (Bash) — the injected `_lacy_mode_toggle_` command is now removed from history immediately
+- **Config cache freshness check inverted** — `config.yaml -nt cache` was incorrectly using the stale cache; now correctly checks `! -nt` so config changes take effect
+- **Config cache write injection** — cache values are now written with `printf %q` instead of raw single-quote interpolation
+- **`bin/lacy setup_tool` crash on non-numeric input** — added regex validation before numeric comparison
+- **`bin/lacy reinstall` destroys user config** — config.yaml is now backed up and restored across reinstall
+- **`yaml_write` sed injection** — sed special characters (`\`, `|`, `&`) in values are now escaped
+- **`commandExists` shell injection** (Node installer) — command names are validated against `/^[a-zA-Z0-9._-]+$/` before `execSync`
+- **PROMPT_COMMAND not restored on cleanup** (Bash) — `lacy_shell_cleanup()` now restores `_LACY_ORIGINAL_PROMPT_COMMAND`
+- **Reroute candidate fires when disabled** — moved disabled/quitting guard before reroute check in both `execute.bash` and `execute.zsh`
+- **`python3` subprocess on every Ctrl+C** (macOS Bash) — replaced with `$(( $(date +%s) * 1000 ))` fallback for second-precision timestamps
+- **`(( PASS++ ))` in tests** — replaced with `PASS=$(( PASS + 1 ))` to avoid exit code 1 when counter is 0
+- Removed dead `lacy_shell_detect_mode()` function from `detection.sh`
 
 ---
 
@@ -284,7 +306,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - JSON escaping edge cases in complex queries (workaround available)
 - MCP server integration is framework-only (servers not auto-started)
-- Limited to zsh shell (other shells planned for future releases)
 
 ### Breaking Changes
 
@@ -300,52 +321,9 @@ None (initial release)
 
 ### Planned Features
 
-#### v1.1.0 (Next Minor Release)
-
 - **Fish shell support**
-- **Bash compatibility layer**
 - **Real MCP server auto-startup**
-- **Performance optimizations**
-- **Extended configuration options**
-
-#### v1.2.0 (Future Release)
-
-- **Machine learning-based detection**
 - **Plugin ecosystem support**
-- **Team collaboration features**
-- **Enhanced MCP integrations**
-- **Custom themes and styling**
-
-#### v2.0.0 (Major Release)
-
-- **Multi-shell architecture**
-- **Advanced AI model support**
-- **Workflow automation**
-- **Enterprise features**
-- **Cloud synchronization**
-
-### Development Roadmap
-
-**Short Term (1-3 months):**
-
-- Bug fixes and stability improvements
-- Community feedback integration
-- Documentation enhancements
-- Performance optimizations
-
-**Medium Term (3-6 months):**
-
-- Shell compatibility expansion
-- MCP ecosystem development
-- Advanced AI features
-- Plugin architecture
-
-**Long Term (6+ months):**
-
-- Enterprise features
-- Cloud integration
-- Machine learning enhancements
-- Advanced automation capabilities
 
 ---
 
@@ -353,6 +331,12 @@ None (initial release)
 
 | Version | Release Date | Key Features                                                               |
 | ------- | ------------ | -------------------------------------------------------------------------- |
+| 1.7.0   | 2026-02-07   | Bash 4+ adapter, standalone CLI, multi-shell architecture, security fixes  |
+| 1.5.0   | 2026-02-07   | NL detection layers 1 & 2, reserved word filtering, error pattern matching |
+| 1.4.0   | 2026-02-04   | Post-exec reroute, NL markers, first-word syntax highlighting              |
+| 1.3.0   | 2026-02-03   | Agent preheating, background server, claude session reuse                  |
+| 1.1.1   | 2026-02-03   | Centralized detection, spinner/cursor fixes, whitespace handling           |
+| 1.1.0   | 2024-12-19   | Smart auto mode, command-first strategy, NL detection                      |
 | 1.0.1   | 2024-12-19   | Production hardening: error handling, emergency recovery, mode persistence |
 | 1.0.0   | 2024-12-19   | Initial release with three modes, AI integration, MCP support              |
 

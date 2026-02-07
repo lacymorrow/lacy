@@ -93,21 +93,21 @@ lacy_shell_init_prompt_once
 
 # After init, PS1 should contain the mode badge
 if [[ "$PS1" == *"AUTO"* ]]; then
-    (( PASS++ ))
+    PASS=$(( PASS + 1 ))
 else
     echo "  FAIL: PS1 should contain AUTO badge"
     echo "    PS1: $PS1"
-    (( FAIL++ ))
+    FAIL=$(( FAIL + 1 ))
 fi
 
 # Mode switch should update prompt
 lacy_shell_set_mode "shell"
 lacy_shell_update_prompt
 if [[ "$PS1" == *"SHELL"* ]]; then
-    (( PASS++ ))
+    PASS=$(( PASS + 1 ))
 else
     echo "  FAIL: PS1 should contain SHELL badge after mode switch"
-    (( FAIL++ ))
+    FAIL=$(( FAIL + 1 ))
 fi
 
 # ============================================================================
@@ -141,10 +141,10 @@ echo ""
 echo "--- Bash Functions ---"
 
 # Check that command functions exist
-if type ask &>/dev/null; then (( PASS++ )); else echo "  FAIL: ask function missing"; (( FAIL++ )); fi
-if type mode &>/dev/null; then (( PASS++ )); else echo "  FAIL: mode function missing"; (( FAIL++ )); fi
-if type tool &>/dev/null; then (( PASS++ )); else echo "  FAIL: tool function missing"; (( FAIL++ )); fi
-if type quit &>/dev/null; then (( PASS++ )); else echo "  FAIL: quit function missing"; (( FAIL++ )); fi
+if type ask &>/dev/null; then PASS=$(( PASS + 1 )); else echo "  FAIL: ask function missing"; FAIL=$(( FAIL + 1 )); fi
+if type mode &>/dev/null; then PASS=$(( PASS + 1 )); else echo "  FAIL: mode function missing"; FAIL=$(( FAIL + 1 )); fi
+if type tool &>/dev/null; then PASS=$(( PASS + 1 )); else echo "  FAIL: tool function missing"; FAIL=$(( FAIL + 1 )); fi
+if type quit &>/dev/null; then PASS=$(( PASS + 1 )); else echo "  FAIL: quit function missing"; FAIL=$(( FAIL + 1 )); fi
 
 # ============================================================================
 # Results

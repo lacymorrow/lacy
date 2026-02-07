@@ -162,26 +162,6 @@ lacy_shell_should_use_agent() {
     fi
 }
 
-# Determine the appropriate mode for input
-lacy_shell_detect_mode() {
-    local input="$1"
-
-    case "$LACY_SHELL_CURRENT_MODE" in
-        "shell")
-            echo "shell"
-            ;;
-        "agent")
-            echo "agent"
-            ;;
-        "auto")
-            echo "auto"
-            ;;
-        *)
-            echo "shell"  # Default fallback
-            ;;
-    esac
-}
-
 # Initialize detection cache (call at startup)
 lacy_shell_init_detection_cache() {
     LACY_CMD_CACHE_WORD=""
@@ -235,14 +215,14 @@ lacy_shell_detect_natural_language() {
 
     # B1: second word is a natural language marker
     if [[ -n "$second_word" ]] && _lacy_in_list "$second_word" "${LACY_NL_MARKERS[@]}"; then
-        LACY_NL_HINT="This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
+        LACY_NL_HINT="Routing to agent — natural language detected."
         return 0
     fi
 
     # B2: 4+ words and a parse/syntax error
     if (( ${#words[@]} >= 4 )); then
         if [[ "$output_lower" == *"parse error"* || "$output_lower" == *"syntax error"* || "$output_lower" == *"unexpected token"* ]]; then
-            LACY_NL_HINT="This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
+            LACY_NL_HINT="Routing to agent — natural language detected."
             return 0
         fi
     fi

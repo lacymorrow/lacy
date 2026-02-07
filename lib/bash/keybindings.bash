@@ -40,6 +40,8 @@ lacy_shell_setup_keybindings() {
 # Hidden command executed by the Ctrl+Space macro.
 # Runs as a real command so PROMPT_COMMAND fires afterward with updated PS1.
 _lacy_mode_toggle_() {
+    # Remove this injected command from history
+    history -d "$(history 1 | awk '{print $1}')" 2>/dev/null
     lacy_shell_toggle_mode
     lacy_shell_update_prompt
     local new_mode="$LACY_SHELL_CURRENT_MODE"
@@ -59,14 +61,15 @@ lacy_shell_interrupt_handler_bash() {
         return
     fi
 
-    # Get current time in milliseconds (portable)
+    # Get current time in milliseconds (portable, no python3 overhead)
     local current_time
     if command -v gdate >/dev/null 2>&1; then
         current_time=$(gdate +%s%3N)
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        current_time=$(python3 -c 'import time; print(int(time.time() * 1000))')
-    else
+    elif date +%s%3N 2>/dev/null | grep -q '^[0-9]*$'; then
         current_time=$(date +%s%3N)
+    else
+        # macOS: second-precision fallback (adequate for double-tap detection)
+        current_time=$(( $(date +%s) * 1000 ))
     fi
 
     local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))

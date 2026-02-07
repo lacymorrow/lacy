@@ -44,6 +44,12 @@ lacy_shell_cleanup() {
     lacy_shell_cleanup_keybindings_bash
     trap - INT
     unset IGNOREEOF
+    # Restore original PROMPT_COMMAND
+    if [[ -n "$_LACY_ORIGINAL_PROMPT_COMMAND" ]]; then
+        PROMPT_COMMAND="$_LACY_ORIGINAL_PROMPT_COMMAND"
+    else
+        PROMPT_COMMAND=""
+    fi
     LACY_SHELL_QUITTING=false
     LACY_SHELL_ENABLED=false
     LACY_SHELL_LOADED=false

@@ -78,10 +78,10 @@ lacy_shell_load_config() {
         LACY_CONFIG_CACHE_VALID=false
     fi
 
-    # Check if we can use cached config
+    # Check if we can use cached config (cache must be newer than config)
     if [[ "$LACY_CONFIG_CACHE_VALID" == true ]] && \
        [[ -f "$LACY_SHELL_CONFIG_CACHE_FILE" ]] && \
-       [[ "$LACY_SHELL_CONFIG_FILE" -nt "$LACY_SHELL_CONFIG_CACHE_FILE" ]]; then
+       [[ ! "$LACY_SHELL_CONFIG_FILE" -nt "$LACY_SHELL_CONFIG_CACHE_FILE" ]]; then
         # Use cached config - much faster
         source "$LACY_SHELL_CONFIG_CACHE_FILE"
         return
@@ -166,17 +166,18 @@ lacy_shell_load_config() {
         fi
 
         # Cache the parsed configuration for fast future loads
+        # Use printf %q to safely escape values (prevents injection when sourced)
         {
             echo "# Generated config cache - do not edit"
-            echo "LACY_SHELL_CURRENT_MODE='$LACY_SHELL_CURRENT_MODE'"
-            echo "LACY_SHELL_API_OPENAI='$LACY_SHELL_API_OPENAI'"
-            echo "LACY_SHELL_API_ANTHROPIC='$LACY_SHELL_API_ANTHROPIC'"
-            echo "LACY_SHELL_PROVIDER='$LACY_SHELL_PROVIDER'"
-            echo "LACY_SHELL_MODEL_NAME='$LACY_SHELL_MODEL_NAME'"
-            echo "LACY_ACTIVE_TOOL='$LACY_ACTIVE_TOOL'"
-            echo "LACY_CUSTOM_TOOL_CMD='$LACY_CUSTOM_TOOL_CMD'"
-            echo "LACY_SHELL_MCP_SERVERS='$LACY_SHELL_MCP_SERVERS'"
-            echo "LACY_SHELL_MCP_SERVERS_JSON='$LACY_SHELL_MCP_SERVERS_JSON'"
+            printf 'LACY_SHELL_CURRENT_MODE=%q\n' "$LACY_SHELL_CURRENT_MODE"
+            printf 'LACY_SHELL_API_OPENAI=%q\n' "$LACY_SHELL_API_OPENAI"
+            printf 'LACY_SHELL_API_ANTHROPIC=%q\n' "$LACY_SHELL_API_ANTHROPIC"
+            printf 'LACY_SHELL_PROVIDER=%q\n' "$LACY_SHELL_PROVIDER"
+            printf 'LACY_SHELL_MODEL_NAME=%q\n' "$LACY_SHELL_MODEL_NAME"
+            printf 'LACY_ACTIVE_TOOL=%q\n' "$LACY_ACTIVE_TOOL"
+            printf 'LACY_CUSTOM_TOOL_CMD=%q\n' "$LACY_CUSTOM_TOOL_CMD"
+            printf 'LACY_SHELL_MCP_SERVERS=%q\n' "$LACY_SHELL_MCP_SERVERS"
+            printf 'LACY_SHELL_MCP_SERVERS_JSON=%q\n' "$LACY_SHELL_MCP_SERVERS_JSON"
         } > "$LACY_SHELL_CONFIG_CACHE_FILE"
 
         LACY_CONFIG_CACHE_VALID=true

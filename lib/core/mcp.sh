@@ -4,6 +4,20 @@
 # Routes queries to configured AI CLI tools
 # Shared across Bash 4+ and ZSH
 
+# Run a tool command safely — splits command string into array to avoid eval.
+# Usage: _lacy_run_tool_cmd "cmd string" "query"
+_lacy_run_tool_cmd() {
+    local cmd_str="$1"
+    local query="$2"
+    local -a cmd_parts
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        cmd_parts=( ${=cmd_str} )
+    else
+        read -ra cmd_parts <<< "$cmd_str"
+    fi
+    "${cmd_parts[@]}" "$query"
+}
+
 # Tool registry — function-based for maximum portability
 # Usage: cmd=$(lacy_tool_cmd <tool_name>)
 lacy_tool_cmd() {
@@ -108,7 +122,7 @@ EOF
         echo ""
         lacy_start_spinner
         local json_output
-        json_output=$(eval "$claude_cmd \"\$query\"" </dev/tty 2>&1)
+        json_output=$(_lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
         local exit_code=$?
         lacy_stop_spinner
 
@@ -128,7 +142,7 @@ EOF
             lacy_preheat_claude_reset_session
             claude_cmd=$(lacy_preheat_claude_build_cmd)
             lacy_start_spinner
-            json_output=$(eval "$claude_cmd \"\$query\"" </dev/tty 2>&1)
+            json_output=$(_lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
             exit_code=$?
             lacy_stop_spinner
 
@@ -158,7 +172,7 @@ EOF
     # === Generic path (gemini, codex, custom, and fallback) ===
     echo ""
     lacy_start_spinner
-    eval "$cmd \"\$query\"" </dev/tty 2>&1 | {
+    _lacy_run_tool_cmd "$cmd" "$query" </dev/tty 2>&1 | {
         local _spinner_killed=false
         while IFS= read -r line; do
             if ! $_spinner_killed; then

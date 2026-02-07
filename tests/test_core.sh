@@ -198,7 +198,7 @@ assert_eq "non-NL second word → no detect" "1" "$?"
 # Parse error with NL second word
 lacy_shell_detect_natural_language "do We already have a way to uninstall?" "(eval):1: parse error near do" 1
 assert_eq "parse error + NL word → detect" "0" "$?"
-assert_eq "hint set after parse error" "This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode." "$LACY_NL_HINT"
+assert_eq "hint set after parse error" "Routing to agent — natural language detected." "$LACY_NL_HINT"
 
 # go ahead — unknown command
 lacy_shell_detect_natural_language "go ahead and fix it" "go ahead: unknown command" 2

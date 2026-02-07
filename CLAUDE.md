@@ -8,7 +8,7 @@ Enable developers to talk directly to their shell.
 
 ## Project Overview
 
-Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No context switching required.
+Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No context switching required.
 
 **Install location:** `~/.lacy`
 **Package name:** `lacy` (npm)
@@ -28,16 +28,15 @@ Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI 
 - **Green (34)** = will execute in shell
 - **Magenta (200)** = will go to AI agent
 
-**First-word syntax highlighting** via ZSH `region_highlight`:
+**First-word syntax highlighting** (ZSH only, via `region_highlight`):
 
 - First word is highlighted **green bold** for shell commands, **magenta bold** for agent queries
 - Updates on every `zle-line-pre-redraw` (accounts for leading whitespace)
 
-**Mode indicator** (right prompt) shows current mode:
+**Mode indicator** shows current mode:
 
-- `SHELL` (green) = all input goes to shell
-- `AGENT` (magenta) = all input goes to AI
-- `AUTO` (blue) = smart detection (default)
+- ZSH: right prompt (`RPS1`) — `SHELL` (green) / `AGENT` (magenta) / `AUTO` (blue)
+- Bash: PS1 badge — `SHELL` / `AGENT` / `AUTO` with matching colors
 
 ## Auto Mode Logic
 
@@ -96,9 +95,10 @@ All input classification MUST go through this function. It returns one of three 
 
 **Consumers:**
 
-- `keybindings.zsh:lacy_shell_update_input_indicator()` — real-time indicator color
-- `execute.zsh:lacy_shell_smart_accept_line()` — execution routing
-- `keybindings.zsh:lacy_shell_update_first_word_highlight()` — syntax highlighting
+- ZSH: `keybindings.zsh:lacy_shell_update_input_indicator()` — real-time indicator color
+- ZSH: `execute.zsh:lacy_shell_smart_accept_line()` — execution routing
+- ZSH: `keybindings.zsh:lacy_shell_update_first_word_highlight()` — syntax highlighting
+- Bash: `execute.bash:lacy_shell_smart_accept_line_bash()` — execution routing
 
 ### `lacy_shell_detect_natural_language(input, output, exit_code)` — Layer 2 Post-Execution
 
@@ -128,7 +128,8 @@ All tools handle their own authentication - no API keys needed from lacy.
 
 ```
 ~/.lacy/
-├── lacy.plugin.zsh          # Entry point
+├── lacy.plugin.zsh          # Entry point (ZSH)
+├── lacy.plugin.bash         # Entry point (Bash 4+)
 ├── config.yaml              # User configuration
 ├── install.sh               # Installer (bash + npx fallback)
 ├── uninstall.sh             # Uninstaller
@@ -148,7 +149,8 @@ All tools handle their own authentication - no API keys needed from lacy.
     │   ├── prompt.zsh           # Prompt with indicator, mode in right prompt
     │   └── execute.zsh          # Execution routing, reroute candidate logic
     ├── bash/
-    │   ├── keybindings.bash     # bind -x Enter override, Ctrl+Space toggle
+    │   ├── init.bash            # Bash adapter init (sources core + bash modules)
+    │   ├── keybindings.bash     # Macro-based Enter override, Ctrl+Space toggle
     │   ├── prompt.bash          # Mode badge in PS1
     │   └── execute.bash         # Execution routing, reroute candidate logic
     └── *.zsh                    # Backward-compat wrappers → lib/core/ or lib/zsh/
@@ -211,7 +213,7 @@ LACY_NO_NODE=1 bin/lacy setup
 
 - `lib/core/constants.sh` - Colors, paths, `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS`
 - `lib/core/detection.sh` - **`lacy_shell_classify_input()`** (canonical), `lacy_shell_has_nl_markers()`, `lacy_shell_detect_natural_language()`
-- `lib/core/mcp.sh` - `LACY_TOOL_CMD` registry, `lacy_shell_query_agent()` routing
+- `lib/core/mcp.sh` - `_lacy_run_tool_cmd()` safe executor, `lacy_tool_cmd()` registry, `lacy_shell_query_agent()` routing
 - `lib/core/config.sh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
 - `lib/core/spinner.sh` - Braille spinner + shimmer "Thinking" animation during AI queries
 - `lib/core/preheat.sh` - Background server (lash/opencode) + session reuse (claude)
@@ -248,9 +250,18 @@ modes:
 
 - Install path changed from `~/.lacy-shell` to `~/.lacy`
 - Repo (`lib/`) and install dir (`~/.lacy/lib/`) are separate copies — changes must be applied to both
-- Prompt capture is deferred to first `precmd` so user's shell profile loads first
+- Prompt capture is deferred to first `precmd`/`PROMPT_COMMAND` so user's shell profile loads first
 - Indicator only updates when type changes (avoids flickering)
 - Colors: Green=34, Magenta=200, Blue=75, Gray=238
-- Use `print -P` (not `echo`) for colored output outside of prompt strings — `%F{...}%f` escapes are only interpreted by ZSH in prompt context or via `print -P`
+- Use `print -P` (not `echo`) for colored output in ZSH — `%F{...}%f` escapes need `print -P`
+- Use `printf '\e[38;5;Nm...\e[0m'` for colored output in Bash
 - Installer uses `printf` instead of `echo -e` for portability
 - Node installer falls back to bash if npm package not available
+
+### Bash adapter notes
+
+- **Enter key**: Can't use `bind -x` directly on `\C-m` — it replaces accept-line entirely, so shell commands never submit. Instead, bind classification to a hidden key (`\C-x\C-l`) and make `\C-m` a macro: `"\C-x\C-l\C-j"` (classify, then accept-line)
+- **Spinner**: Background `{ ... } &` jobs dump their source on exit via bash's `[N] Done ...` notification. Fix: `disown` the PID immediately after starting; use `kill` + `sleep` instead of `wait` for cleanup
+- **No real-time indicator**: Bash can't redraw PS1 on keystroke (no `zle-line-pre-redraw` equivalent). Mode badge in PS1 updates on each prompt cycle only
+- **Ctrl+Space**: Uses macro `"\C-a\C-k _lacy_mode_toggle_\C-j"` — types hidden command and submits, so PROMPT_COMMAND can update PS1
+- **macOS default bash is 3.2** — adapter requires 4+ and shows a clear error if version is too old. Users install modern bash via `brew install bash`

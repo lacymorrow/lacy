@@ -115,6 +115,12 @@ lacy_shell_precmd() {
     printf '\e[?25h'   # Cursor visible
     printf '\e[?7h'    # Line wrapping enabled
 
+    # Don't run if disabled or quitting
+    if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
+        LACY_SHELL_REROUTE_CANDIDATE=""
+        return
+    fi
+
     # Check reroute candidate: if the command failed with a non-signal exit
     # code (< 128), re-route to agent. Exit codes >= 128 are signal-based
     # (e.g. 130=Ctrl+C, 137=SIGKILL) and should not trigger re-routing.
@@ -126,12 +132,6 @@ lacy_shell_precmd() {
             lacy_shell_execute_agent "$candidate"
             return
         fi
-    fi
-
-    # Don't run if disabled or quitting
-    if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
-        LACY_SHELL_REROUTE_CANDIDATE=""
-        return
     fi
     # Handle deferred quit triggered by Ctrl-D without letting EOF propagate
     if [[ "$LACY_SHELL_DEFER_QUIT" == true ]]; then

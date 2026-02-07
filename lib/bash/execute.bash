@@ -96,6 +96,12 @@ lacy_shell_precmd_bash() {
     printf '\e[?25h'   # Cursor visible
     printf '\e[?7h'    # Line wrapping enabled
 
+    # Don't run if disabled or quitting
+    if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
+        LACY_SHELL_REROUTE_CANDIDATE=""
+        return
+    fi
+
     # Check reroute candidate
     if [[ -n "$LACY_SHELL_REROUTE_CANDIDATE" ]]; then
         local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
@@ -105,12 +111,6 @@ lacy_shell_precmd_bash() {
             lacy_shell_execute_agent "$candidate"
             return
         fi
-    fi
-
-    # Don't run if disabled or quitting
-    if [[ "$LACY_SHELL_ENABLED" != true || "$LACY_SHELL_QUITTING" == true ]]; then
-        LACY_SHELL_REROUTE_CANDIDATE=""
-        return
     fi
 
     # Handle deferred quit triggered by Ctrl-D

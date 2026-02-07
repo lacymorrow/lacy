@@ -86,9 +86,13 @@ yaml_value() {
 # Write a YAML value (replace in-place within a section)
 yaml_write() {
     local file="$1" key="$2" value="$3"
+    # Escape sed special chars in value (delimiter is |)
+    local escaped_value="${value//\\/\\\\}"
+    escaped_value="${escaped_value//|/\\|}"
+    escaped_value="${escaped_value//&/\\&}"
     if grep -q "^[[:space:]]*${key}:" "$file" 2>/dev/null; then
         # Replace existing key — handles both "key: value" and "key:" (empty)
-        sed -i.bak "s|^\\([[:space:]]*${key}:\\).*|\\1 ${value}|" "$file"
+        sed -i.bak "s|^\\([[:space:]]*${key}:\\).*|\\1 ${escaped_value}|" "$file"
         rm -f "${file}.bak"
     fi
 }
@@ -216,12 +220,28 @@ cmd_update() {
 cmd_reinstall() {
     info "Reinstalling Lacy Shell..."
 
+    # Backup user config before removing
+    local config_backup=""
+    if [[ -f "$CONFIG_FILE" ]]; then
+        config_backup=$(mktemp)
+        cp "$CONFIG_FILE" "$config_backup"
+    fi
+
     # Remove existing
     [[ -d "$INSTALL_DIR" ]] && rm -rf "$INSTALL_DIR"
     [[ -d "$INSTALL_DIR_OLD" ]] && rm -rf "$INSTALL_DIR_OLD"
 
     # Clone fresh
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || die "Clone failed"
+
+    # Restore user config
+    if [[ -n "$config_backup" ]]; then
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        cp "$config_backup" "$CONFIG_FILE"
+        rm -f "$config_backup"
+        success "Configuration preserved"
+    fi
+
     success "Lacy Shell reinstalled"
 
     # Ensure shell is configured
@@ -305,6 +325,24 @@ cmd_status() {
     fi
 
     echo ""
+}
+
+cmd_info() {
+    if [[ -f "$LACY_BASE_DIR/lib/commands/info.sh" ]]; then
+        cat "$LACY_BASE_DIR/lib/commands/info.sh"
+    else
+        printf '\e[38;5;75m%s\e[0m\n' "🔧 Lacy Shell v$VERSION"
+        echo
+        printf '%s\n' "Lacy Shell detects natural language and routes it to AI coding agents."
+        echo
+        printf '%s\n' "Quick tips:"
+        printf '  • %s\n' "Type normally for shell commands"
+        printf '  • %s\n' "Type natural language for AI assistance"
+        printf '  • %s\n' "Press Ctrl+Space to toggle modes"
+        echo
+        printf '%s\n' "Run '\e[38;5;200mlacy setup\e[0m' to configure your AI tool and settings."
+        printf '%s\n' "Run '\e[38;5;200mlacy mode\e[0m' to see current mode and legend."
+    fi
 }
 
 cmd_doctor() {
@@ -490,7 +528,7 @@ setup_tool() {
 
     read -p "Select [1-${#tools[@]}]: " choice
 
-    if [[ -z "$choice" ]] || [[ "$choice" -lt 1 ]] || [[ "$choice" -gt ${#tools[@]} ]] 2>/dev/null; then
+    if [[ -z "$choice" ]] || ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 ]] || [[ "$choice" -gt ${#tools[@]} ]]; then
         warn "Cancelled"
         return
     fi
@@ -612,6 +650,7 @@ main() {
         update)     cmd_update "$@" ;;
         reinstall)  cmd_reinstall "$@" ;;
         status|s)   cmd_status "$@" ;;
+        info)       cmd_info ;;
         doctor)     cmd_doctor "$@" ;;
         config|c)   cmd_config "$@" ;;
         version|-v|--version) cmd_version ;;

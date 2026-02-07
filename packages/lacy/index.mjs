@@ -87,6 +87,7 @@ const MODES = [
 ];
 
 function commandExists(cmd) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(cmd)) return false;
   try {
     execSync(`command -v ${cmd}`, { stdio: "ignore" });
     return true;
@@ -566,6 +567,25 @@ Commands:
 
 async function main() {
   const args = process.argv.slice(2);
+
+  // Handle info subcommand
+  if (args[0] === "info") {
+    const infoPath = join(INSTALL_DIR, "lib/commands/info.sh");
+    if (existsSync(infoPath)) {
+      const content = readFileSync(infoPath, "utf-8");
+      console.log(content);
+    } else {
+      console.log(`\n${pc.magenta(pc.bold("🔧 Lacy Shell"))} v${require("./package.json").version || "1.6.5"}\n`);
+      console.log("Lacy Shell detects natural language and routes it to AI coding agents.\n");
+      console.log("Quick tips:");
+      console.log("  • Type normally for shell commands");
+      console.log("  • Type natural language for AI assistance");
+      console.log("  • Press Ctrl+Space to toggle modes\n");
+      console.log(`Run '${pc.cyan("lacy setup")}' to configure your AI tool and settings.`);
+      console.log(`Run '${pc.cyan("lacy mode")}' to see current mode and legend.`);
+    }
+    return;
+  }
 
   // Handle uninstall subcommand/flag
   if (args[0] === "uninstall") {
