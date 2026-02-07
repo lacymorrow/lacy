@@ -332,15 +332,15 @@ select_tool() {
     else
         # Auto-detect: check if any tool is available
         printf "\n"
-        local any_tool_found=0
+        local first_tool_found=""
         for t in lash claude opencode gemini codex; do
             if command -v "$t" >/dev/null 2>&1; then
-                any_tool_found=1
+                first_tool_found="$t"
                 break
             fi
         done
 
-        if [[ $any_tool_found -eq 0 ]]; then
+        if [[ -z "$first_tool_found" ]]; then
             printf "${YELLOW}No AI CLI tools are installed.${NC}\n"
             printf "Would you like to install ${GREEN}lash${NC} (recommended)?\n"
             printf "\n"
@@ -354,7 +354,7 @@ select_tool() {
                 printf "${YELLOW}Note: You'll need to install a tool before using Lacy.${NC}\n"
             fi
         else
-            printf "Using: ${GREEN}auto-detect${NC} (first available tool)\n"
+            printf "Using: ${GREEN}auto-detect${NC} (currently: ${GREEN}${first_tool_found}${NC})\n"
         fi
     fi
 

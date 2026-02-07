@@ -456,6 +456,11 @@ async function install() {
     p.log.info(`Custom command: ${pc.cyan(customCommand)}`);
   }
 
+  // Show which tool auto-detect resolves to
+  if (selectedTool === "auto" && detected.length > 0) {
+    p.log.info(`Using: ${pc.green("auto-detect")} (currently: ${pc.green(detected[0])})`);
+  }
+
   // Offer to install lash if selected but not installed,
   // or if auto-detect was chosen but no tools are available
   const needsLashInstall =
