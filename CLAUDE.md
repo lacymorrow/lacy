@@ -43,21 +43,28 @@ Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI 
 
 In AUTO mode, routing is determined by:
 
-1. `what ...` → Agent (hardcoded override)
-2. First word is valid command → Shell
-3. Single word, not a command → Shell (typo, let it error)
-4. Multiple words, first not a command → Agent (natural language)
-5. Valid command + 3+ bare words + NL marker → Shell first, then agent on failure (post-execution reroute)
+1. `what`/`yes`/`no` → Agent (hardcoded overrides in `LACY_HARD_AGENT_INDICATORS`)
+2. **Shell reserved words** (`do`, `done`, `then`, `else`, `elif`, `fi`, `esac`, `in`, `select`, `function`, `coproc`, `{`, `}`, `!`, `[[`) → Agent (Layer 1 — these pass `command -v` but are never standalone commands)
+3. First word is valid command → Shell
+4. Single word, not a command → Shell (typo, let it error)
+5. Multiple words, first not a command → Agent (natural language)
+6. Valid command + 3+ bare words + NL marker → Shell first, then agent on failure (post-execution reroute)
 
-Rule 5 detail: `lacy_shell_has_nl_markers()` counts bare words after the first word (excluding flags, paths, numbers, variables). If there are 3+ bare words and at least one is a strong NL marker (articles, pronouns, question words, "please"), the command is flagged via `LACY_SHELL_REROUTE_CANDIDATE`. In `precmd`, if the command exited non-zero with code < 128 (not signal-based), it reroutes to the agent. Only active in auto mode.
+Rule 2 detail: Shell reserved words pass `command -v` but are never valid as the first token of a standalone invocation. When a user types "do we have X" or "in the codebase", they mean natural language. List defined in `LACY_SHELL_RESERVED_WORDS` in `lib/core/constants.sh`. See `NATURAL_LANGUAGE_DETECTION.md` for full spec.
+
+Rule 6 detail: `lacy_shell_has_nl_markers()` counts bare words after the first word (excluding flags, paths, numbers, variables). If there are 3+ bare words and at least one is in `LACY_NL_MARKERS` (~100 common English words), the command is flagged via `LACY_SHELL_REROUTE_CANDIDATE`. In `precmd`, if the command exited non-zero with code < 128 (not signal-based), a hint is shown and the input reroutes to the agent. Only active in auto mode.
 
 Examples:
 
 - `ls -la` → Shell (valid command)
 - `what files are here` → Agent ("what" override)
+- `do we have a way to uninstall?` → Agent (reserved word "do")
+- `in the codebase where is auth?` → Agent (reserved word "in")
 - `cd..` → Shell (single word typo)
 - `fix the bug` → Agent (multi-word natural language)
 - `kill the process on localhost:3000` → Shell → Agent (4 bare words, "the" marker, fails)
+- `go ahead and fix the tests` → Shell → Agent ("ahead" marker, "unknown command" error)
+- `make sure the tests pass` → Shell → Agent ("sure" marker, "No rule to make target" error)
 - `kill -9 my baby` → Shell only (2 bare words, below threshold)
 - `echo the quick brown fox` → Shell only (succeeds, no reroute)
 - `!rm -rf` → Shell (emergency bypass with `!` prefix)
@@ -66,7 +73,7 @@ Examples:
 
 ### `lacy_shell_classify_input(input)` — The Single Source of Truth
 
-**File:** `lib/detection.zsh`
+**File:** `lib/core/detection.sh`
 
 All input classification MUST go through this function. It returns one of three strings:
 
@@ -93,6 +100,17 @@ All input classification MUST go through this function. It returns one of three 
 - `execute.zsh:lacy_shell_smart_accept_line()` — execution routing
 - `keybindings.zsh:lacy_shell_update_first_word_highlight()` — syntax highlighting
 
+### `lacy_shell_detect_natural_language(input, output, exit_code)` — Layer 2 Post-Execution
+
+**File:** `lib/core/detection.sh`
+
+Analyzes a failed shell command's output to detect natural language. Returns 0 if NL detected (sets `LACY_NL_HINT`), 1 otherwise. Both criteria must match:
+
+1. **Error pattern** — output contains a known shell error from `LACY_SHELL_ERROR_PATTERNS`
+2. **NL signal** — second word is in `LACY_NL_MARKERS`, OR 5+ words with parse/syntax error
+
+Minimum 3 words required. See `NATURAL_LANGUAGE_DETECTION.md` for full algorithm.
+
 ## Supported AI CLI Tools
 
 | Tool     | Command                | Prompt Flag  |
@@ -117,16 +135,23 @@ All tools handle their own authentication - no API keys needed from lacy.
 ├── bin/
 │   └── lacy                 # Standalone CLI (no Node required)
 └── lib/
-    ├── constants.zsh        # Colors, timeouts, paths (LACY_SHELL_HOME=~/.lacy)
-    ├── config.zsh           # YAML config, API key management, agent_tools parsing
-    ├── modes.zsh            # Mode state (shell/agent/auto)
-    ├── spinner.zsh          # Loading spinner with shimmer text effect
-    ├── mcp.zsh              # Multi-tool routing (LACY_TOOL_CMD registry)
-    ├── preheat.zsh          # Agent preheating (background server, session reuse)
-    ├── detection.zsh        # Mode detection, lacy_shell_has_nl_markers() NL analysis
-    ├── keybindings.zsh      # Ctrl+Space toggle, indicator, first-word region_highlight
-    ├── prompt.zsh           # Prompt with indicator, mode in right prompt
-    └── execute.zsh          # Execution routing, LACY_SHELL_REROUTE_CANDIDATE logic
+    ├── core/                    # Shared modules (Bash 4+ and ZSH)
+    │   ├── constants.sh         # Colors, timeouts, paths, detection arrays
+    │   ├── config.sh            # YAML config, API key management
+    │   ├── modes.sh             # Mode state (shell/agent/auto)
+    │   ├── spinner.sh           # Loading spinner with shimmer text effect
+    │   ├── mcp.sh               # Multi-tool routing (LACY_TOOL_CMD registry)
+    │   ├── preheat.sh           # Agent preheating (background server, session reuse)
+    │   └── detection.sh         # classify_input(), has_nl_markers(), detect_natural_language()
+    ├── zsh/
+    │   ├── keybindings.zsh      # Ctrl+Space toggle, indicator, first-word region_highlight
+    │   ├── prompt.zsh           # Prompt with indicator, mode in right prompt
+    │   └── execute.zsh          # Execution routing, reroute candidate logic
+    ├── bash/
+    │   ├── keybindings.bash     # bind -x Enter override, Ctrl+Space toggle
+    │   ├── prompt.bash          # Mode badge in PS1
+    │   └── execute.bash         # Execution routing, reroute candidate logic
+    └── *.zsh                    # Backward-compat wrappers → lib/core/ or lib/zsh/
 
 packages/lacy/               # npm package for interactive installer
 ├── package.json
@@ -156,6 +181,20 @@ Source: `bin/lacy` (pure bash, zero dependencies)
 
 **Hybrid Node delegation:** `setup`, `install`, and `uninstall` try `npx lacy@latest` first for the rich @clack/prompts UI, then fall back to bash if Node is unavailable. Set `LACY_NO_NODE=1` to force bash-only mode.
 
+### Testing locally
+
+`bin/lacy` delegates to `npx lacy@latest` which downloads the **published** npm package, not the local code. To test local changes to `packages/lacy/index.mjs`:
+
+```bash
+# Run the local Node installer/menu directly
+node packages/lacy/index.mjs          # already-installed dashboard
+node packages/lacy/index.mjs setup    # same dashboard
+node packages/lacy/index.mjs --help   # help text
+
+# Or force the bash fallback (skips npx entirely)
+LACY_NO_NODE=1 bin/lacy setup
+```
+
 ## Key Commands
 
 - `mode [shell|agent|auto]` - Switch modes
@@ -170,16 +209,17 @@ Source: `bin/lacy` (pure bash, zero dependencies)
 
 ## Key Files
 
-- `lib/constants.zsh` - `LACY_SHELL_HOME` path definition (~/.lacy)
-- `lib/mcp.zsh` - `LACY_TOOL_CMD` registry, `lacy_shell_query_agent()` routing
-- `lib/config.zsh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
-- `lib/execute.zsh` - `lacy_shell_tool()` command, routing logic
-- `lib/spinner.zsh` - Braille spinner + shimmer "Thinking" animation during AI queries
-- `lib/preheat.zsh` - Background server (lash/opencode) + session reuse (claude)
-- `lib/detection.zsh` - **`lacy_shell_classify_input()`** (canonical classifier), `lacy_shell_has_nl_markers()` for NL detection
-- `lib/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
+- `lib/core/constants.sh` - Colors, paths, `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS`
+- `lib/core/detection.sh` - **`lacy_shell_classify_input()`** (canonical), `lacy_shell_has_nl_markers()`, `lacy_shell_detect_natural_language()`
+- `lib/core/mcp.sh` - `LACY_TOOL_CMD` registry, `lacy_shell_query_agent()` routing
+- `lib/core/config.sh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
+- `lib/core/spinner.sh` - Braille spinner + shimmer "Thinking" animation during AI queries
+- `lib/core/preheat.sh` - Background server (lash/opencode) + session reuse (claude)
+- `lib/zsh/execute.zsh` - `lacy_shell_tool()` command, routing logic, reroute candidates
+- `lib/zsh/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy/index.mjs` - Node installer with @clack/prompts
+- `NATURAL_LANGUAGE_DETECTION.md` - Shared spec for NL detection (synced with lash)
 
 ## Configuration
 

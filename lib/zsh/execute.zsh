@@ -122,6 +122,7 @@ lacy_shell_precmd() {
         local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
         LACY_SHELL_REROUTE_CANDIDATE=""
         if (( last_exit != 0 && last_exit < LACY_SIGNAL_EXIT_THRESHOLD )); then
+            print -P "%F{yellow}This looks like a question for the agent — routing automatically.%f"
             lacy_shell_execute_agent "$candidate"
             return
         fi

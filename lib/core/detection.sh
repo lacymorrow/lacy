@@ -129,6 +129,13 @@ lacy_shell_classify_input() {
         fi
     done
 
+    # Layer 1: Shell reserved words pass `command -v` but are never valid
+    # standalone commands. Route to agent. (see NATURAL_LANGUAGE_DETECTION.md)
+    if _lacy_in_list "$first_word_lower" "${LACY_SHELL_RESERVED_WORDS[@]}"; then
+        echo "agent"
+        return
+    fi
+
     # Check if it's a valid command (cached)
     if lacy_shell_is_valid_command "$first_word"; then
         echo "shell"
@@ -179,6 +186,68 @@ lacy_shell_detect_mode() {
 lacy_shell_init_detection_cache() {
     LACY_CMD_CACHE_WORD=""
     LACY_CMD_CACHE_RESULT=""
+}
+
+# Layer 2: Post-execution natural language detection.
+# Analyzes a failed shell command's output to determine if the user
+# typed natural language. Returns 0 (true) if NL detected, 1 otherwise.
+# Sets LACY_NL_HINT with a message if detected.
+# See NATURAL_LANGUAGE_DETECTION.md for the full algorithm.
+#
+# Usage: lacy_shell_detect_natural_language "input" "output" exit_code
+lacy_shell_detect_natural_language() {
+    local input="$1"
+    local output="$2"
+    local exit_code="$3"
+    LACY_NL_HINT=""
+
+    # Only check failed commands
+    (( exit_code == 0 )) && return 1
+    [[ -z "$exit_code" ]] && return 1
+
+    # Count words
+    local -a words
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        words=( ${=input} )
+    else
+        read -ra words <<< "$input"
+    fi
+
+    # Very short inputs are probably real commands
+    (( ${#words[@]} < 3 )) && return 1
+
+    # Criterion A: output must match at least one error pattern (case-insensitive)
+    local output_lower
+    output_lower=$(_lacy_lowercase "$output")
+    local pattern pattern_lower matched=false
+    for pattern in "${LACY_SHELL_ERROR_PATTERNS[@]}"; do
+        pattern_lower=$(_lacy_lowercase "$pattern")
+        if [[ "$output_lower" == *"$pattern_lower"* ]]; then
+            matched=true
+            break
+        fi
+    done
+    [[ "$matched" == false ]] && return 1
+
+    # Criterion B: check for natural language signal
+    local second_word
+    second_word=$(_lacy_lowercase "${words[$_LACY_ARR_OFFSET + 1]}")
+
+    # B1: second word is a natural language marker
+    if [[ -n "$second_word" ]] && _lacy_in_list "$second_word" "${LACY_NL_MARKERS[@]}"; then
+        LACY_NL_HINT="This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
+        return 0
+    fi
+
+    # B2: 5+ words and a parse/syntax error
+    if (( ${#words[@]} >= 5 )); then
+        if [[ "$output_lower" == *"parse error"* || "$output_lower" == *"syntax error"* || "$output_lower" == *"unexpected token"* ]]; then
+            LACY_NL_HINT="This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
+            return 0
+        fi
+    fi
+
+    return 1
 }
 
 # Test the detection logic (for debugging)

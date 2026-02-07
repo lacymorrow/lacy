@@ -546,6 +546,11 @@ cmd_version() {
 }
 
 cmd_help() {
+    local has_node=false
+    if command_exists npx && [[ "${LACY_NO_NODE:-}" != "1" ]]; then
+        has_node=true
+    fi
+
     cat <<EOF
 ${BOLD}Lacy Shell${NC} — Talk directly to your shell
 
@@ -561,9 +566,6 @@ ${BOLD}Commands:${NC}
   status         Show installation status
   doctor         Diagnose common issues
   config         Show/edit configuration
-    config show    Print config file (default)
-    config edit    Open config in \$EDITOR
-    config path    Print config file path
   version        Show version
   help           Show this help
 
@@ -573,26 +575,26 @@ ${BOLD}In-shell commands${NC} (available when Lacy is active):
   ask "query"    Direct query to AI
   Ctrl+Space     Toggle between modes
 
-${BOLD}Examples:${NC}
-  lacy setup                # Interactive settings
-  lacy install              # Install with interactive setup
-  lacy status               # Check what's installed
-  lacy doctor               # Diagnose issues
-  lacy config edit          # Edit configuration
-  lacy update               # Update to latest
-
-${BOLD}Install methods:${NC}
-  lacy install
-  curl -fsSL https://lacy.sh/install | bash
-  npx lacy
-  brew install lacymorrow/tap/lacy
-
 ${BOLD}Environment:${NC}
   LACY_NO_NODE=1            Force bash-only mode (skip Node UI)
 
-${DIM}Run 'lacy setup' for interactive configuration${NC}
 ${DIM}https://github.com/lacymorrow/lacy${NC}
 EOF
+
+    # Show banner again at the bottom
+    if [[ "$has_node" == true ]]; then
+        print_setup_banner
+    fi
+}
+
+print_setup_banner() {
+    printf "\n"
+    printf "  ${MAGENTA}${BOLD}╔════════════════════════════════════════════════╗${NC}\n"
+    printf "  ${MAGENTA}${BOLD}║                                                ║${NC}\n"
+    printf "  ${MAGENTA}${BOLD}║   Run ${NC}${BOLD}lacy setup${MAGENTA}${BOLD} for interactive settings      ║${NC}\n"
+    printf "  ${MAGENTA}${BOLD}║                                                ║${NC}\n"
+    printf "  ${MAGENTA}${BOLD}╚════════════════════════════════════════════════╝${NC}\n"
+    printf "\n"
 }
 
 # ============================================================================

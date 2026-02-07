@@ -58,7 +58,60 @@ LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
 # === Detection ===
 LACY_HARD_AGENT_INDICATORS=("what" "yes" "no")
-LACY_NL_MARKERS=("the" "a" "an" "my" "your" "this" "that" "these" "those" "please" "how" "why" "where" "when")
+
+# Shell reserved words — pass `command -v` but are never valid standalone commands.
+# Used by Layer 1 of natural language detection (see NATURAL_LANGUAGE_DETECTION.md).
+LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "function" "coproc" "{" "}" "!" "[[")
+
+# Natural language markers — common English words unusual as shell arguments.
+# Used by has_nl_markers (reroute candidates) and Layer 2 detection.
+# Kept in sync with lash plugin/shell-mode/natural-language.ts.
+LACY_NL_MARKERS=(
+    # articles/determiners
+    "a" "an" "the" "this" "that" "these" "those" "my" "our" "your"
+    # pronouns
+    "i" "we" "you" "it" "they" "me" "us" "him" "her" "them"
+    # prepositions
+    "to" "of" "about" "with" "from" "for" "into" "through" "between" "after" "before"
+    # conjunctions
+    "and" "but" "or" "so" "because" "since" "although"
+    # verbs
+    "is" "are" "was" "were" "be" "been" "have" "has" "had"
+    "can" "could" "would" "should" "will" "shall" "may" "might" "must" "need" "want"
+    # adverbs
+    "not" "already" "also" "just" "still" "even" "really" "actually" "probably" "maybe"
+    # question words
+    "how" "what" "when" "where" "why" "who" "which"
+    # other
+    "if" "there" "here" "all" "any" "some" "every" "no" "each"
+    "does" "do" "did" "sure" "out" "up" "down"
+    "ahead" "back" "over" "away" "around" "along"
+    "please" "anyone" "someone" "everyone" "anything" "something" "everything"
+)
+
+# Error patterns that suggest the shell tried to interpret natural language.
+# Case-insensitive matching. Used by Layer 2 detection.
+# Kept in sync with lash plugin/shell-mode/natural-language.ts.
+LACY_SHELL_ERROR_PATTERNS=(
+    "parse error"
+    "syntax error"
+    "unexpected token"
+    "unexpected end of file"
+    "command not found"
+    "no such file or directory"
+    "invalid option"
+    "unrecognized option"
+    "illegal option"
+    "unknown option"
+    "no rule to make target"
+    "unknown primary or operator"
+    "missing argument to"
+    "invalid regular expression"
+    "is not a git command"
+    "unknown command"
+    "no such command"
+)
+
 LACY_SHELL_OPERATORS=('|' '&&' '||' ';' '>')
 
 # === UI ===

@@ -81,16 +81,16 @@ One of:
 
 ~100 common English words that are unusual as shell arguments:
 
-| Category             | Words                                                                                                                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Articles/determiners | a, an, the, this, that, these, those, my, our, your                                                                                                                                      |
-| Pronouns             | i, we, you, it, they, me, us, him, her, them                                                                                                                                             |
-| Prepositions         | to, of, about, with, from, for, into, through, between, after, before                                                                                                                    |
-| Conjunctions         | and, but, or, so, because, since, although                                                                                                                                               |
-| Verbs                | is, are, was, were, be, been, have, has, had, can, could, would, should, will, shall, may, might, must, need, want                                                                       |
-| Adverbs              | not, already, also, just, still, even, really, actually, probably, maybe                                                                                                                 |
-| Question words       | how, what, when, where, why, who, which                                                                                                                                                  |
-| Other                | if, there, here, all, any, some, every, no, each, does, do, did, sure, out, up, down, ahead, back, over, away, around, along, anyone, someone, everyone, anything, something, everything |
+| Category             | Words                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Articles/determiners | a, an, the, this, that, these, those, my, our, your                                                                                                                                              |
+| Pronouns             | i, we, you, it, they, me, us, him, her, them                                                                                                                                                     |
+| Prepositions         | to, of, about, with, from, for, into, through, between, after, before                                                                                                                            |
+| Conjunctions         | and, but, or, so, because, since, although                                                                                                                                                       |
+| Verbs                | is, are, was, were, be, been, have, has, had, can, could, would, should, will, shall, may, might, must, need, want                                                                               |
+| Adverbs              | not, already, also, just, still, even, really, actually, probably, maybe                                                                                                                         |
+| Question words       | how, what, when, where, why, who, which                                                                                                                                                          |
+| Other                | if, there, here, all, any, some, every, no, each, does, do, did, sure, out, up, down, ahead, back, over, away, around, along, please, anyone, someone, everyone, anything, something, everything |
 
 ---
 
@@ -166,4 +166,17 @@ The hint should be visually distinct (warning color).
 
 ### Implementation in lacyshell
 
-Use the same reserved words list and error patterns. The algorithm has no dependencies — it is pure string matching. Both lists (reserved words and natural language words) must be kept in sync across implementations.
+| File                    | Role                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `lib/core/constants.sh` | `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS` arrays              |
+| `lib/core/detection.sh` | `lacy_shell_classify_input()` (Layer 1 check), `lacy_shell_detect_natural_language()` (Layer 2) |
+| `lib/zsh/execute.zsh`   | Reroute candidate logic in `lacy_shell_precmd()`, hint display                                  |
+| `lib/bash/execute.bash` | Reroute candidate logic in `lacy_shell_precmd_bash()`, hint display                             |
+| `tests/test_core.sh`    | Tests for both layers (Bash and ZSH)                                                            |
+
+Both lists (reserved words and natural language words) must be kept in sync across implementations. The algorithm has no dependencies — it is pure string matching.
+
+**Lacyshell-specific extensions** (not in lash):
+
+- `LACY_HARD_AGENT_INDICATORS` (`what`, `yes`, `no`) — first words that always route to agent regardless of `command -v`
+- `lacy_shell_has_nl_markers()` — pre-execution reroute candidate flagging (counts bare words after first word, checks for NL markers, requires 3+ bare words)

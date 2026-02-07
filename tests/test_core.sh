@@ -126,6 +126,23 @@ assert_eq "agent mode: empty → agent" "agent" "$(lacy_shell_classify_input '')
 LACY_SHELL_CURRENT_MODE="auto"
 
 # ============================================================================
+# Reserved Words Tests (Layer 1)
+# ============================================================================
+
+echo ""
+echo "--- Detection: reserved words → agent ---"
+
+LACY_SHELL_CURRENT_MODE="auto"
+
+assert_eq "do question → agent" "agent" "$(lacy_shell_classify_input 'do We already have a way to uninstall?')"
+assert_eq "done with this → agent" "agent" "$(lacy_shell_classify_input 'done with this task')"
+assert_eq "then what → agent" "agent" "$(lacy_shell_classify_input 'then what happens next')"
+assert_eq "else something → agent" "agent" "$(lacy_shell_classify_input 'else something')"
+assert_eq "in the codebase → agent" "agent" "$(lacy_shell_classify_input 'in the codebase')"
+assert_eq "function of module → agent" "agent" "$(lacy_shell_classify_input 'function of this module')"
+assert_eq "select all users → agent" "agent" "$(lacy_shell_classify_input 'select all users')"
+
+# ============================================================================
 # NL Markers Tests
 # ============================================================================
 
@@ -134,10 +151,52 @@ echo "--- Detection: has_nl_markers ---"
 
 assert_true "kill the process on localhost" lacy_shell_has_nl_markers "kill the process on localhost:3000"
 assert_true "make the tests pass" lacy_shell_has_nl_markers "make the tests pass"
+assert_true "go ahead and fix it" lacy_shell_has_nl_markers "go ahead and fix it"
+assert_true "find out how auth works" lacy_shell_has_nl_markers "find out how auth works"
 assert_false "kill -9 my baby (2 bare words)" lacy_shell_has_nl_markers "kill -9 my baby"
 assert_false "kill -9 (single word)" lacy_shell_has_nl_markers "kill -9"
 assert_false "git push origin main (no NL marker)" lacy_shell_has_nl_markers "git push origin main"
 assert_false "echo hello | grep the (has pipe)" lacy_shell_has_nl_markers "echo hello | grep the"
+
+# ============================================================================
+# Natural Language Detection Tests (Layer 2)
+# ============================================================================
+
+echo ""
+echo "--- Detection: detect_natural_language ---"
+
+# Successful commands — no detection
+lacy_shell_detect_natural_language "ls -la" "file1" 0
+assert_eq "exit 0 → no detect" "1" "$?"
+
+# Short input — no detection
+lacy_shell_detect_natural_language "ls foo" "no such file or directory" 1
+assert_eq "short input → no detect" "1" "$?"
+
+# Parse error with NL second word
+lacy_shell_detect_natural_language "do We already have a way to uninstall?" "(eval):1: parse error near do" 1
+assert_eq "parse error + NL word → detect" "0" "$?"
+assert_eq "hint set after parse error" "This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode." "$LACY_NL_HINT"
+
+# go ahead — unknown command
+lacy_shell_detect_natural_language "go ahead and fix it" "go ahead: unknown command" 2
+assert_eq "go ahead → detect" "0" "$?"
+
+# make sure — no rule to make target
+lacy_shell_detect_natural_language "make sure the tests pass" "make: *** No rule to make target 'sure'.  Stop." 2
+assert_eq "make sure → detect" "0" "$?"
+
+# git me — not a git command
+lacy_shell_detect_natural_language "git me the latest changes" "git: 'me' is not a git command." 1
+assert_eq "git me → detect" "0" "$?"
+
+# find out — unknown primary
+lacy_shell_detect_natural_language "find out how the auth works" "find: out: unknown primary or operator" 1
+assert_eq "find out → detect" "0" "$?"
+
+# Real command error — no detection
+lacy_shell_detect_natural_language "grep -r foo" "grep: warning: recursive search" 1
+assert_eq "real grep error → no detect" "1" "$?"
 
 # ============================================================================
 # Mode Tests

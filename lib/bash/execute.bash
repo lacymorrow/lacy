@@ -101,6 +101,7 @@ lacy_shell_precmd_bash() {
         local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
         LACY_SHELL_REROUTE_CANDIDATE=""
         if (( _lacy_last_exit != 0 && _lacy_last_exit < LACY_SIGNAL_EXIT_THRESHOLD )); then
+            printf '\e[38;5;226m%s\e[0m\n' "This looks like a question for the agent — routing automatically."
             lacy_shell_execute_agent "$candidate"
             return
         fi

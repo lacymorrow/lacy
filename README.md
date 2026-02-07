@@ -40,18 +40,20 @@ Real-time visual feedback shows what will happen before you hit enter:
 
 Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no context switching — you just type.
 
-| Input                      | Routes to  | Why                                 |
-| -------------------------- | ---------- | ----------------------------------- |
-| `ls -la`                   | Shell      | Valid command                       |
-| `what files are here`      | AI         | Natural language                    |
-| `git status`               | Shell      | Valid command                       |
-| `fix the bug`              | AI         | Multi-word, not a command           |
-| `kill the process on 3000` | Shell → AI | Valid command, but fails — rerouted |
-| `!rm -rf *`                | Shell      | `!` prefix forces shell             |
+| Input                          | Routes to  | Why                                         |
+| ------------------------------ | ---------- | ------------------------------------------- |
+| `ls -la`                       | Shell      | Valid command                               |
+| `what files are here`          | AI         | Natural language                            |
+| `git status`                   | Shell      | Valid command                               |
+| `do we have a way to install?` | AI         | Reserved word — never a real command        |
+| `fix the bug`                  | AI         | Multi-word, not a command                   |
+| `kill the process on 3000`     | Shell → AI | Valid command, but fails — rerouted         |
+| `go ahead and fix it`          | Shell → AI | "go" is valid, but "ahead" triggers reroute |
+| `!rm -rf *`                    | Shell      | `!` prefix forces shell                     |
 
 The first word of your input is also syntax-highlighted in real-time: **green** for shell commands, **magenta** for AI queries.
 
-**Smart rerouting** (auto mode): When a valid command contains natural language patterns (3+ bare words with articles, pronouns, etc.) and fails, lacy automatically re-sends it to the AI agent.
+**Smart rerouting** (auto mode): When a valid command contains natural language patterns (3+ bare words with articles, pronouns, etc.) and fails, lacy shows a hint and automatically re-sends it to the AI agent. Shell reserved words like `do`, `then`, `in`, `else` are routed directly to the agent — they pass `command -v` but are never standalone commands.
 
 ## Modes
 
