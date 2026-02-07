@@ -237,7 +237,7 @@ detect_tools() {
         printf "\n"
         read -p "Install lash now? [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
         if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
-            install_lash_cli
+            install_lash
             printf "\n"
             # Re-check if lash was installed successfully
             if command -v lash >/dev/null 2>&1; then
@@ -298,7 +298,7 @@ select_tool() {
                 printf "\n"
                 read -p "Would you like to install lash now? [y/N]: " install_lash < /dev/tty 2>/dev/null || install_lash="n"
                 if [[ "$install_lash" =~ ^[Yy]$ ]]; then
-                    install_lash_cli
+                    install_lash
                 fi
             else
                 printf "You can install it later with:\n"
@@ -325,11 +325,11 @@ select_tool() {
 }
 
 # Install lash CLI
-install_lash_cli() {
+install_lash() {
     printf "${BLUE}Installing lash...${NC}\n"
 
     if command -v npm >/dev/null 2>&1; then
-        npm install -g lash-cli
+        npm install -g lashcode
         printf "${GREEN}✓ lash installed${NC}\n"
     elif command -v brew >/dev/null 2>&1; then
         brew tap lacymorrow/tap
@@ -532,7 +532,7 @@ show_success() {
 
     if [[ "$SELECTED_TOOL" == "none" ]] || { [[ -z "$SELECTED_TOOL" ]] && ! command -v lash >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; }; then
         printf "${YELLOW}Remember to install an AI CLI tool:${NC}\n"
-        printf "  npm install -g lash-cli     # or\n"
+        printf "  npm install -g lashcode     # or\n"
         printf "  brew install claude\n"
         printf "\n"
     fi

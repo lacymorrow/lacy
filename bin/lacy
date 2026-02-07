@@ -417,7 +417,7 @@ cmd_doctor() {
         success "AI CLI tool available"
     else
         printf "  ${YELLOW}!${NC} No AI CLI tool installed\n"
-        printf "    Fix: ${CYAN}npm install -g lash-cli${NC} or ${CYAN}brew install claude${NC}\n"
+        printf "    Fix: ${CYAN}npm install -g lashcode${NC} or ${CYAN}brew install claude${NC}\n"
         issues=$((issues + 1))
     fi
 

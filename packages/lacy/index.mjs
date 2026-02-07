@@ -396,7 +396,7 @@ async function install() {
 
       try {
         if (commandExists("npm")) {
-          execSync("npm install -g lash-cli", { stdio: "pipe" });
+          execSync("npm install -g lashcode", { stdio: "pipe" });
           lashSpinner.stop("lash installed");
           detected.push("lash");
         } else if (commandExists("brew")) {
@@ -408,13 +408,13 @@ async function install() {
         } else {
           lashSpinner.stop("Could not install lash");
           p.log.warn(
-            "Please install npm or homebrew, then run: npm install -g lash-cli",
+            "Please install npm or homebrew, then run: npm install -g lashcode",
           );
         }
       } catch (e) {
         lashSpinner.stop("lash installation failed");
         p.log.warn(
-          "You can install it manually later: npm install -g lash-cli",
+          "You can install it manually later: npm install -g lashcode",
         );
       }
     }
@@ -475,7 +475,7 @@ async function install() {
 
       try {
         if (commandExists("npm")) {
-          execSync("npm install -g lash-cli", { stdio: "pipe" });
+          execSync("npm install -g lashcode", { stdio: "pipe" });
           lashSpinner.stop("lash installed");
         } else if (commandExists("brew")) {
           execSync("brew tap lacymorrow/tap && brew install lash", {
@@ -485,13 +485,13 @@ async function install() {
         } else {
           lashSpinner.stop("Could not install lash");
           p.log.warn(
-            "Please install npm or homebrew, then run: npm install -g lash-cli",
+            "Please install npm or homebrew, then run: npm install -g lashcode",
           );
         }
       } catch (e) {
         lashSpinner.stop("lash installation failed");
         p.log.warn(
-          "You can install it manually later: npm install -g lash-cli",
+          "You can install it manually later: npm install -g lashcode",
         );
       }
     }
@@ -636,7 +636,7 @@ Commands:
     (selectedTool === "auto" && detected.length === 0)
   ) {
     p.log.warn("Remember to install an AI CLI tool:");
-    console.log(`  ${pc.cyan("npm install -g lash-cli")}`);
+    console.log(`  ${pc.cyan("npm install -g lashcode")}`);
   }
 
   await restartShell();

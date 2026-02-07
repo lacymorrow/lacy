@@ -69,15 +69,79 @@ EOF
             return $exit_code
         fi
 
-        echo "No AI CLI tool found. Install one of: lash, claude, opencode, gemini, codex"
         echo ""
-        echo "Install options:"
-        echo "  lash:     npm install -g lash-cli"
-        echo "  claude:   brew install claude"
-        echo "  opencode: brew install opencode"
-        echo "  gemini:   brew install gemini"
-        echo "  codex:    npm install -g @openai/codex"
-        return 1
+        echo "No AI CLI tool found."
+        echo ""
+
+        # Offer to install lash interactively if terminal is available
+        local can_prompt=false
+        if [[ -t 0 ]]; then
+            can_prompt=true
+        elif [[ -c /dev/tty ]]; then
+            can_prompt=true
+        fi
+
+        if [[ "$can_prompt" == true ]]; then
+            local install_now=""
+            echo "Would you like to install lash (recommended)?"
+            echo ""
+            if [[ -t 0 ]]; then
+                read -p "Install lash now? [Y/n]: " install_now
+            else
+                read -p "Install lash now? [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
+            fi
+
+            if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
+                echo ""
+                if command -v npm >/dev/null 2>&1; then
+                    echo "Installing lash..."
+                    if npm install -g lashcode; then
+                        echo ""
+                        echo "lash installed! Re-running your query..."
+                        echo ""
+                        tool="lash"
+                    else
+                        echo ""
+                        echo "Installation failed. You can try manually: npm install -g lashcode"
+                        return 1
+                    fi
+                elif command -v brew >/dev/null 2>&1; then
+                    echo "Installing lash..."
+                    if brew tap lacymorrow/tap && brew install lash; then
+                        echo ""
+                        echo "lash installed! Re-running your query..."
+                        echo ""
+                        tool="lash"
+                    else
+                        echo ""
+                        echo "Installation failed. You can try manually: brew install lacymorrow/tap/lash"
+                        return 1
+                    fi
+                else
+                    echo "Neither npm nor brew found. Please install one of them first, then run:"
+                    echo "  npm install -g lashcode"
+                    return 1
+                fi
+            else
+                echo ""
+                echo "Install options:"
+                echo "  lash:     npm install -g lashcode"
+                echo "  claude:   brew install claude"
+                echo "  opencode: brew install opencode"
+                echo "  gemini:   brew install gemini"
+                echo "  codex:    npm install -g @openai/codex"
+                return 1
+            fi
+        else
+            echo "Install an AI CLI tool to get started:"
+            echo ""
+            echo "  npm install -g lashcode     (recommended)"
+            echo "  brew install claude"
+            echo "  brew install opencode"
+            echo "  brew install gemini"
+            echo "  npm install -g @openai/codex"
+            return 1
+        fi
     fi
 
     local cmd

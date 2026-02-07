@@ -240,7 +240,8 @@ async function publishHomebrew(tag: string, version: string) {
 		);
 		writeFileSync(HOMEBREW_FORMULA, formula);
 
-		// Commit and push
+		// Commit and push (pull first to avoid rejected pushes)
+		run("git pull --rebase origin main", { cwd: HOMEBREW_TAP });
 		run("git add Formula/lacy.rb", { cwd: HOMEBREW_TAP });
 		run(`git commit -m "lacy: update to ${tag}"`, { cwd: HOMEBREW_TAP });
 		run("git push", { cwd: HOMEBREW_TAP });

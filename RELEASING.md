@@ -93,8 +93,9 @@ gh repo clone lacymorrow/homebrew-tap /tmp/homebrew-tap 2>/dev/null || git -C /t
 sed -i '' "s|url \".*\"|url \"https://github.com/lacymorrow/lacy/archive/refs/tags/v$VERSION.tar.gz\"|" /tmp/homebrew-tap/Formula/lacy.rb
 sed -i '' "s|sha256 \".*\"|sha256 \"$SHA\"|" /tmp/homebrew-tap/Formula/lacy.rb
 
-# Push
+# Push (pull first to avoid rejected pushes from remote changes)
 cd /tmp/homebrew-tap
+git pull --rebase origin main
 git add Formula/lacy.rb
 git commit -m "lacy: update to v$VERSION"
 git push origin main

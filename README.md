@@ -141,7 +141,7 @@ api_keys:
 
 ## Troubleshooting
 
-**No AI response** — Check `tool` to see if a tool is detected. Install one: `npm i -g lash-cli` or `brew install claude`.
+**No AI response** — Check `tool` to see if a tool is detected. Install one: `npm i -g lashcode` or `brew install claude`.
 
 **Colors not showing** — Ensure your terminal supports 256 colors (green=34, magenta=200, blue=75).
 

@@ -81,8 +81,8 @@ lacy_shell_execute_agent() {
     if ! lacy_shell_query_agent "$query"; then
         echo ""
         echo "Agent request failed. Try:"
-        echo "   - Install lash: npm install -g lash-cli"
-        echo "   - Or configure API keys in ~/.lacy/config.yaml"
+        echo "   - Install an AI tool: npm install -g lashcode"
+        echo "   - Or run: lacy setup"
         echo ""
     fi
 }
