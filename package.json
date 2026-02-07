@@ -5,7 +5,8 @@
   "main": "lacy.plugin.zsh",
   "scripts": {
     "install": "./install.sh",
-    "release": "bun run script/release.ts"
+    "release": "bun run script/release.ts",
+    "release:beta": "bun run script/release.ts --beta"
   },
   "keywords": [
     "shell",

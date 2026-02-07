@@ -8,6 +8,8 @@
  *   bun run release minor        # minor bump  (1.5.3 → 1.6.0)
  *   bun run release major        # major bump  (1.5.3 → 2.0.0)
  *   bun run release 1.6.0        # explicit version
+ *   bun run release --beta       # beta release (1.5.3 → 1.5.4-beta.0)
+ *   bun run release:beta         # alias for --beta
  */
 
 import * as p from "@clack/prompts";
@@ -46,7 +48,8 @@ function bumpVersion(
 	current: string,
 	type: "patch" | "minor" | "major",
 ): string {
-	const [major, minor, patch] = current.split(".").map(Number);
+	const base = current.replace(/-.*$/, ""); // strip any prerelease suffix
+	const [major, minor, patch] = base.split(".").map(Number);
 	switch (type) {
 		case "major":
 			return `${major + 1}.0.0`;
@@ -55,6 +58,17 @@ function bumpVersion(
 		case "patch":
 			return `${major}.${minor}.${patch + 1}`;
 	}
+}
+
+function bumpBeta(current: string, bumpType: "patch" | "minor" | "major"): string {
+	const betaMatch = current.match(/^(.+)-beta\.(\d+)$/);
+	if (betaMatch) {
+		// Already a beta — increment the beta number
+		return `${betaMatch[1]}-beta.${Number(betaMatch[2]) + 1}`;
+	}
+	// Not a beta — bump the base version and start at beta.0
+	const base = bumpVersion(current, bumpType);
+	return `${base}-beta.0`;
 }
 
 function cancelled(): never {
@@ -88,13 +102,14 @@ function errorText(err: unknown): string {
 
 // ── npm publish ──────────────────────────────────────────────────────────────
 
-async function publishNpm(cwd: string): Promise<boolean> {
+async function publishNpm(cwd: string, beta = false): Promise<boolean> {
+	const tagFlag = beta ? " --tag beta" : "";
 	// First attempt: without OTP (works if token is valid and 2FA isn't required)
 	const spinner = p.spinner();
-	spinner.start("Publishing to npm");
+	spinner.start(`Publishing to npm${beta ? " (beta)" : ""}`);
 	try {
-		run("npm publish --access public", { cwd });
-		spinner.stop(pc.green("Published to npm"));
+		run(`npm publish --access public${tagFlag}`, { cwd });
+		spinner.stop(pc.green(`Published to npm${beta ? " (beta)" : ""}`));
 		return true;
 	} catch (err: unknown) {
 		spinner.stop(pc.yellow("npm publish failed"));
@@ -168,7 +183,7 @@ async function publishNpm(cwd: string): Promise<boolean> {
 		const retrySpinner = p.spinner();
 		retrySpinner.start("Publishing to npm");
 		try {
-			run(`npm publish --access public${otpFlag}`, { cwd });
+			run(`npm publish --access public${tagFlag}${otpFlag}`, { cwd });
 			retrySpinner.stop(pc.green("Published to npm"));
 			return true;
 		} catch (err: unknown) {
@@ -243,8 +258,15 @@ async function publishHomebrew(tag: string, version: string) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+	const isBeta = process.argv.includes("--beta");
+	const args = process.argv.slice(2).filter((a) => a !== "--beta");
+
 	console.clear();
-	p.intro(pc.magenta(pc.bold("  Lacy Shell — Release  ")));
+	p.intro(
+		pc.magenta(
+			pc.bold(isBeta ? "  Lacy Shell — Beta Release  " : "  Lacy Shell — Release  "),
+		),
+	);
 
 	// Preflight checks
 	const preflight = p.spinner();
@@ -259,7 +281,7 @@ async function main() {
 	}
 
 	const branch = run("git branch --show-current").trim();
-	if (branch !== "main") {
+	if (!isBeta && branch !== "main") {
 		preflight.stop(pc.red(`On branch '${branch}', not 'main'`));
 		process.exit(1);
 	}
@@ -271,12 +293,79 @@ async function main() {
 	const currentVersion: string = rootPkg.version;
 
 	// Determine new version
-	const arg = process.argv[2];
+	const arg = args[0];
 	let newVersion: string;
 
-	if (arg === "patch" || arg === "minor" || arg === "major") {
+	if (isBeta) {
+		// Beta: pick a bump type then apply beta suffix
+		const isAlreadyBeta = /-beta\.\d+$/.test(currentVersion);
+
+		if (isAlreadyBeta) {
+			// Already on a beta — offer to bump beta number or start fresh
+			const selected = await p.select({
+				message: `Current version: ${pc.cyan(currentVersion)}. Beta bump?`,
+				options: [
+					{
+						value: "next" as const,
+						label: "next beta",
+						hint: `${currentVersion} → ${bumpBeta(currentVersion, "patch")}`,
+					},
+					{
+						value: "patch" as const,
+						label: "new patch beta",
+						hint: `${currentVersion} → ${bumpVersion(currentVersion, "patch")}-beta.0`,
+					},
+					{
+						value: "minor" as const,
+						label: "new minor beta",
+						hint: `${currentVersion} → ${bumpVersion(currentVersion, "minor")}-beta.0`,
+					},
+					{
+						value: "major" as const,
+						label: "new major beta",
+						hint: `${currentVersion} → ${bumpVersion(currentVersion, "major")}-beta.0`,
+					},
+				],
+			});
+
+			if (p.isCancel(selected)) cancelled();
+			newVersion =
+				selected === "next"
+					? bumpBeta(currentVersion, "patch")
+					: `${bumpVersion(currentVersion, selected)}-beta.0`;
+		} else {
+			// Not a beta yet — bump type then add -beta.0
+			if (arg === "patch" || arg === "minor" || arg === "major") {
+				newVersion = bumpBeta(currentVersion, arg);
+			} else {
+				const selected = await p.select({
+					message: `Current version: ${pc.cyan(currentVersion)}. Bump type for beta?`,
+					options: [
+						{
+							value: "patch" as const,
+							label: "patch",
+							hint: `${currentVersion} → ${bumpBeta(currentVersion, "patch")}`,
+						},
+						{
+							value: "minor" as const,
+							label: "minor",
+							hint: `${currentVersion} → ${bumpBeta(currentVersion, "minor")}`,
+						},
+						{
+							value: "major" as const,
+							label: "major",
+							hint: `${currentVersion} → ${bumpBeta(currentVersion, "major")}`,
+						},
+					],
+				});
+
+				if (p.isCancel(selected)) cancelled();
+				newVersion = bumpBeta(currentVersion, selected);
+			}
+		}
+	} else if (arg === "patch" || arg === "minor" || arg === "major") {
 		newVersion = bumpVersion(currentVersion, arg);
-	} else if (arg && /^\d+\.\d+\.\d+$/.test(arg)) {
+	} else if (arg && /^\d+\.\d+\.\d+/.test(arg)) {
 		newVersion = arg;
 	} else {
 		const selected = await p.select({
@@ -348,7 +437,7 @@ async function main() {
 	// 4. Push
 	const pushSpinner = p.spinner();
 	pushSpinner.start("Pushing to GitHub");
-	run("git push origin main --no-verify");
+	run(`git push origin ${branch} --no-verify`);
 	run(`git push origin ${tag}`);
 	pushSpinner.stop("Pushed to GitHub");
 
@@ -357,15 +446,19 @@ async function main() {
 	releaseSpinner.start("Creating GitHub release");
 	const releaseNotes = `## Changes\n\n${changelog}`;
 	run(
-		`gh release create ${tag} --title "${tag}" --notes "${releaseNotes.replace(/"/g, '\\"')}"`,
+		`gh release create ${tag} --title "${tag}" --notes "${releaseNotes.replace(/"/g, '\\"')}"${isBeta ? " --prerelease" : ""}`,
 	);
 	releaseSpinner.stop("GitHub release created");
 
 	// 6. npm publish
-	await publishNpm(resolve(ROOT, "packages/lacy"));
+	await publishNpm(resolve(ROOT, "packages/lacy"), isBeta);
 
-	// 7. Homebrew
-	await publishHomebrew(tag, newVersion);
+	// 7. Homebrew (skip for beta releases)
+	if (!isBeta) {
+		await publishHomebrew(tag, newVersion);
+	} else {
+		p.log.info("Skipping Homebrew for beta release");
+	}
 
 	// Done
 	p.outro(
