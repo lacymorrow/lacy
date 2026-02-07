@@ -15,23 +15,26 @@ Lacy Shell is a ZSH plugin that detects natural language and routes it to an AI 
 
 ## Installation Methods
 
-| Method | Command |
-|--------|---------|
-| curl | `curl -fsSL https://lacy.sh/install \| bash` |
-| npx | `npx lacy` |
-| Homebrew | `brew install lacymorrow/tap/lacy` |
+| Method   | Command                                      |
+| -------- | -------------------------------------------- |
+| curl     | `curl -fsSL https://lacy.sh/install \| bash` |
+| npx      | `npx lacy`                                   |
+| Homebrew | `brew install lacymorrow/tap/lacy`           |
 
 ## Visual Feedback
 
 **Real-time indicator** (left of prompt) changes color as you type:
+
 - **Green (34)** = will execute in shell
 - **Magenta (200)** = will go to AI agent
 
 **First-word syntax highlighting** via ZSH `region_highlight`:
+
 - First word is highlighted **green bold** for shell commands, **magenta bold** for agent queries
 - Updates on every `zle-line-pre-redraw` (accounts for leading whitespace)
 
 **Mode indicator** (right prompt) shows current mode:
+
 - `SHELL` (green) = all input goes to shell
 - `AGENT` (magenta) = all input goes to AI
 - `AUTO` (blue) = smart detection (default)
@@ -49,6 +52,7 @@ In AUTO mode, routing is determined by:
 Rule 5 detail: `lacy_shell_has_nl_markers()` counts bare words after the first word (excluding flags, paths, numbers, variables). If there are 3+ bare words and at least one is a strong NL marker (articles, pronouns, question words, "please"), the command is flagged via `LACY_SHELL_REROUTE_CANDIDATE`. In `precmd`, if the command exited non-zero with code < 128 (not signal-based), it reroutes to the agent. Only active in auto mode.
 
 Examples:
+
 - `ls -la` → Shell (valid command)
 - `what files are here` → Agent ("what" override)
 - `cd..` → Shell (single word typo)
@@ -65,36 +69,40 @@ Examples:
 **File:** `lib/detection.zsh`
 
 All input classification MUST go through this function. It returns one of three strings:
+
 - `"shell"` → route to shell (indicator: green)
 - `"agent"` → route to AI agent (indicator: magenta)
 - `"neutral"` → no routing decision yet (indicator: gray)
 
 **Mode-aware behavior:**
+
 1. **Empty input** → returns mode color (`shell`/`agent`) in locked modes, `neutral` in auto
 2. **Shell mode** → always returns `shell` (after empty check)
 3. **Agent mode** → always returns `agent` (after empty check)
 4. **Auto mode** → applies detection heuristics
 
 **Why this matters:**
+
 - The indicator, execution, and highlighting ALL call this function
 - Never create parallel detection logic — always extend this function
 - The empty-input behavior ensures the indicator shows the correct mode color when idle
 
 **Consumers:**
+
 - `keybindings.zsh:lacy_shell_update_input_indicator()` — real-time indicator color
 - `execute.zsh:lacy_shell_smart_accept_line()` — execution routing
 - `keybindings.zsh:lacy_shell_update_first_word_highlight()` — syntax highlighting
 
 ## Supported AI CLI Tools
 
-| Tool | Command | Prompt Flag |
-|------|---------|-------------|
-| lash | `lash run -c "query"` | `-c` |
-| claude | `claude -p "query"` | `-p` |
-| opencode | `opencode run "query"` | positional |
-| gemini | `gemini -p "query"` | `-p` |
-| codex | `codex exec "query"` | positional |
-| custom | user-defined command | user-defined |
+| Tool     | Command                | Prompt Flag  |
+| -------- | ---------------------- | ------------ |
+| lash     | `lash run -c "query"`  | `-c`         |
+| claude   | `claude -p "query"`    | `-p`         |
+| opencode | `opencode run "query"` | positional   |
+| gemini   | `gemini -p "query"`    | `-p`         |
+| codex    | `codex exec "query"`   | positional   |
+| custom   | user-defined command   | user-defined |
 
 All tools handle their own authentication - no API keys needed from lacy.
 
@@ -106,6 +114,8 @@ All tools handle their own authentication - no API keys needed from lacy.
 ├── config.yaml              # User configuration
 ├── install.sh               # Installer (bash + npx fallback)
 ├── uninstall.sh             # Uninstaller
+├── bin/
+│   └── lacy                 # Standalone CLI (no Node required)
 └── lib/
     ├── constants.zsh        # Colors, timeouts, paths (LACY_SHELL_HOME=~/.lacy)
     ├── config.zsh           # YAML config, API key management, agent_tools parsing
@@ -123,6 +133,28 @@ packages/lacy/               # npm package for interactive installer
 ├── index.mjs                # @clack/prompts based installer
 └── README.md
 ```
+
+## CLI (standalone, no Node required)
+
+After installation, `~/.lacy/bin` is added to `$PATH`, making the `lacy` command available:
+
+```bash
+lacy setup           # Interactive settings (tool, mode, config) — fancy Node UI if available
+lacy status          # Show installation status
+lacy doctor          # Diagnose common issues
+lacy update          # Pull latest changes
+lacy uninstall       # Remove Lacy Shell — fancy Node UI if available
+lacy reinstall       # Fresh installation
+lacy config          # Show config
+lacy config edit     # Open config in $EDITOR
+lacy install         # Install (delegates to npx or curl installer)
+lacy version         # Show version
+lacy help            # Show all commands
+```
+
+Source: `bin/lacy` (pure bash, zero dependencies)
+
+**Hybrid Node delegation:** `setup`, `install`, and `uninstall` try `npx lacy@latest` first for the rich @clack/prompts UI, then fall back to bash if Node is unavailable. Set `LACY_NO_NODE=1` to force bash-only mode.
 
 ## Key Commands
 
@@ -155,16 +187,15 @@ Config file: `~/.lacy/config.yaml`
 
 ```yaml
 agent_tools:
-  active: claude  # or lash, opencode, gemini, codex, custom, empty for auto
+  active: claude # or lash, opencode, gemini, codex, custom, empty for auto
   # custom_command: "your-command -flags"  # used when active: custom
 
 api_keys:
-  openai: "sk-..."      # Only needed if no CLI tool
+  openai: "sk-..." # Only needed if no CLI tool
   anthropic: "sk-..."
 
 modes:
   default: auto
-
 # Preheat: keep agents warm between queries
 # preheat:
 #   eager: false          # Start background server on plugin load

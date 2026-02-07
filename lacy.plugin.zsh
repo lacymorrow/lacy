@@ -11,20 +11,18 @@ LACY_SHELL_LOADED=true
 # Plugin directory
 LACY_SHELL_DIR="${0:A:h}"
 
-# Load modules in order
-source "$LACY_SHELL_DIR/lib/constants.zsh"
-source "$LACY_SHELL_DIR/lib/config.zsh"
-source "$LACY_SHELL_DIR/lib/modes.zsh"
-source "$LACY_SHELL_DIR/lib/spinner.zsh"
-source "$LACY_SHELL_DIR/lib/mcp.zsh"
-source "$LACY_SHELL_DIR/lib/preheat.zsh"
-source "$LACY_SHELL_DIR/lib/detection.zsh"
-source "$LACY_SHELL_DIR/lib/keybindings.zsh"
-source "$LACY_SHELL_DIR/lib/prompt.zsh"
-source "$LACY_SHELL_DIR/lib/execute.zsh"
+# Shell type identification (used by shared core)
+LACY_SHELL_TYPE="zsh"
+_LACY_ARR_OFFSET=1
+
+# Load shared core + ZSH adapter modules
+source "$LACY_SHELL_DIR/lib/zsh/init.zsh"
 
 # Initialize
 lacy_shell_init() {
+    # Performance optimization: Initialize caches early
+    lacy_shell_init_detection_cache
+
     lacy_shell_load_config
     lacy_shell_setup_keybindings
     lacy_shell_init_mcp

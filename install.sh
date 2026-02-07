@@ -30,6 +30,67 @@ CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 SELECTED_TOOL=""
 CUSTOM_COMMAND=""
 
+# Detected shell (set during installation)
+DETECTED_SHELL=""
+
+# Detect user's login shell
+detect_user_shell() {
+    if [[ -n "$LACY_FORCE_SHELL" ]]; then
+        DETECTED_SHELL="$LACY_FORCE_SHELL"
+        return
+    fi
+
+    local login_shell
+    login_shell=$(basename "${SHELL:-}")
+
+    case "$login_shell" in
+        zsh)  DETECTED_SHELL="zsh" ;;
+        bash) DETECTED_SHELL="bash" ;;
+        *)    DETECTED_SHELL="zsh" ;;  # Default to zsh
+    esac
+}
+
+# Get the RC file for the detected shell
+get_rc_file() {
+    case "$DETECTED_SHELL" in
+        zsh)  echo "${HOME}/.zshrc" ;;
+        bash)
+            # macOS uses .bash_profile for login shells
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                echo "${HOME}/.bash_profile"
+            else
+                echo "${HOME}/.bashrc"
+            fi
+            ;;
+        *)    echo "${HOME}/.zshrc" ;;
+    esac
+}
+
+# Get the plugin file for the detected shell
+get_plugin_file() {
+    case "$DETECTED_SHELL" in
+        zsh)  echo "lacy.plugin.zsh" ;;
+        bash) echo "lacy.plugin.bash" ;;
+        *)    echo "lacy.plugin.zsh" ;;
+    esac
+}
+
+# Get the shell restart command
+get_shell_restart_cmd() {
+    case "$DETECTED_SHELL" in
+        zsh)  echo "zsh -l" ;;
+        bash) echo "bash -l" ;;
+        *)    echo "zsh -l" ;;
+    esac
+}
+
+# Get the source command for the RC file
+get_source_hint() {
+    local rc_file
+    rc_file=$(get_rc_file)
+    echo "source $rc_file"
+}
+
 # Check if we should use Node installer
 use_node_installer() {
     # Skip Node installer if --bash flag is passed
@@ -84,13 +145,33 @@ check_prerequisites() {
     printf "${BLUE}Checking prerequisites...${NC}\n"
     local missing=0
 
-    # Check for zsh
-    if command -v zsh >/dev/null 2>&1; then
-        printf "  ${GREEN}✓${NC} zsh\n"
-    else
-        printf "  ${RED}✗${NC} zsh (required)\n"
-        missing=1
-    fi
+    # Check for the target shell
+    case "$DETECTED_SHELL" in
+        zsh)
+            if command -v zsh >/dev/null 2>&1; then
+                printf "  ${GREEN}✓${NC} zsh\n"
+            else
+                printf "  ${RED}✗${NC} zsh (required)\n"
+                missing=1
+            fi
+            ;;
+        bash)
+            if command -v bash >/dev/null 2>&1; then
+                local bash_version
+                bash_version=$(bash -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || echo "0")
+                if [[ "$bash_version" -ge 4 ]]; then
+                    printf "  ${GREEN}✓${NC} bash ${bash_version}+\n"
+                else
+                    printf "  ${RED}✗${NC} bash 4+ required (found bash ${bash_version})\n"
+                    printf "    ${DIM}Install with: brew install bash${NC}\n"
+                    missing=1
+                fi
+            else
+                printf "  ${RED}✗${NC} bash (required)\n"
+                missing=1
+            fi
+            ;;
+    esac
 
     # Check for curl
     if command -v curl >/dev/null 2>&1; then
@@ -260,32 +341,75 @@ install_plugin() {
     printf "\n"
 }
 
-# Configure zsh integration
-configure_zsh() {
-    printf "${BLUE}Configuring shell...${NC}\n"
+# Configure shell integration (multi-shell aware)
+configure_shell() {
+    printf "${BLUE}Configuring ${DETECTED_SHELL} shell...${NC}\n"
 
-    local zshrc="${HOME}/.zshrc"
-    local plugin_line="source ${INSTALL_DIR}/lacy.plugin.zsh"
+    local rc_file plugin_file plugin_line rc_name
+
+    rc_file=$(get_rc_file)
+    plugin_file=$(get_plugin_file)
+    rc_name=$(basename "$rc_file")
+
+    plugin_line="source ${INSTALL_DIR}/${plugin_file}"
+
+    # PATH line for the lacy CLI binary
+    local path_line
+    case "$DETECTED_SHELL" in
+        fish)
+            path_line="fish_add_path ${INSTALL_DIR}/bin"
+            ;;
+        *)
+            path_line="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+            ;;
+    esac
 
     # Check if already configured
-    if [[ -f "$zshrc" ]] && grep -q "lacy.plugin.zsh" "$zshrc" 2>/dev/null; then
-        printf "${GREEN}✓ Already configured in .zshrc${NC}\n"
-    else
-        # Create .zshrc if it doesn't exist
-        [[ ! -f "$zshrc" ]] && touch "$zshrc"
+    if [[ -f "$rc_file" ]] && grep -q "lacy.plugin" "$rc_file" 2>/dev/null; then
+        printf "${GREEN}✓ Already configured in ${rc_name}${NC}\n"
 
-        # Add to .zshrc
+        # Add PATH if missing (upgrade from older install)
+        if ! grep -q '\.lacy/bin' "$rc_file" 2>/dev/null; then
+            printf "%s\n" "$path_line" >> "$rc_file"
+            printf "${GREEN}✓ Added lacy CLI to PATH in ${rc_name}${NC}\n"
+        fi
+    else
+        # Ensure parent directory exists
+        mkdir -p "$(dirname "$rc_file")"
+
+        # Create RC file if it doesn't exist
+        [[ ! -f "$rc_file" ]] && touch "$rc_file"
+
+        # Add source line + PATH
         {
             printf "\n"
             printf "# Lacy Shell\n"
             printf "%s\n" "$plugin_line"
-        } >> "$zshrc"
+            printf "%s\n" "$path_line"
+        } >> "$rc_file"
 
-        printf "${GREEN}✓ Added to .zshrc${NC}\n"
+        printf "${GREEN}✓ Added to ${rc_name}${NC}\n"
+    fi
+
+    # For Bash on macOS, also add to .bashrc if it exists (some terminals source it)
+    if [[ "$DETECTED_SHELL" == "bash" && "$OSTYPE" == "darwin"* ]]; then
+        local bashrc="${HOME}/.bashrc"
+        if [[ -f "$bashrc" ]] && ! grep -q "lacy.plugin" "$bashrc" 2>/dev/null; then
+            {
+                printf "\n"
+                printf "# Lacy Shell\n"
+                printf "%s\n" "$plugin_line"
+                printf "%s\n" "$path_line"
+            } >> "$bashrc"
+            printf "${GREEN}✓ Also added to .bashrc${NC}\n"
+        fi
     fi
 
     printf "\n"
 }
+
+# Backward compat alias
+configure_zsh() { configure_shell; }
 
 # Create configuration with selected tool
 create_config() {
@@ -373,10 +497,29 @@ restart_shell() {
         read -p "Restart shell now to apply changes? [Y/n]: " restart < /dev/tty
         if [[ ! "$restart" =~ ^[Nn]$ ]]; then
             printf "${BLUE}Restarting shell...${NC}\n"
-            exec zsh -l
+            local restart_cmd
+            restart_cmd=$(get_shell_restart_cmd)
+            exec $restart_cmd
         else
             printf "\n"
-            printf "Run ${CYAN}source ~/.zshrc${NC} or restart your terminal to apply changes.\n"
+            printf "Run ${CYAN}$(get_source_hint)${NC} or restart your terminal to apply changes.\n"
+        fi
+    fi
+}
+
+# Remove lacy lines from an RC file
+_remove_from_rc() {
+    local rc_file="$1"
+    local rc_name
+    rc_name=$(basename "$rc_file")
+    if [[ -f "$rc_file" ]]; then
+        if grep -q "lacy.plugin" "$rc_file" 2>/dev/null; then
+            printf "${BLUE}Removing from ${rc_name}...${NC}\n"
+            local tmp_file
+            tmp_file=$(mktemp)
+            grep -v "lacy.plugin" "$rc_file" | grep -v "# Lacy Shell" | grep -v '\.lacy/bin' > "$tmp_file" || true
+            mv "$tmp_file" "$rc_file"
+            printf "  ${GREEN}✓${NC} Removed from ${rc_name}\n"
         fi
     fi
 }
@@ -392,15 +535,11 @@ do_uninstall() {
         exit 0
     fi
 
-    # Remove from .zshrc
-    local zshrc="${HOME}/.zshrc"
-    if [[ -f "$zshrc" ]]; then
-        printf "${BLUE}Removing from .zshrc...${NC}\n"
-        local tmp_file=$(mktemp)
-        grep -v "lacy.plugin.zsh" "$zshrc" | grep -v "# Lacy Shell" > "$tmp_file" || true
-        mv "$tmp_file" "$zshrc"
-        printf "  ${GREEN}✓${NC} Removed from .zshrc\n"
-    fi
+    # Remove from all possible RC files
+    _remove_from_rc "${HOME}/.zshrc"
+    _remove_from_rc "${HOME}/.bashrc"
+    _remove_from_rc "${HOME}/.bash_profile"
+    _remove_from_rc "${HOME}/.config/fish/conf.d/lacy.fish"
 
     # Remove installation directories
     if [[ -d "$INSTALL_DIR" ]]; then
@@ -415,12 +554,15 @@ do_uninstall() {
     # Restart shell
     if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
         printf "\n"
+        detect_user_shell
         read -p "Restart shell now? [Y/n]: " restart < /dev/tty
         if [[ ! "$restart" =~ ^[Nn]$ ]]; then
-            exec zsh -l
+            local restart_cmd
+            restart_cmd=$(get_shell_restart_cmd)
+            exec $restart_cmd
         else
             printf "\n"
-            printf "Run ${CYAN}source ~/.zshrc${NC} or restart your terminal.\n"
+            printf "Restart your terminal to apply changes.\n"
         fi
     fi
 }
@@ -483,11 +625,13 @@ check_existing_installation() {
 # Main installation flow (bash)
 main_bash() {
     print_banner
+    detect_user_shell
+    printf "${DIM}Detected shell: ${DETECTED_SHELL}${NC}\n\n"
     check_prerequisites
     detect_tools
     select_tool
     install_plugin
-    configure_zsh
+    configure_shell
     create_config
     show_success
     restart_shell
@@ -520,6 +664,7 @@ case "$1" in
         printf "  --help       Show this help message\n"
         printf "  --uninstall  Uninstall Lacy Shell\n"
         printf "  --bash       Force bash installer (skip Node)\n"
+        printf "  --shell X    Force shell type (zsh, bash)\n"
         printf "  --tool X     Pre-select tool (lash, claude, opencode, gemini, codex, custom, auto)\n"
         printf "\n"
         printf "Examples:\n"
@@ -539,6 +684,11 @@ case "$1" in
         shift
         main "$@"
         ;;
+    "--shell")
+        LACY_FORCE_SHELL="$2"
+        shift 2
+        main "$@"
+        ;;
     "--tool")
         SELECTED_TOOL="$2"
         if [[ "$SELECTED_TOOL" == "custom" ]]; then
@@ -553,9 +703,10 @@ case "$1" in
             shift 2
         fi
         print_banner
+        detect_user_shell
         check_prerequisites
         install_plugin
-        configure_zsh
+        configure_shell
         create_config
         show_success
         restart_shell

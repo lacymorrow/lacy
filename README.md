@@ -40,14 +40,14 @@ Real-time visual feedback shows what will happen before you hit enter:
 
 Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no context switching — you just type.
 
-| Input | Routes to | Why |
-|-------|-----------|-----|
-| `ls -la` | Shell | Valid command |
-| `what files are here` | AI | Natural language |
-| `git status` | Shell | Valid command |
-| `fix the bug` | AI | Multi-word, not a command |
+| Input                      | Routes to  | Why                                 |
+| -------------------------- | ---------- | ----------------------------------- |
+| `ls -la`                   | Shell      | Valid command                       |
+| `what files are here`      | AI         | Natural language                    |
+| `git status`               | Shell      | Valid command                       |
+| `fix the bug`              | AI         | Multi-word, not a command           |
 | `kill the process on 3000` | Shell → AI | Valid command, but fails — rerouted |
-| `!rm -rf *` | Shell | `!` prefix forces shell |
+| `!rm -rf *`                | Shell      | `!` prefix forces shell             |
 
 The first word of your input is also syntax-highlighted in real-time: **green** for shell commands, **magenta** for AI queries.
 
@@ -59,11 +59,11 @@ The first word of your input is also syntax-highlighted in real-time: **green** 
   <img src="assets/mode-indicators.jpeg" alt="Shell and Agent mode indicators" width="480" />
 </p>
 
-| Mode | Behavior | Activate |
-|------|----------|----------|
-| **Auto** | Smart routing (default) | `mode auto` |
-| **Shell** | Everything to shell | `mode shell` or `Ctrl+Space` |
-| **Agent** | Everything to AI | `mode agent` or `Ctrl+Space` |
+| Mode      | Behavior                | Activate                     |
+| --------- | ----------------------- | ---------------------------- |
+| **Auto**  | Smart routing (default) | `mode auto`                  |
+| **Shell** | Everything to shell     | `mode shell` or `Ctrl+Space` |
+| **Agent** | Everything to AI        | `mode agent` or `Ctrl+Space` |
 
 ## Supported Tools
 
@@ -83,23 +83,39 @@ Or edit `~/.lacy/config.yaml`:
 
 ```yaml
 agent_tools:
-  active: claude   # lash, claude, opencode, gemini, codex, custom, or empty for auto
+  active: claude # lash, claude, opencode, gemini, codex, custom, or empty for auto
 ```
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `mode` | Show current mode |
-| `mode [shell\|agent\|auto]` | Switch mode |
-| `tool` | Show active AI tool |
-| `tool set <name>` | Set AI tool |
-| `ask "query"` | Direct query to AI |
-| `Ctrl+Space` | Toggle between modes |
+| Command                     | Description          |
+| --------------------------- | -------------------- |
+| `mode`                      | Show current mode    |
+| `mode [shell\|agent\|auto]` | Switch mode          |
+| `tool`                      | Show active AI tool  |
+| `tool set <name>`           | Set AI tool          |
+| `ask "query"`               | Direct query to AI   |
+| `Ctrl+Space`                | Toggle between modes |
+
+## CLI
+
+After installation, the `lacy` command is available (no Node required):
+
+```bash
+lacy setup        # Interactive settings (tool, mode, config)
+lacy status       # Show installation status
+lacy doctor       # Diagnose common issues
+lacy update       # Pull latest changes
+lacy config edit  # Open config in $EDITOR
+lacy uninstall    # Remove Lacy Shell
+lacy help         # Show all commands
+```
 
 ## Uninstall
 
 ```bash
+lacy uninstall
+# or
 npx lacy --uninstall
 # or
 curl -fsSL https://lacy.sh/install | bash -s -- --uninstall
@@ -111,13 +127,13 @@ Config file: `~/.lacy/config.yaml`
 
 ```yaml
 agent_tools:
-  active: claude   # lash, claude, opencode, gemini, codex, or empty for auto
+  active: claude # lash, claude, opencode, gemini, codex, or empty for auto
 
 modes:
-  default: auto    # shell, agent, auto
+  default: auto # shell, agent, auto
 
 api_keys:
-  openai: "sk-..."      # Only needed if no CLI tool installed
+  openai: "sk-..." # Only needed if no CLI tool installed
   anthropic: "sk-ant-..."
 ```
 
