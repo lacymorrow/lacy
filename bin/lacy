@@ -164,20 +164,6 @@ cmd_uninstall() {
         fi
     fi
 
-    # Ask about keeping config
-    local keep_config="y"
-    if [[ -f "$CONFIG_FILE" ]] && [[ -t 0 ]]; then
-        printf "Keep configuration for future reinstall? [Y/n]: "
-        read -r keep_config
-    fi
-
-    # Backup config if keeping
-    local config_backup=""
-    if [[ ! "$keep_config" =~ ^[Nn]$ ]] && [[ -f "$CONFIG_FILE" ]]; then
-        config_backup=$(mktemp)
-        cp "$CONFIG_FILE" "$config_backup"
-    fi
-
     info "Uninstalling Lacy Shell..."
 
     # Remove from all RC files
@@ -201,14 +187,6 @@ cmd_uninstall() {
     if [[ -d "$INSTALL_DIR_OLD" ]]; then
         rm -rf "$INSTALL_DIR_OLD"
         success "Removed $INSTALL_DIR_OLD"
-    fi
-
-    # Restore config if keeping
-    if [[ -n "$config_backup" ]]; then
-        mkdir -p "$INSTALL_DIR"
-        cp "$config_backup" "$CONFIG_FILE"
-        rm -f "$config_backup"
-        success "Configuration preserved"
     fi
 
     printf "\n${GREEN}Lacy Shell uninstalled.${NC}\n"

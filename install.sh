@@ -296,8 +296,8 @@ select_tool() {
 
             if [[ "$SELECTED_TOOL" == "lash" ]]; then
                 printf "\n"
-                read -p "Would you like to install lash now? [y/N]: " install_lash < /dev/tty 2>/dev/null || install_lash="n"
-                if [[ "$install_lash" =~ ^[Yy]$ ]]; then
+                read -p "Would you like to install lash now? [y/N]: " do_install_lash < /dev/tty 2>/dev/null || do_install_lash="n"
+                if [[ "$do_install_lash" =~ ^[Yy]$ ]]; then
                     install_lash
                 fi
             else
@@ -317,8 +317,32 @@ select_tool() {
         printf "\n"
         printf "No tool selected. Lacy will prompt you to install one when needed.\n"
     else
+        # Auto-detect: check if any tool is available
         printf "\n"
-        printf "Using: ${GREEN}auto-detect${NC} (first available tool)\n"
+        local any_tool_found=0
+        for t in lash claude opencode gemini codex; do
+            if command -v "$t" >/dev/null 2>&1; then
+                any_tool_found=1
+                break
+            fi
+        done
+
+        if [[ $any_tool_found -eq 0 ]]; then
+            printf "${YELLOW}No AI CLI tools are installed.${NC}\n"
+            printf "Would you like to install ${GREEN}lash${NC} (recommended)?\n"
+            printf "\n"
+            local do_install=""
+            read -p "Install lash now? [Y/n]: " do_install < /dev/tty 2>/dev/null || do_install="n"
+            if [[ ! "$do_install" =~ ^[Nn]$ ]]; then
+                install_lash
+            else
+                printf "\n"
+                printf "Using: ${GREEN}auto-detect${NC} (first available tool)\n"
+                printf "${YELLOW}Note: You'll need to install a tool before using Lacy.${NC}\n"
+            fi
+        else
+            printf "Using: ${GREEN}auto-detect${NC} (first available tool)\n"
+        fi
     fi
 
     printf "\n"
@@ -595,27 +619,6 @@ do_uninstall() {
         exit 0
     fi
 
-    # Ask about keeping config
-    local keep_config="n"
-    if [[ -f "$CONFIG_FILE" ]]; then
-        if [[ -t 0 ]]; then
-            printf "Keep configuration for future reinstall? [Y/n]: "
-            read -r keep_config
-        elif { true < /dev/tty; } 2>/dev/null; then
-            printf "Keep configuration for future reinstall? [Y/n]: "
-            read -r keep_config < /dev/tty 2>/dev/null || keep_config="y"
-        else
-            keep_config="y"  # Non-interactive: default to keeping config
-        fi
-    fi
-
-    # Backup config if keeping
-    local config_backup=""
-    if [[ ! "$keep_config" =~ ^[Nn]$ ]] && [[ -f "$CONFIG_FILE" ]]; then
-        config_backup=$(mktemp)
-        cp "$CONFIG_FILE" "$config_backup"
-    fi
-
     # Remove from all possible RC files
     _remove_from_rc "${HOME}/.zshrc"
     _remove_from_rc "${HOME}/.bashrc"
@@ -632,14 +635,6 @@ do_uninstall() {
         printf "${BLUE}Removing ${HOME}/.lacy-shell...${NC}\n"
         rm -rf "${HOME}/.lacy-shell"
         printf "  ${GREEN}✓${NC} Removed\n"
-    fi
-
-    # Restore config if keeping
-    if [[ -n "$config_backup" ]]; then
-        mkdir -p "$INSTALL_DIR"
-        cp "$config_backup" "$CONFIG_FILE"
-        rm -f "$config_backup"
-        printf "  ${GREEN}✓${NC} Configuration preserved\n"
     fi
 
     printf "\n"

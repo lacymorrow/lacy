@@ -220,7 +220,7 @@ function removeLacyFromFile(filePath) {
   return true;
 }
 
-// Shared uninstall logic — removes RC lines and install dirs, optionally keeps config
+// Shared uninstall logic — removes RC lines and install dirs completely
 async function doUninstall({ askConfirm = true } = {}) {
   if (askConfirm) {
     const confirm = await p.confirm({
@@ -232,24 +232,6 @@ async function doUninstall({ askConfirm = true } = {}) {
       p.cancel("Uninstall cancelled");
       process.exit(0);
     }
-  }
-
-  // Ask about config
-  let keepConfig = false;
-  if (existsSync(CONFIG_FILE)) {
-    const configChoice = await p.confirm({
-      message: "Keep configuration for future reinstall?",
-      initialValue: true,
-    });
-    if (!p.isCancel(configChoice)) {
-      keepConfig = configChoice;
-    }
-  }
-
-  // Backup config if keeping
-  let configBackup = null;
-  if (keepConfig && existsSync(CONFIG_FILE)) {
-    configBackup = readFileSync(CONFIG_FILE, "utf-8");
   }
 
   // Remove from all possible RC files
@@ -280,15 +262,7 @@ async function doUninstall({ askConfirm = true } = {}) {
     rmSync(INSTALL_DIR_OLD, { recursive: true, force: true });
   }
 
-  // Restore config if keeping
-  if (configBackup) {
-    mkdirSync(INSTALL_DIR, { recursive: true });
-    writeFileSync(CONFIG_FILE, configBackup);
-  }
-
-  removeSpinner.stop(
-    configBackup ? "Installation removed (config preserved)" : "Installation removed",
-  );
+  removeSpinner.stop("Installation removed");
 
   p.log.success("Lacy Shell uninstalled");
 
@@ -457,10 +431,17 @@ async function install() {
     p.log.info(`Custom command: ${pc.cyan(customCommand)}`);
   }
 
-  // Offer to install lash if selected but not installed
-  if (selectedTool === "lash" && !commandExists("lash")) {
+  // Offer to install lash if selected but not installed,
+  // or if auto-detect was chosen but no tools are available
+  const needsLashInstall =
+    (selectedTool === "lash" && !commandExists("lash")) ||
+    (selectedTool === "auto" && detected.length === 0);
+
+  if (needsLashInstall) {
     const installLash = await p.confirm({
-      message: "lash is not installed. Would you like to install it now?",
+      message: selectedTool === "auto"
+        ? `No AI CLI tools are installed. Would you like to install ${pc.green("lash")} (recommended)?`
+        : "lash is not installed. Would you like to install it now?",
       initialValue: true,
     });
 
