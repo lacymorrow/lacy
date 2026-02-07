@@ -301,9 +301,20 @@ lacy_shell_interrupt_handler() {
 # Set up the interrupt handler
 lacy_shell_setup_interrupt_handler() {
     TRAPINT() {
+        # CRITICAL: Only intercept SIGINT when ZLE (the line editor) is active,
+        # i.e., the user is at the prompt. When a foreground child process is
+        # running (e.g., `lash`, `vim`, `python`), we must NOT intercept SIGINT
+        # — let it propagate to the child's process group normally. Without this
+        # guard, Ctrl+C, paste, and other keyboard shortcuts break in child
+        # processes because SIGINT never reaches them.
+        if [[ -z "$ZLE_STATE" ]]; then
+            # No ZLE active — a child process is running. Use default behavior.
+            return $(( 128 + $1 ))
+        fi
+
         # Don't handle if already disabled
         if [[ "$LACY_SHELL_ENABLED" != true ]]; then
-            return 130
+            return $(( 128 + $1 ))
         fi
 
         # Get current time
@@ -326,7 +337,7 @@ lacy_shell_setup_interrupt_handler() {
             zle -R 2>/dev/null
             zle reset-prompt 2>/dev/null
             # Remove this trap itself after quit
-            trap - INT
+            unfunction TRAPINT 2>/dev/null
             return 130
         else
             # Single Ctrl+C
@@ -343,7 +354,11 @@ lacy_shell_setup_eof_handler() {
     # Prevent Ctrl-D from exiting the shell at all
     # The widget will handle quitting lacy shell
     setopt IGNORE_EOF
-    export IGNOREEOF=1000
+    # Note: we intentionally do NOT export IGNOREEOF to the environment.
+    # Exporting it would leak into child processes (lash, vim, python, etc.)
+    # and alter their EOF handling behavior. The ZSH setopt above is sufficient
+    # for the interactive shell itself.
+    IGNOREEOF=1000
 }
 
 # Cleanup all keybindings

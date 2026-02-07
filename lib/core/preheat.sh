@@ -33,8 +33,10 @@ lacy_preheat_server_start() {
     LACY_PREHEAT_SERVER_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || date +%s%N)
 
     # Start server in background (suppress all job notifications)
+    # Redirect stdin from /dev/null so the background server doesn't compete
+    # with foreground processes (lash, vim, etc.) for terminal input.
     _lacy_jobctl_off
-    "$tool" serve --port "$LACY_PREHEAT_SERVER_PORT" >/dev/null 2>&1 &
+    "$tool" serve --port "$LACY_PREHEAT_SERVER_PORT" </dev/null >/dev/null 2>&1 &
     LACY_PREHEAT_SERVER_PID=$!
     disown 2>/dev/null
     _lacy_jobctl_on

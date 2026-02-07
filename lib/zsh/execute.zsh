@@ -330,7 +330,19 @@ lacy_shell_quit() {
 
     # Unset aliases
     unalias ask mode tool quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
-    
+
+    # Define a `lacy` function so user can re-enter by typing `lacy`
+    local _ldir="$LACY_SHELL_DIR"
+    eval "lacy() {
+        if [[ \$# -eq 0 ]]; then
+            unfunction lacy 2>/dev/null
+            LACY_SHELL_LOADED=false
+            source \"${_ldir}/lacy.plugin.zsh\"
+        else
+            command lacy \"\$@\"
+        fi
+    }"
+
     # Restore original prompt
     lacy_shell_restore_prompt
 

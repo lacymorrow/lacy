@@ -283,6 +283,18 @@ lacy_shell_quit() {
     # Unset functions used as commands
     unset -f ask mode tool quit stop 2>/dev/null
 
+    # Define a `lacy` function so user can re-enter by typing `lacy`
+    local _ldir="$LACY_SHELL_DIR"
+    eval "lacy() {
+        if [[ \$# -eq 0 ]]; then
+            unset -f lacy 2>/dev/null
+            LACY_SHELL_LOADED=false
+            source \"${_ldir}/lacy.plugin.bash\"
+        else
+            command lacy \"\$@\"
+        fi
+    }"
+
     # Restore prompt
     lacy_shell_restore_prompt
 
