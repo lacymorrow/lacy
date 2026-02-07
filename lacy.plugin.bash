@@ -7,6 +7,7 @@ if [[ "${LACY_SHELL_LOADED:-}" == "true" ]]; then
     return 0
 fi
 LACY_SHELL_LOADED=true
+export LACY_SHELL_ACTIVE=1
 
 # Plugin directory
 LACY_SHELL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,6 +54,7 @@ lacy_shell_cleanup() {
     LACY_SHELL_QUITTING=false
     LACY_SHELL_ENABLED=false
     LACY_SHELL_LOADED=false
+    unset LACY_SHELL_ACTIVE
 }
 
 # Set up PROMPT_COMMAND for post-execution hooks

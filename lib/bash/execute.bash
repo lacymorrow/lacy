@@ -257,6 +257,7 @@ lacy_shell_tool() {
 lacy_shell_quit() {
     LACY_SHELL_ENABLED=false
     LACY_SHELL_QUITTING=true
+    unset LACY_SHELL_ACTIVE
 
     echo ""
     echo "Exiting Lacy Shell..."

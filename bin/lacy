@@ -596,6 +596,23 @@ setup_mode() {
     offer_restart
 }
 
+cmd_enter() {
+    # Already inside a lacy shell session — show info instead of nesting
+    if [[ "${LACY_SHELL_ACTIVE:-}" == "1" ]]; then
+        cmd_info
+        return
+    fi
+
+    if ! is_installed; then
+        die "Lacy Shell is not installed. Run: lacy install"
+    fi
+
+    # Launch an interactive shell — the plugin loads from .zshrc/.bashrc
+    local shell
+    shell=$(detect_shell)
+    exec "$shell" -li
+}
+
 cmd_version() {
     echo "lacy $VERSION"
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
@@ -615,7 +632,8 @@ cmd_help() {
 ${BOLD}Lacy Shell${NC} — Talk directly to your shell
 
 ${BOLD}Usage:${NC}
-  lacy [command] [options]
+  lacy                Enter Lacy Shell (or re-enter after quit)
+  lacy [command]      Run a command
 
 ${BOLD}Commands:${NC}
   setup          Interactive settings (tool, mode, config)
@@ -677,7 +695,8 @@ main() {
         doctor)     cmd_doctor "$@" ;;
         config|c)   cmd_config "$@" ;;
         version|-v|--version) cmd_version ;;
-        help|-h|--help|"")    cmd_help ;;
+        help|-h|--help)       cmd_help ;;
+        "")                   cmd_enter ;;
         *)
             printf "${RED}Unknown command: %s${NC}\n\n" "$cmd"
             cmd_help
