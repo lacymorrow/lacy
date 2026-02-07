@@ -34,6 +34,7 @@ function run(cmd: string, opts?: { cwd?: string; stdio?: "inherit" | "pipe" }) {
 		cwd: opts?.cwd ?? ROOT,
 		stdio: opts?.stdio ?? "pipe",
 		encoding: "utf-8",
+		shell: "/bin/bash",
 	});
 }
 
