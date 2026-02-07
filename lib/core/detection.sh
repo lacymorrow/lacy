@@ -23,8 +23,9 @@ lacy_shell_is_valid_command() {
 }
 
 # Check if input starting with a valid command has natural language markers.
-# Returns 0 (true) if 3+ bare words exist after the first word AND at least
-# one is a strong NL marker. Used to flag reroute candidates.
+# Returns 0 (true) if at least one bare word after the first word is a strong
+# NL marker. Used to flag reroute candidates — the reroute only fires when
+# the command also fails, so this can be fairly aggressive.
 lacy_shell_has_nl_markers() {
     local input="$1"
 
@@ -63,8 +64,8 @@ lacy_shell_has_nl_markers() {
         bare_words+=( "$lower_token" )
     done
 
-    # Need 3+ bare words to be considered NL
-    (( ${#bare_words[@]} < 3 )) && return 1
+    # Need at least 1 bare word after the first word
+    (( ${#bare_words[@]} < 1 )) && return 1
 
     # Check for strong NL markers
     local word marker
@@ -120,18 +121,17 @@ lacy_shell_classify_input() {
     local first_word_lower
     first_word_lower=$(_lacy_lowercase "$first_word")
 
-    # Hard agent indicators — always route to agent
-    local indicator
-    for indicator in "${LACY_HARD_AGENT_INDICATORS[@]}"; do
-        if [[ "$first_word_lower" == "$indicator" ]]; then
-            echo "agent"
-            return
-        fi
-    done
-
-    # Layer 1: Shell reserved words pass `command -v` but are never valid
+    # Layer 1a: Shell reserved words pass `command -v` but are never valid
     # standalone commands. Route to agent. (see NATURAL_LANGUAGE_DETECTION.md)
     if _lacy_in_list "$first_word_lower" "${LACY_SHELL_RESERVED_WORDS[@]}"; then
+        echo "agent"
+        return
+    fi
+
+    # Layer 1b: Common English words always route to agent.
+    # These are conversational responses (perfect, yes, sure, thanks, etc.)
+    # that are almost never intentional shell commands.
+    if _lacy_in_list "$first_word_lower" "${LACY_AGENT_WORDS[@]}"; then
         echo "agent"
         return
     fi
@@ -213,8 +213,8 @@ lacy_shell_detect_natural_language() {
         read -ra words <<< "$input"
     fi
 
-    # Very short inputs are probably real commands
-    (( ${#words[@]} < 3 )) && return 1
+    # Single-word inputs are probably real commands
+    (( ${#words[@]} < 2 )) && return 1
 
     # Criterion A: output must match at least one error pattern (case-insensitive)
     local output_lower
@@ -239,8 +239,8 @@ lacy_shell_detect_natural_language() {
         return 0
     fi
 
-    # B2: 5+ words and a parse/syntax error
-    if (( ${#words[@]} >= 5 )); then
+    # B2: 4+ words and a parse/syntax error
+    if (( ${#words[@]} >= 4 )); then
         if [[ "$output_lower" == *"parse error"* || "$output_lower" == *"syntax error"* || "$output_lower" == *"unexpected token"* ]]; then
             LACY_NL_HINT="This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
             return 0

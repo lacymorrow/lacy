@@ -5,14 +5,36 @@ All notable changes to Lacy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-02-07
+
+### Added
+
+- **Layer 1: Shell reserved word filtering** — words like `do`, `done`, `then`, `else`, `in`, `select`, `function` that pass `command -v` but are never standalone commands are now routed directly to the agent. Prevents inputs like `do we have a way to uninstall?` from causing shell parse errors
+- **Layer 2: Post-execution natural language detection** — `lacy_shell_detect_natural_language()` analyzes failed command output against 17 error patterns and checks for natural language signals (second word check, 5+ word parse errors). Covers `go ahead`, `make sure`, `find out`, `git me`, etc.
+- `LACY_SHELL_RESERVED_WORDS` constant (15 shell reserved words)
+- `LACY_SHELL_ERROR_PATTERNS` constant (17 error patterns including `unknown command`, `no such command`, `parse error`, `syntax error`, etc.)
+- Expanded `LACY_NL_MARKERS` from 14 to ~108 common English words (articles, pronouns, prepositions, conjunctions, verbs, adverbs, question words, directional words)
+- Hint message shown before auto-reroute: "This looks like a question for the agent — routing automatically."
+- `NATURAL_LANGUAGE_DETECTION.md` — shared spec for NL detection (synced with lash)
+- Tests for reserved word filtering, NL markers, and `detect_natural_language()` in `tests/test_core.sh`
+
+### Changed
+
+- Reorganized `lib/` into `lib/core/` (shared Bash 4+/ZSH), `lib/zsh/`, `lib/bash/` with backward-compat wrappers
+- `lacy_shell_classify_input()` now checks `LACY_SHELL_RESERVED_WORDS` before `command -v`
+
+---
+
 ## [1.4.0] - 2026-02-04
 
 ### Added
+
 - Post-execution error fallback for smart command routing — when a valid command has 3+ bare words with natural language markers (e.g. `kill the process on localhost:3000`), shell executes first; if it fails, input is automatically re-routed to the agent
 - `lacy_shell_has_nl_markers()` — NL detection function that counts bare words (excluding flags, paths, numbers, variables) and checks for strong markers (articles, pronouns, question words, "please")
 - First-word syntax highlighting via ZSH `region_highlight` — the first word is highlighted green for shell commands and magenta for agent queries in real-time as you type
 
 ### Changed
+
 - `lacy_shell_precmd()` now captures `$?` as its first operation to support exit code checking for reroute candidates
 - Exit codes >= 128 (signal-based: Ctrl+C, SIGKILL) are excluded from reroute triggering
 - Explicit `mode shell` never triggers rerouting — only auto mode
@@ -22,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0] - 2026-02-03
 
 ### Added
+
 - Agent preheating to reduce per-query latency
 - Background server mode for lash and opencode — starts `lash serve` / `opencode serve` in background, routes queries via local REST API to eliminate cold-start
 - Claude session reuse — captures `session_id` from `--output-format json` and passes `--resume` on subsequent queries for conversation continuity
@@ -29,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic server lifecycle management: lazy start on first query, health checks, crash recovery, cleanup on quit or tool switch
 
 ### Fixed
+
 - Fixed JSON output parsing in zsh — replaced `echo` with `printf '%s\n'` to prevent zsh from interpreting escape sequences (`\n`, `\"`) in JSON strings
 
 ---
@@ -36,12 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.1] - 2026-02-03
 
 ### Fixed
+
 - Leading whitespace no longer misroutes input to agent (`  ls -la` now correctly executes in shell)
 - Spinner no longer permanently disables job control (`fg`/`bg` work after AI queries)
 - Spinner no longer leaves cursor hidden after Ctrl+C interrupts
 - `exit` no longer shadowed by alias — passes through to shell builtin in shell mode, quits lacy in auto/agent mode
 
 ### Changed
+
 - Centralized detection logic into single `lacy_shell_classify_input()` function — indicator and execution can no longer disagree
 - Added single-entry cache for `command -v` lookups to reduce input lag with large PATH
 
@@ -52,29 +78,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ⚡ Major Enhancement: Intelligent Auto Mode
 
 **Smart Command Execution**: Auto mode now executes real commands first, then falls back to AI
+
 - **Command-First Strategy**: Real shell commands execute immediately without AI overhead
 - **Natural Language Detection**: Obvious questions go directly to AI (no failed shell attempts)
 - **Smart Fallback**: Unknown commands try shell first, then automatically ask AI for help
 - **Better Performance**: Eliminates unnecessary AI calls for standard commands
 
 ### 🎯 New Smart Auto Mode Features
+
 - `lacy_shell_execute_smart_auto()` - Core smart execution logic
 - `lacy_shell_command_exists()` - Robust command existence checking (includes builtins)
 - `lacy_shell_is_obvious_natural_language()` - Natural language pattern detection
 - Smart routing indicators: 💻 for commands, 🤖 for AI, ❓ for fallback attempts
 
 ### 🧪 Testing & Validation
+
 - `test-smart-auto.sh` - Comprehensive test suite for smart auto mode
 - `test_smart_auto` alias for quick function testing
 - Real-world test cases covering edge cases and common scenarios
 
 ### 📈 Performance Improvements
+
 - ⚡ Real commands execute instantly (no AI delay)
 - 🧠 Natural language bypasses shell attempts
 - 🔄 Graceful fallback maintains workflow continuity
 - 📚 Educational feedback when introducing new tools
 
 ### 🔄 Breaking Changes
+
 - Auto mode behavior significantly improved (backwards compatible)
 - Detection logic now optimized for performance over pattern matching
 - Mode descriptions updated to reflect new "try shell first" behavior
@@ -84,12 +115,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.1] - 2024-12-19 - PRODUCTION HARDENING 🛡️
 
 ### 🚨 Critical Fixes
+
 - **Fixed Input "Swallowing" Issue**: Resolved commands disappearing with no feedback
 - **MCP Server Error Handling**: Added proper startup validation and error reporting
 - **Emergency Recovery System**: Multiple escape routes when things go wrong
 - **API Timeout Protection**: 30-second timeout prevents hanging on AI calls
 
 ### 🔧 New Emergency Commands
+
 - `!command` - Emergency bypass prefix for direct shell execution
 - `disable_lacy` - Disable input interception entirely (alias: `lacy_shell_disable_interception`)
 - `enable_lacy` - Re-enable input interception (alias: `lacy_shell_enable_interception`)
@@ -97,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mode status` - Show detailed mode information including persistence state
 
 ### 🛡️ Reliability Improvements
+
 - Pre-flight API key validation before agent execution
 - Process validation for MCP servers with PID checking
 - Clear error messages with actionable troubleshooting steps
@@ -104,12 +138,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced error logging for MCP server diagnostics
 
 ### 📚 Documentation Updates
+
 - Comprehensive troubleshooting section in README
 - Emergency recovery procedures in all docs
 - API documentation for new diagnostic functions
 - Architecture docs updated with error handling patterns
 
 ### 🎯 Mode Persistence Enhancement
+
 - **Persistent Mode Memory**: Your preferred mode is saved across shell sessions
 - Mode state file: `~/.lacy-shell/current_mode`
 - Enhanced `mode status` command shows current, default, and saved modes
@@ -120,6 +156,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🎉 Initial Release
 
 #### Added
+
 - **Three intelligent modes**: Shell, Agent, and Auto
 - **Smart mode switching** with `Ctrl+Space` keybinding
 - **AI integration** with OpenAI and Anthropic APIs
@@ -134,41 +171,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Features
 
 **Core Functionality:**
+
 - 🐚 **Shell Mode** (`$`) - Pure shell execution
 - 🤖 **Agent Mode** (`?`) - AI-powered assistance
 - ⚡ **Auto Mode** (`~`) - Smart routing between shell and agent
 
 **User Interface:**
+
 - Single-character mode indicators on prompt right side
 - Clean, minimal visual design
 - Real-time streaming AI responses
 - Context-aware help system
 
 **AI Integration:**
+
 - Support for OpenAI GPT-4 and Anthropic Claude models
 - Conversation memory and context preservation
 - Streaming responses for real-time feedback
 - MCP server integration framework
 
 **Smart Detection:**
+
 - Keyword-based classification (help, how, what, etc.)
 - Command pattern recognition (git, npm, docker, etc.)
 - Natural language query detection
 - Customizable detection rules
 
 **Configuration:**
+
 - YAML-based configuration with fallback parsing
 - API key management
 - MCP server configuration
 - Custom detection keywords and commands
 
 **Keybindings:**
+
 - `Ctrl+Space` - Primary mode toggle (universal compatibility)
 - `Ctrl+T` - Alternative mode toggle
 - `Ctrl+X` prefix commands for direct mode switching
 - Compatible with Mac, VS Code, and all major terminals
 
 **Developer Features:**
+
 - Modular architecture with clear separation of concerns
 - Comprehensive test suite
 - Debug and troubleshooting commands
@@ -177,24 +221,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Technical Implementation
 
 **Architecture:**
+
 - ZSH plugin with widget-based input interception
 - Modular design with 7 core components
 - Hook-based integration with existing shell setups
 - Thread-safe mode management
 
 **Performance:**
+
 - Lazy loading for fast startup
 - Minimal memory footprint
 - Efficient detection algorithms
 - API response caching
 
 **Compatibility:**
+
 - Works with zsh, starship, oh-my-zsh
 - MacOS, Linux, and WSL support
 - VS Code terminal integration
 - Compatible with existing shell configurations
 
 **Security:**
+
 - Local API key storage
 - No automatic command execution from AI
 - Sandboxed execution environment
@@ -203,11 +251,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Installation & Setup
 
 **Installation Methods:**
+
 - Automated installer script
 - Manual plugin installation
 - Package manager support (planned)
 
 **Dependencies:**
+
 - zsh shell
 - Python 3.x for configuration parsing
 - curl for API communication
@@ -216,6 +266,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Documentation
 
 **Comprehensive Documentation:**
+
 - User guide with examples
 - API documentation for developers
 - Architecture deep dive
@@ -223,6 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Troubleshooting guide
 
 **Example Workflows:**
+
 - Development assistance scenarios
 - System administration tasks
 - Learning and exploration use cases
@@ -249,13 +301,15 @@ None (initial release)
 ### Planned Features
 
 #### v1.1.0 (Next Minor Release)
+
 - **Fish shell support**
-- **Bash compatibility layer** 
+- **Bash compatibility layer**
 - **Real MCP server auto-startup**
 - **Performance optimizations**
 - **Extended configuration options**
 
 #### v1.2.0 (Future Release)
+
 - **Machine learning-based detection**
 - **Plugin ecosystem support**
 - **Team collaboration features**
@@ -263,6 +317,7 @@ None (initial release)
 - **Custom themes and styling**
 
 #### v2.0.0 (Major Release)
+
 - **Multi-shell architecture**
 - **Advanced AI model support**
 - **Workflow automation**
@@ -272,18 +327,21 @@ None (initial release)
 ### Development Roadmap
 
 **Short Term (1-3 months):**
+
 - Bug fixes and stability improvements
 - Community feedback integration
 - Documentation enhancements
 - Performance optimizations
 
 **Medium Term (3-6 months):**
+
 - Shell compatibility expansion
 - MCP ecosystem development
 - Advanced AI features
 - Plugin architecture
 
 **Long Term (6+ months):**
+
 - Enterprise features
 - Cloud integration
 - Machine learning enhancements
@@ -293,10 +351,10 @@ None (initial release)
 
 ## Version History Summary
 
-| Version | Release Date | Key Features |
-|---------|--------------|--------------|
+| Version | Release Date | Key Features                                                               |
+| ------- | ------------ | -------------------------------------------------------------------------- |
 | 1.0.1   | 2024-12-19   | Production hardening: error handling, emergency recovery, mode persistence |
-| 1.0.0   | 2024-12-19   | Initial release with three modes, AI integration, MCP support |
+| 1.0.0   | 2024-12-19   | Initial release with three modes, AI integration, MCP support              |
 
 ## Contributors
 
@@ -314,5 +372,5 @@ None (initial release)
 
 ---
 
-*For detailed technical changes, see the git commit history.*
-*For upgrade instructions, see the [README.md](README.md) file.*
+_For detailed technical changes, see the git commit history._
+_For upgrade instructions, see the [README.md](README.md) file._

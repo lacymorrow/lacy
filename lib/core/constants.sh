@@ -57,36 +57,100 @@ LACY_COLOR_NEUTRAL=238     # Dark gray - neutral/dim
 LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
 # === Detection ===
-LACY_HARD_AGENT_INDICATORS=("what" "yes" "no")
+# (LACY_HARD_AGENT_INDICATORS removed — replaced by LACY_AGENT_WORDS below)
 
 # Shell reserved words — pass `command -v` but are never valid standalone commands.
 # Used by Layer 1 of natural language detection (see NATURAL_LANGUAGE_DETECTION.md).
 LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "function" "coproc" "{" "}" "!" "[[")
+
+# Agent words — common English words that always route to agent, even as
+# single-word input. Some (yes, nice, cancel) exist as real commands but are
+# almost never typed standalone intentionally.
+# Kept in sync with lash plugin/shell-mode/command-check.ts AGENT_WORDS.
+LACY_AGENT_WORDS=(
+    # affirmations
+    "yes" "yeah" "yep" "yup" "sure" "ok" "okay" "alright"
+    "absolutely" "definitely" "certainly" "indeed" "correct" "right" "exactly"
+    "perfect" "agreed" "affirmative" "totally" "clearly" "obviously" "lgtm"
+    # negations
+    "no" "nope" "nah" "never" "wrong" "disagree"
+    # gratitude
+    "thanks" "thank" "thx" "ty" "cheers" "appreciated"
+    # reactions
+    "great" "good" "nice" "cool" "awesome" "amazing" "wonderful" "brilliant"
+    "excellent" "fantastic" "sweet" "neat" "beautiful" "gorgeous" "impressive"
+    "incredible" "outstanding" "superb" "marvelous" "magnificent" "stellar"
+    "phenomenal" "terrific" "splendid" "fine" "solid" "dope" "sick" "fire" "lit" "rad" "legit"
+    # greetings/closings
+    "hey" "hi" "hello" "howdy" "sup" "yo" "bye" "goodbye" "cya" "later"
+    # conversational
+    "please" "sorry" "pardon" "hmm" "huh" "wow" "whoa" "oops" "ugh" "yikes"
+    "damn" "dang" "shoot" "welp" "well" "anyway" "anyways" "regardless"
+    "meanwhile" "honestly" "basically" "literally" "actually" "really"
+    "seriously" "obviously" "hopefully" "unfortunately" "apparently"
+    "supposedly" "probably" "maybe" "perhaps" "possibly"
+    # action/intent
+    "stop" "wait" "hold" "pause" "cancel" "abort" "skip" "continue" "proceed"
+    "next" "again" "redo" "undo" "retry"
+    "help" "explain" "elaborate" "clarify" "summarize" "describe" "show" "tell"
+    # question words
+    "why" "how" "what" "when" "where" "who" "which"
+    "can" "could" "would" "should" "will" "shall" "may" "might" "must"
+    "does" "did" "is" "are" "was" "were" "has" "have" "had"
+)
 
 # Natural language markers — common English words unusual as shell arguments.
 # Used by has_nl_markers (reroute candidates) and Layer 2 detection.
 # Kept in sync with lash plugin/shell-mode/natural-language.ts.
 LACY_NL_MARKERS=(
     # articles/determiners
-    "a" "an" "the" "this" "that" "these" "those" "my" "our" "your"
+    "a" "an" "the" "this" "that" "these" "those" "my" "our" "your" "its" "their" "his" "her"
     # pronouns
     "i" "we" "you" "it" "they" "me" "us" "him" "her" "them"
+    "myself" "yourself" "itself" "ourselves" "themselves"
     # prepositions
     "to" "of" "about" "with" "from" "for" "into" "through" "between" "after" "before"
+    "during" "without" "within" "against" "above" "below" "under" "upon" "across"
+    "toward" "towards" "beside" "besides" "beyond" "except" "inside" "outside"
+    "behind" "near" "among" "along" "around"
     # conjunctions
-    "and" "but" "or" "so" "because" "since" "although"
+    "and" "but" "or" "so" "because" "since" "although" "though" "unless" "while"
+    "whereas" "whether" "however" "therefore" "moreover" "furthermore"
+    "nevertheless" "otherwise" "instead"
     # verbs
-    "is" "are" "was" "were" "be" "been" "have" "has" "had"
+    "is" "are" "was" "were" "be" "been" "being" "have" "has" "had" "having"
     "can" "could" "would" "should" "will" "shall" "may" "might" "must" "need" "want"
+    "know" "think" "believe" "understand" "remember" "forget" "seem" "appear"
+    "look" "feel" "sound" "mean" "try" "keep" "let" "begin" "start" "stop"
+    "continue" "happen" "work" "run" "give" "take" "bring" "send" "put" "get"
+    "got" "went" "going" "done" "doing" "made" "making"
     # adverbs
     "not" "already" "also" "just" "still" "even" "really" "actually" "probably" "maybe"
+    "perhaps" "always" "never" "sometimes" "often" "usually" "only" "very" "too"
+    "enough" "quite" "rather" "pretty" "almost" "nearly" "completely" "entirely"
+    "definitely" "certainly" "obviously" "clearly" "honestly" "basically" "literally"
+    "seriously" "hopefully" "unfortunately" "apparently" "absolutely" "simply" "merely"
+    "exactly" "roughly"
     # question words
-    "how" "what" "when" "where" "why" "who" "which"
-    # other
+    "how" "what" "when" "where" "why" "who" "which" "whom" "whose"
+    # other common sentence words
     "if" "there" "here" "all" "any" "some" "every" "no" "each"
-    "does" "do" "did" "sure" "out" "up" "down"
-    "ahead" "back" "over" "away" "around" "along"
-    "please" "anyone" "someone" "everyone" "anything" "something" "everything"
+    "does" "do" "did" "sure" "out" "up" "down" "ahead" "back" "over" "away" "off"
+    "on" "now" "then" "again" "once" "twice" "first" "last" "next"
+    "new" "old" "same" "other" "another" "both" "either" "neither"
+    "much" "many" "more" "most" "less" "least" "few" "several" "own" "such" "whole" "entire"
+    # conversational/reactions
+    "please" "thanks" "thank" "sorry" "yes" "yeah" "yep" "ok" "okay" "alright"
+    "right" "correct" "wrong" "perfect" "great" "good" "nice" "cool" "awesome"
+    "amazing" "wonderful" "excellent" "fantastic" "brilliant" "fine"
+    "terrible" "horrible" "awful" "bad" "worse" "worst" "better" "best"
+    # indefinite pronouns
+    "anyone" "someone" "everyone" "anything" "something" "everything"
+    "nobody" "nothing" "nowhere" "wherever" "whatever" "whoever" "whenever" "however"
+    # common nouns used in conversation
+    "way" "thing" "things" "stuff" "part" "place" "point" "fact"
+    "issue" "problem" "question" "answer" "idea" "reason" "example"
+    "change" "error" "bug" "fix" "feature" "code" "file" "files" "repo" "project" "app" "test" "tests"
 )
 
 # Error patterns that suggest the shell tried to interpret natural language.

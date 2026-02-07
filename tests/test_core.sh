@@ -95,10 +95,30 @@ assert_eq "what files → agent" "agent" "$(lacy_shell_classify_input 'what file
 assert_eq "fix the bug → agent" "agent" "$(lacy_shell_classify_input 'fix the bug')"
 assert_eq "hello there → agent" "agent" "$(lacy_shell_classify_input 'hello there')"
 
-# Hard agent indicators
-assert_eq "what → agent" "agent" "$(lacy_shell_classify_input 'what is this')"
+# Agent words — single-word conversational
+assert_eq "perfect → agent" "agent" "$(lacy_shell_classify_input 'perfect')"
+assert_eq "yes → agent" "agent" "$(lacy_shell_classify_input 'yes')"
+assert_eq "sure → agent" "agent" "$(lacy_shell_classify_input 'sure')"
+assert_eq "thanks → agent" "agent" "$(lacy_shell_classify_input 'thanks')"
+assert_eq "ok → agent" "agent" "$(lacy_shell_classify_input 'ok')"
+assert_eq "great → agent" "agent" "$(lacy_shell_classify_input 'great')"
+assert_eq "cool → agent" "agent" "$(lacy_shell_classify_input 'cool')"
+assert_eq "nice → agent" "agent" "$(lacy_shell_classify_input 'nice')"
+assert_eq "awesome → agent" "agent" "$(lacy_shell_classify_input 'awesome')"
+assert_eq "lgtm → agent" "agent" "$(lacy_shell_classify_input 'lgtm')"
+assert_eq "help → agent" "agent" "$(lacy_shell_classify_input 'help')"
+assert_eq "stop → agent" "agent" "$(lacy_shell_classify_input 'stop')"
+assert_eq "why → agent" "agent" "$(lacy_shell_classify_input 'why')"
+assert_eq "how → agent" "agent" "$(lacy_shell_classify_input 'how')"
+assert_eq "no → agent" "agent" "$(lacy_shell_classify_input 'no')"
+assert_eq "nope → agent" "agent" "$(lacy_shell_classify_input 'nope')"
+
+# Agent words — multi-word
+assert_eq "what is this → agent" "agent" "$(lacy_shell_classify_input 'what is this')"
 assert_eq "yes lets go → agent" "agent" "$(lacy_shell_classify_input 'yes lets go')"
 assert_eq "no I dont → agent" "agent" "$(lacy_shell_classify_input 'no I dont want that')"
+assert_eq "perfect lets move on → agent" "agent" "$(lacy_shell_classify_input 'perfect lets move on')"
+assert_eq "thanks for the help → agent" "agent" "$(lacy_shell_classify_input 'thanks for the help')"
 
 # Single word non-command → shell (typo)
 assert_eq "asdfgh → shell" "shell" "$(lacy_shell_classify_input 'asdfgh')"
@@ -153,8 +173,10 @@ assert_true "kill the process on localhost" lacy_shell_has_nl_markers "kill the 
 assert_true "make the tests pass" lacy_shell_has_nl_markers "make the tests pass"
 assert_true "go ahead and fix it" lacy_shell_has_nl_markers "go ahead and fix it"
 assert_true "find out how auth works" lacy_shell_has_nl_markers "find out how auth works"
-assert_false "kill -9 my baby (2 bare words)" lacy_shell_has_nl_markers "kill -9 my baby"
-assert_false "kill -9 (single word)" lacy_shell_has_nl_markers "kill -9"
+assert_true "find the file" lacy_shell_has_nl_markers "find the file"
+assert_true "go ahead" lacy_shell_has_nl_markers "go ahead"
+assert_true "kill -9 my baby (my is NL)" lacy_shell_has_nl_markers "kill -9 my baby"
+assert_false "kill -9 (no bare words)" lacy_shell_has_nl_markers "kill -9"
 assert_false "git push origin main (no NL marker)" lacy_shell_has_nl_markers "git push origin main"
 assert_false "echo hello | grep the (has pipe)" lacy_shell_has_nl_markers "echo hello | grep the"
 
@@ -169,9 +191,9 @@ echo "--- Detection: detect_natural_language ---"
 lacy_shell_detect_natural_language "ls -la" "file1" 0
 assert_eq "exit 0 → no detect" "1" "$?"
 
-# Short input — no detection
+# Non-NL second word — no detection
 lacy_shell_detect_natural_language "ls foo" "no such file or directory" 1
-assert_eq "short input → no detect" "1" "$?"
+assert_eq "non-NL second word → no detect" "1" "$?"
 
 # Parse error with NL second word
 lacy_shell_detect_natural_language "do We already have a way to uninstall?" "(eval):1: parse error near do" 1
@@ -193,6 +215,14 @@ assert_eq "git me → detect" "0" "$?"
 # find out — unknown primary
 lacy_shell_detect_natural_language "find out how the auth works" "find: out: unknown primary or operator" 1
 assert_eq "find out → detect" "0" "$?"
+
+# find the file — no such file or directory
+lacy_shell_detect_natural_language "find the file" "find: the: No such file or directory" 1
+assert_eq "find the file → detect" "0" "$?"
+
+# go ahead — unknown command (2 words)
+lacy_shell_detect_natural_language "go ahead" "go ahead: unknown command" 2
+assert_eq "go ahead (2 words) → detect" "0" "$?"
 
 # Real command error — no detection
 lacy_shell_detect_natural_language "grep -r foo" "grep: warning: recursive search" 1
