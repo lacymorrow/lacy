@@ -106,7 +106,7 @@ assert_eq "cool → agent" "agent" "$(lacy_shell_classify_input 'cool')"
 assert_eq "nice → agent" "agent" "$(lacy_shell_classify_input 'nice')"
 assert_eq "awesome → agent" "agent" "$(lacy_shell_classify_input 'awesome')"
 assert_eq "lgtm → agent" "agent" "$(lacy_shell_classify_input 'lgtm')"
-assert_eq "help → agent" "agent" "$(lacy_shell_classify_input 'help')"
+assert_eq "help → shell (real builtin)" "shell" "$(lacy_shell_classify_input 'help')"
 assert_eq "stop → agent" "agent" "$(lacy_shell_classify_input 'stop')"
 assert_eq "why → agent" "agent" "$(lacy_shell_classify_input 'why')"
 assert_eq "how → agent" "agent" "$(lacy_shell_classify_input 'how')"
@@ -198,7 +198,6 @@ assert_eq "non-NL second word → no detect" "1" "$?"
 # Parse error with NL second word
 lacy_shell_detect_natural_language "do We already have a way to uninstall?" "(eval):1: parse error near do" 1
 assert_eq "parse error + NL word → detect" "0" "$?"
-assert_eq "hint set after parse error" "Routing to agent — natural language detected." "$LACY_NL_HINT"
 
 # go ahead — unknown command
 lacy_shell_detect_natural_language "go ahead and fix it" "go ahead: unknown command" 2

@@ -42,21 +42,21 @@ Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and
 
 In AUTO mode, routing is determined by:
 
-1. `what`/`yes`/`no` → Agent (hardcoded overrides in `LACY_HARD_AGENT_INDICATORS`)
+1. **Agent words** (~150 common conversational words like `perfect`, `thanks`, `yes`, `no`, `explain`, `help`) → Agent (always, even single-word). Defined in `LACY_AGENT_WORDS` in `lib/core/constants.sh`.
 2. **Shell reserved words** (`do`, `done`, `then`, `else`, `elif`, `fi`, `esac`, `in`, `select`, `function`, `coproc`, `{`, `}`, `!`, `[[`) → Agent (Layer 1 — these pass `command -v` but are never standalone commands)
 3. First word is valid command → Shell
 4. Single word, not a command → Shell (typo, let it error)
 5. Multiple words, first not a command → Agent (natural language)
-6. Valid command + 3+ bare words + NL marker → Shell first, then agent on failure (post-execution reroute)
+6. Valid command + NL arguments → Shell first, then agent on failure (post-execution reroute, silent)
 
-Rule 2 detail: Shell reserved words pass `command -v` but are never valid as the first token of a standalone invocation. When a user types "do we have X" or "in the codebase", they mean natural language. List defined in `LACY_SHELL_RESERVED_WORDS` in `lib/core/constants.sh`. See `NATURAL_LANGUAGE_DETECTION.md` for full spec.
+Rule 2 detail: Shell reserved words pass `command -v` but are never valid as the first token of a standalone invocation. When a user types "do we have X" or "in the codebase", they mean natural language. List defined in `LACY_SHELL_RESERVED_WORDS` in `lib/core/constants.sh`. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full spec.
 
-Rule 6 detail: `lacy_shell_has_nl_markers()` counts bare words after the first word (excluding flags, paths, numbers, variables). If there are 3+ bare words and at least one is in `LACY_NL_MARKERS` (~100 common English words), the command is flagged via `LACY_SHELL_REROUTE_CANDIDATE`. In `precmd`, if the command exited non-zero with code < 128 (not signal-based), a hint is shown and the input reroutes to the agent. Only active in auto mode.
+Rule 6 detail: When a valid command receives NL arguments and fails (exit non-zero, code < 128), the error output is analyzed. If it matches a known error pattern AND has NL markers in the input, the command silently reroutes to the agent. No user-facing hint — just auto-reroute. Only active in auto mode.
 
 Examples:
 
 - `ls -la` → Shell (valid command)
-- `what files are here` → Agent ("what" override)
+- `what files are here` → Agent (agent word "what")
 - `do we have a way to uninstall?` → Agent (reserved word "do")
 - `in the codebase where is auth?` → Agent (reserved word "in")
 - `cd..` → Shell (single word typo)
@@ -104,12 +104,12 @@ All input classification MUST go through this function. It returns one of three 
 
 **File:** `lib/core/detection.sh`
 
-Analyzes a failed shell command's output to detect natural language. Returns 0 if NL detected (sets `LACY_NL_HINT`), 1 otherwise. Both criteria must match:
+Analyzes a failed shell command's output to detect natural language. Returns 0 if NL detected, 1 otherwise. Both criteria must match:
 
 1. **Error pattern** — output contains a known shell error from `LACY_SHELL_ERROR_PATTERNS`
 2. **NL signal** — second word is in `LACY_NL_MARKERS`, OR 5+ words with parse/syntax error
 
-Minimum 3 words required. See `NATURAL_LANGUAGE_DETECTION.md` for full algorithm.
+Minimum 2 words required. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full algorithm.
 
 ## Supported AI CLI Tools
 
@@ -117,9 +117,9 @@ Minimum 3 words required. See `NATURAL_LANGUAGE_DETECTION.md` for full algorithm
 | -------- | ---------------------- | ------------ |
 | lash     | `lash run -c "query"`  | `-c`         |
 | claude   | `claude -p "query"`    | `-p`         |
-| opencode | `opencode run "query"` | positional   |
-| gemini   | `gemini -p "query"`    | `-p`         |
-| codex    | `codex exec "query"`   | positional   |
+| opencode | `opencode run -c "query"` | `-c`         |
+| gemini   | `gemini --resume -p "query"` | `-p`         |
+| codex    | `codex exec resume --last "query"` | positional   |
 | custom   | user-defined command   | user-defined |
 
 All tools handle their own authentication - no API keys needed from lacy.
@@ -211,7 +211,7 @@ LACY_NO_NODE=1 bin/lacy setup
 
 ## Key Files
 
-- `lib/core/constants.sh` - Colors, paths, `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS`
+- `lib/core/constants.sh` - Colors, paths, `LACY_AGENT_WORDS`, `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS`
 - `lib/core/detection.sh` - **`lacy_shell_classify_input()`** (canonical), `lacy_shell_has_nl_markers()`, `lacy_shell_detect_natural_language()`
 - `lib/core/mcp.sh` - `_lacy_run_tool_cmd()` safe executor, `lacy_tool_cmd()` registry, `lacy_shell_query_agent()` routing
 - `lib/core/config.sh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
@@ -221,7 +221,7 @@ LACY_NO_NODE=1 bin/lacy setup
 - `lib/zsh/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy/index.mjs` - Node installer with @clack/prompts
-- `NATURAL_LANGUAGE_DETECTION.md` - Shared spec for NL detection (synced with lash)
+- `docs/NATURAL_LANGUAGE_DETECTION.md` - Shared spec for NL detection (synced with lash)
 
 ## Configuration
 

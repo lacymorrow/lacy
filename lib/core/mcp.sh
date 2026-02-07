@@ -24,9 +24,9 @@ lacy_tool_cmd() {
     case "$1" in
         lash)     echo "lash run -c" ;;
         claude)   echo "claude -p" ;;
-        opencode) echo "opencode run" ;;
-        gemini)   echo "gemini -p" ;;
-        codex)    echo "codex exec" ;;
+        opencode) echo "opencode run -c" ;;
+        gemini)   echo "gemini --resume -p" ;;
+        codex)    echo "codex exec resume --last" ;;
         *)        echo "" ;;
     esac
 }

@@ -2,7 +2,7 @@
 
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { execSync, spawn } from "child_process";
+import { execSync } from "child_process";
 import {
   existsSync,
   mkdirSync,
@@ -24,8 +24,7 @@ function detectShell() {
   const shell = process.env.SHELL || "";
   const base = shell.split("/").pop();
   if (base === "bash") return "bash";
-  if (base === "fish") return "fish";
-  return "zsh"; // default
+  return "zsh"; // default (fish not yet supported)
 }
 
 function getShellConfig(shell) {
@@ -41,14 +40,6 @@ function getShellConfig(shell) {
         pluginFile: "lacy.plugin.bash",
         shellCmd: "bash",
         rcName: process.platform === "darwin" ? ".bash_profile" : ".bashrc",
-      };
-    case "fish":
-      return {
-        rcFile: join(homedir(), ".config", "fish", "conf.d", "lacy.fish"),
-        extraRcFile: null,
-        pluginFile: "lacy.plugin.fish",
-        shellCmd: "fish",
-        rcName: "conf.d/lacy.fish",
       };
     default: // zsh
       return {
@@ -144,13 +135,15 @@ async function restartShell(
 
   if (restart) {
     const cmd = shellCmd || getShellConfig(detectShell()).shellCmd;
+    // Use exec to replace the current process (no nested shell)
     p.log.info(`Restarting ${cmd}...`);
-    const child = spawn(cmd, ["-l"], {
-      stdio: "inherit",
-      shell: false,
-    });
-    child.on("exit", () => process.exit(0));
-    await new Promise(() => {});
+    try {
+      execSync(`exec ${cmd} -l`, { stdio: "inherit" });
+    } catch {
+      // exec replaces the process so this only runs if it fails
+      p.log.warn(`Could not restart. Please run: ${cmd} -l`);
+    }
+    process.exit(0);
   }
 }
 
@@ -275,8 +268,6 @@ async function install() {
     } else {
       missing.push("bash");
     }
-  } else if (shell === "fish") {
-    if (!commandExists("fish")) missing.push("fish");
   } else {
     if (!commandExists("zsh")) missing.push("zsh");
   }
@@ -455,10 +446,7 @@ async function install() {
 
   const { rcFile, extraRcFile, pluginFile, rcName } = shellConfig;
   const sourceLine = `source ${INSTALL_DIR}/${pluginFile}`;
-  const pathLine =
-    shell === "fish"
-      ? `fish_add_path ${INSTALL_DIR}/bin`
-      : `export PATH="${INSTALL_DIR}/bin:$PATH"`;
+  const pathLine = `export PATH="${INSTALL_DIR}/bin:$PATH"`;
 
   // Ensure parent directory exists (for fish: ~/.config/fish/conf.d/)
   const rcDir = rcFile.substring(0, rcFile.lastIndexOf("/"));
@@ -492,21 +480,32 @@ async function install() {
     appendFileSync(extraRcFile, `\n# Lacy Shell\n${sourceLine}\n${pathLine}\n`);
   }
 
-  // Create config
+  // Create or update config
   const configSpinner = p.spinner();
-  configSpinner.start("Creating configuration");
-
   mkdirSync(INSTALL_DIR, { recursive: true });
 
   const activeToolValue =
     selectedTool === "auto" || selectedTool === "none" ? "" : selectedTool;
 
-  const customCommandLine =
-    selectedTool === "custom" && customCommand
-      ? `  custom_command: "${customCommand}"`
-      : `  # custom_command: "your-command -flags"`;
+  if (existsSync(CONFIG_FILE)) {
+    // Preserve existing config, only update tool selection
+    configSpinner.start("Updating configuration");
+    if (activeToolValue) {
+      writeConfigValue("active", activeToolValue);
+      if (selectedTool === "custom" && customCommand) {
+        writeConfigValue("custom_command", `"${customCommand}"`);
+      }
+    }
+    configSpinner.stop("Configuration preserved");
+  } else {
+    configSpinner.start("Creating configuration");
 
-  const configContent = `# Lacy Shell Configuration
+    const customCommandLine =
+      selectedTool === "custom" && customCommand
+        ? `  custom_command: "${customCommand}"`
+        : `  # custom_command: "your-command -flags"`;
+
+    const configContent = `# Lacy Shell Configuration
 # https://github.com/lacymorrow/lacy
 
 # AI CLI tool selection
@@ -530,8 +529,9 @@ auto_detection:
   confidence_threshold: 0.7
 `;
 
-  writeFileSync(CONFIG_FILE, configContent);
-  configSpinner.stop("Configuration created");
+    writeFileSync(CONFIG_FILE, configContent);
+    configSpinner.stop("Configuration created");
+  }
 
   // Success message
   p.log.success(pc.green("Installation complete!"));
@@ -613,6 +613,7 @@ ${pc.bold("Options:")}
 
 ${pc.bold("Commands:")}
   setup            Interactive settings (tool, mode, config)
+  info             Show basic information and help
 
 ${pc.bold("Other install methods:")}
   curl -fsSL https://lacy.sh/install | bash
@@ -860,11 +861,21 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
       if (action === "reinstall") {
         const removeSpinner = p.spinner();
         removeSpinner.start("Removing existing installation");
+        // Backup config before removing
+        let configBackup = null;
+        if (existsSync(CONFIG_FILE)) {
+          configBackup = readFileSync(CONFIG_FILE, "utf-8");
+        }
         if (existsSync(INSTALL_DIR)) {
           rmSync(INSTALL_DIR, { recursive: true, force: true });
         }
         if (existsSync(INSTALL_DIR_OLD)) {
           rmSync(INSTALL_DIR_OLD, { recursive: true, force: true });
+        }
+        // Restore config so install() sees it and preserves it
+        if (configBackup) {
+          mkdirSync(INSTALL_DIR, { recursive: true });
+          writeFileSync(CONFIG_FILE, configBackup);
         }
         removeSpinner.stop("Removed");
         loop = false;

@@ -29,6 +29,12 @@ CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 # Release channel (set via --beta, --channel, or LACY_CHANNEL env var)
 LACY_CHANNEL="${LACY_CHANNEL:-latest}"
 
+# Validate channel — alphanumeric, hyphens, dots only
+if [[ ! "$LACY_CHANNEL" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    printf "${RED}Invalid channel: %s${NC}\n" "$LACY_CHANNEL" >&2
+    exit 1
+fi
+
 # Selected tool (set during installation)
 SELECTED_TOOL=""
 CUSTOM_COMMAND=""
@@ -49,14 +55,13 @@ detect_user_shell() {
     case "$login_shell" in
         zsh)  DETECTED_SHELL="zsh" ;;
         bash) DETECTED_SHELL="bash" ;;
-        *)    DETECTED_SHELL="zsh" ;;  # Default to zsh
+        *)    DETECTED_SHELL="zsh" ;;  # Default to zsh (fish not yet supported)
     esac
 }
 
 # Get the RC file for the detected shell
 get_rc_file() {
     case "$DETECTED_SHELL" in
-        zsh)  echo "${HOME}/.zshrc" ;;
         bash)
             # macOS uses .bash_profile for login shells
             if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -72,7 +77,6 @@ get_rc_file() {
 # Get the plugin file for the detected shell
 get_plugin_file() {
     case "$DETECTED_SHELL" in
-        zsh)  echo "lacy.plugin.zsh" ;;
         bash) echo "lacy.plugin.bash" ;;
         *)    echo "lacy.plugin.zsh" ;;
     esac
@@ -81,7 +85,6 @@ get_plugin_file() {
 # Get the shell restart command
 get_shell_restart_cmd() {
     case "$DETECTED_SHELL" in
-        zsh)  echo "zsh -l" ;;
         bash) echo "bash -l" ;;
         *)    echo "zsh -l" ;;
     esac
@@ -226,7 +229,7 @@ detect_tools() {
         printf "${YELLOW}Lacy Shell requires an AI CLI tool to work.${NC}\n"
         printf "Would you like to install ${GREEN}lash${NC} (recommended)?\n"
         printf "\n"
-        read -p "Install lash now? [Y/n]: " install_now < /dev/tty
+        read -p "Install lash now? [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
         if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
             install_lash_cli
             printf "\n"
@@ -255,7 +258,7 @@ select_tool() {
     printf "\n"
 
     local choice
-    read -p "Select [1-8, default=6]: " choice < /dev/tty
+    read -p "Select [1-8, default=6]: " choice < /dev/tty 2>/dev/null || choice="6"
 
     case "$choice" in
         1) SELECTED_TOOL="lash" ;;
@@ -268,7 +271,7 @@ select_tool() {
         8)
             SELECTED_TOOL="custom"
             printf "\n"
-            read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND < /dev/tty
+            read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND < /dev/tty 2>/dev/null || CUSTOM_COMMAND=""
             if [[ -z "$CUSTOM_COMMAND" ]]; then
                 printf "${RED}No command entered. Falling back to auto-detect.${NC}\n"
                 SELECTED_TOOL=""
@@ -287,7 +290,7 @@ select_tool() {
 
             if [[ "$SELECTED_TOOL" == "lash" ]]; then
                 printf "\n"
-                read -p "Would you like to install lash now? [y/N]: " install_lash < /dev/tty
+                read -p "Would you like to install lash now? [y/N]: " install_lash < /dev/tty 2>/dev/null || install_lash="n"
                 if [[ "$install_lash" =~ ^[Yy]$ ]]; then
                     install_lash_cli
                 fi
@@ -373,15 +376,7 @@ configure_shell() {
     plugin_line="source ${INSTALL_DIR}/${plugin_file}"
 
     # PATH line for the lacy CLI binary
-    local path_line
-    case "$DETECTED_SHELL" in
-        fish)
-            path_line="fish_add_path ${INSTALL_DIR}/bin"
-            ;;
-        *)
-            path_line="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
-            ;;
-    esac
+    local path_line="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
 
     # Check if already configured
     if [[ -f "$rc_file" ]] && grep -q "lacy.plugin" "$rc_file" 2>/dev/null; then
@@ -430,10 +425,26 @@ configure_shell() {
 # Backward compat alias
 configure_zsh() { configure_shell; }
 
-# Create configuration with selected tool
-create_config() {
-    printf "${BLUE}Creating configuration...${NC}\n"
+# Parse a simple YAML value (strips inline comments and quotes)
+_yaml_value() {
+    local file="$1" key="$2"
+    grep "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*#.*//' | tr -d '"' | tr -d "'"
+}
 
+# Write a YAML value in-place
+_yaml_write() {
+    local file="$1" key="$2" value="$3"
+    local escaped_value="${value//\\/\\\\}"
+    escaped_value="${escaped_value//|/\\|}"
+    escaped_value="${escaped_value//&/\\&}"
+    if grep -q "^[[:space:]]*${key}:" "$file" 2>/dev/null; then
+        sed -i.bak "s|^\\([[:space:]]*${key}:\\).*|\\1 ${escaped_value}|" "$file"
+        rm -f "${file}.bak"
+    fi
+}
+
+# Create configuration with selected tool (preserves existing config)
+create_config() {
     mkdir -p "$INSTALL_DIR"
 
     # Determine active tool value for config
@@ -442,13 +453,29 @@ create_config() {
         active_tool_value="$SELECTED_TOOL"
     fi
 
+    # If config already exists, update the tool selection only
+    if [[ -f "$CONFIG_FILE" ]]; then
+        printf "${BLUE}Updating configuration...${NC}\n"
+        if [[ -n "$active_tool_value" ]]; then
+            _yaml_write "$CONFIG_FILE" "active" "$active_tool_value"
+            if [[ "$SELECTED_TOOL" == "custom" && -n "$CUSTOM_COMMAND" ]]; then
+                _yaml_write "$CONFIG_FILE" "custom_command" "\"$CUSTOM_COMMAND\""
+            fi
+        fi
+        printf "${GREEN}✓ Configuration preserved at $CONFIG_FILE${NC}\n"
+        printf "\n"
+        return
+    fi
+
+    # Fresh config
+    printf "${BLUE}Creating configuration...${NC}\n"
+
     # Build custom_command line
     local custom_command_line="  # custom_command: \"your-command -flags\""
     if [[ "$SELECTED_TOOL" == "custom" && -n "$CUSTOM_COMMAND" ]]; then
         custom_command_line="  custom_command: \"$CUSTOM_COMMAND\""
     fi
 
-    # Create config file
     cat > "$CONFIG_FILE" << EOF
 # Lacy Shell Configuration
 # https://github.com/lacymorrow/lacy
@@ -510,19 +537,27 @@ show_success() {
 
 # Restart shell to apply changes
 restart_shell() {
-    # Only restart if we're in an interactive terminal
-    if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
+    # Only prompt if /dev/tty is actually usable (not just that it exists)
+    local restart=""
+    if [[ -t 0 ]]; then
+        printf "\n"
+        read -p "Restart shell now to apply changes? [Y/n]: " restart
+    elif { true < /dev/tty; } 2>/dev/null; then
         printf "\n"
         read -p "Restart shell now to apply changes? [Y/n]: " restart < /dev/tty
-        if [[ ! "$restart" =~ ^[Nn]$ ]]; then
-            printf "${BLUE}Restarting shell...${NC}\n"
-            local restart_cmd
-            restart_cmd=$(get_shell_restart_cmd)
-            exec $restart_cmd
-        else
-            printf "\n"
-            printf "Run ${CYAN}$(get_source_hint)${NC} or restart your terminal to apply changes.\n"
-        fi
+    else
+        printf "\nRestart your terminal to apply changes.\n"
+        return 0
+    fi
+
+    if [[ ! "$restart" =~ ^[Nn]$ ]]; then
+        printf "${BLUE}Restarting shell...${NC}\n"
+        local restart_cmd
+        restart_cmd=$(get_shell_restart_cmd)
+        exec $restart_cmd
+    else
+        printf "\n"
+        printf "Run ${CYAN}$(get_source_hint)${NC} or restart your terminal to apply changes.\n"
     fi
 }
 
@@ -549,7 +584,7 @@ do_uninstall() {
     printf "\n"
 
     # Check if installed
-    if [[ ! -d "$INSTALL_DIR" ]]; then
+    if [[ ! -d "$INSTALL_DIR" ]] && [[ ! -d "${HOME}/.lacy-shell" ]]; then
         printf "${YELLOW}Lacy Shell is not installed${NC}\n"
         exit 0
     fi
@@ -566,24 +601,18 @@ do_uninstall() {
         rm -rf "$INSTALL_DIR"
         printf "  ${GREEN}✓${NC} Removed\n"
     fi
+    if [[ -d "${HOME}/.lacy-shell" ]]; then
+        printf "${BLUE}Removing ${HOME}/.lacy-shell...${NC}\n"
+        rm -rf "${HOME}/.lacy-shell"
+        printf "  ${GREEN}✓${NC} Removed\n"
+    fi
 
     printf "\n"
     printf "${GREEN}Lacy Shell uninstalled${NC}\n"
 
-    # Restart shell
-    if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
-        printf "\n"
-        detect_user_shell
-        read -p "Restart shell now? [Y/n]: " restart < /dev/tty
-        if [[ ! "$restart" =~ ^[Nn]$ ]]; then
-            local restart_cmd
-            restart_cmd=$(get_shell_restart_cmd)
-            exec $restart_cmd
-        else
-            printf "\n"
-            printf "Restart your terminal to apply changes.\n"
-        fi
-    fi
+    # Restart shell (reuse the safe TTY-aware function)
+    detect_user_shell
+    restart_shell
 }
 
 # Check if already installed and show menu
@@ -601,7 +630,7 @@ check_existing_installation() {
         printf "\n"
 
         local choice
-        read -p "Select [1-4]: " choice < /dev/tty
+        read -p "Select [1-4]: " choice < /dev/tty 2>/dev/null || choice="4"
 
         case "$choice" in
             1)
@@ -622,7 +651,19 @@ check_existing_installation() {
             2)
                 printf "\n"
                 printf "${BLUE}Removing existing installation...${NC}\n"
+                # Backup user config before removing
+                local config_backup=""
+                if [[ -f "$CONFIG_FILE" ]]; then
+                    config_backup=$(mktemp)
+                    cp "$CONFIG_FILE" "$config_backup"
+                fi
                 rm -rf "$INSTALL_DIR" 2>/dev/null
+                # Restore config so create_config() sees it and preserves it
+                if [[ -n "$config_backup" ]]; then
+                    mkdir -p "$INSTALL_DIR"
+                    cp "$config_backup" "$CONFIG_FILE"
+                    rm -f "$config_backup"
+                fi
                 printf "${GREEN}✓ Removed${NC}\n"
                 printf "\n"
                 # Continue with fresh install

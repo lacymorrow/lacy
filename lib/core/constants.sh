@@ -60,7 +60,7 @@ LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 # (LACY_HARD_AGENT_INDICATORS removed — replaced by LACY_AGENT_WORDS below)
 
 # Shell reserved words — pass `command -v` but are never valid standalone commands.
-# Used by Layer 1 of natural language detection (see NATURAL_LANGUAGE_DETECTION.md).
+# Used by Layer 1 of natural language detection (see docs/NATURAL_LANGUAGE_DETECTION.md).
 LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "function" "coproc" "{" "}" "!" "[[")
 
 # Agent words — common English words that always route to agent, even as
@@ -90,9 +90,9 @@ LACY_AGENT_WORDS=(
     "seriously" "obviously" "hopefully" "unfortunately" "apparently"
     "supposedly" "probably" "maybe" "perhaps" "possibly"
     # action/intent
-    "stop" "wait" "hold" "pause" "cancel" "abort" "skip" "continue" "proceed"
+    "stop" "hold" "pause" "cancel" "abort" "skip" "continue" "proceed"
     "next" "again" "redo" "undo" "retry"
-    "help" "explain" "elaborate" "clarify" "summarize" "describe" "show" "tell"
+    "explain" "elaborate" "clarify" "summarize" "describe" "show" "tell"
     # question words
     "why" "how" "what" "when" "where" "who" "which"
     "can" "could" "would" "should" "will" "shall" "may" "might" "must"

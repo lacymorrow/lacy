@@ -122,7 +122,7 @@ lacy_shell_classify_input() {
     first_word_lower=$(_lacy_lowercase "$first_word")
 
     # Layer 1a: Shell reserved words pass `command -v` but are never valid
-    # standalone commands. Route to agent. (see NATURAL_LANGUAGE_DETECTION.md)
+    # standalone commands. Route to agent. (see docs/NATURAL_LANGUAGE_DETECTION.md)
     if _lacy_in_list "$first_word_lower" "${LACY_SHELL_RESERVED_WORDS[@]}"; then
         echo "agent"
         return
@@ -171,15 +171,13 @@ lacy_shell_init_detection_cache() {
 # Layer 2: Post-execution natural language detection.
 # Analyzes a failed shell command's output to determine if the user
 # typed natural language. Returns 0 (true) if NL detected, 1 otherwise.
-# Sets LACY_NL_HINT with a message if detected.
-# See NATURAL_LANGUAGE_DETECTION.md for the full algorithm.
+# See docs/NATURAL_LANGUAGE_DETECTION.md for the full algorithm.
 #
 # Usage: lacy_shell_detect_natural_language "input" "output" exit_code
 lacy_shell_detect_natural_language() {
     local input="$1"
     local output="$2"
     local exit_code="$3"
-    LACY_NL_HINT=""
 
     # Only check failed commands
     (( exit_code == 0 )) && return 1
@@ -215,14 +213,12 @@ lacy_shell_detect_natural_language() {
 
     # B1: second word is a natural language marker
     if [[ -n "$second_word" ]] && _lacy_in_list "$second_word" "${LACY_NL_MARKERS[@]}"; then
-        LACY_NL_HINT="Routing to agent — natural language detected."
         return 0
     fi
 
     # B2: 4+ words and a parse/syntax error
     if (( ${#words[@]} >= 4 )); then
         if [[ "$output_lower" == *"parse error"* || "$output_lower" == *"syntax error"* || "$output_lower" == *"unexpected token"* ]]; then
-            LACY_NL_HINT="Routing to agent — natural language detected."
             return 0
         fi
     fi

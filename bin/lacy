@@ -50,7 +50,7 @@ detect_shell() {
     local shell
     shell=$(basename "${SHELL:-zsh}")
     case "$shell" in
-        zsh|bash|fish) echo "$shell" ;;
+        zsh|bash) echo "$shell" ;;
         *) echo "zsh" ;;
     esac
 }
@@ -64,7 +64,6 @@ get_rc_file() {
                 echo "${HOME}/.bashrc"
             fi
             ;;
-        fish) echo "${HOME}/.config/fish/conf.d/lacy.fish" ;;
         *)    echo "${HOME}/.zshrc" ;;
     esac
 }
@@ -72,7 +71,6 @@ get_rc_file() {
 get_plugin_file() {
     case "$(detect_shell)" in
         bash) echo "lacy.plugin.bash" ;;
-        fish) echo "lacy.plugin.fish" ;;
         *)    echo "lacy.plugin.zsh" ;;
     esac
 }
