@@ -79,11 +79,15 @@ lacy_shell_execute_agent() {
     local query="$1"
 
     if ! lacy_shell_query_agent "$query"; then
-        echo ""
-        echo "Agent request failed. Try:"
-        echo "   - Install an AI tool: npm install -g lashcode"
-        echo "   - Or run: lacy setup"
-        echo ""
+        # Only show install hints if query_agent didn't already format the error
+        if [[ -z "$LACY_ACTIVE_TOOL" ]] && ! command -v lash >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; then
+            echo ""
+            lacy_print_color 196 "  No AI tool configured"
+            echo ""
+            lacy_print_color 238 "  Install one:  npm install -g lashcode"
+            lacy_print_color 238 "  Or configure: lacy setup"
+            echo ""
+        fi
     fi
 }
 

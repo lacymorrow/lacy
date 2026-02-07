@@ -34,6 +34,75 @@ lacy_tool_cmd() {
 # Active tool (set during install or via config)
 : "${LACY_ACTIVE_TOOL:=""}"
 
+# Format tool error output — detects JSON error blobs and prints a clean message.
+# Returns 0 if an error was detected and formatted, 1 if output is not a tool error.
+# Usage: lacy_format_tool_error "$output" "$tool_name"
+lacy_format_tool_error() {
+    local output="$1"
+    local tool="${2:-agent}"
+
+    # Quick check: does it look like JSON with an error?
+    [[ "$output" == "{"* ]] || return 1
+
+    local is_error="" result_text=""
+
+    if command -v jq >/dev/null 2>&1; then
+        is_error=$(printf '%s\n' "$output" | jq -r 'if .is_error == true then "true" else "" end' 2>/dev/null)
+        result_text=$(printf '%s\n' "$output" | jq -r '.result // empty' 2>/dev/null)
+    elif command -v python3 >/dev/null 2>&1; then
+        is_error=$(printf '%s\n' "$output" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    print('true' if d.get('is_error') else '')
+except: pass" 2>/dev/null)
+        result_text=$(printf '%s\n' "$output" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    print(d.get('result', ''))
+except: pass" 2>/dev/null)
+    else
+        # Fallback: grep for is_error and result fields
+        if printf '%s' "$output" | grep -q '"is_error"[[:space:]]*:[[:space:]]*true'; then
+            is_error="true"
+            result_text=$(printf '%s' "$output" | grep -o '"result"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+        fi
+    fi
+
+    [[ "$is_error" == "true" ]] || return 1
+
+    # We have an error — format it nicely
+    local red=196
+    local dim=238
+    local yellow=220
+
+    echo ""
+    lacy_print_color "$red" "  Error from ${tool}"
+    echo ""
+    if [[ -n "$result_text" ]]; then
+        # Split on " · " delimiter that Claude uses
+        local IFS_BAK="$IFS"
+        local msg="$result_text"
+        local main_msg="" hint_msg=""
+        if [[ "$msg" == *" · "* ]]; then
+            main_msg="${msg%% · *}"
+            hint_msg="${msg#* · }"
+        else
+            main_msg="$msg"
+        fi
+        lacy_print_color "$yellow" "  ${main_msg}"
+        if [[ -n "$hint_msg" ]]; then
+            echo ""
+            lacy_print_color "$dim" "  ${hint_msg}"
+        fi
+    else
+        lacy_print_color "$yellow" "  The agent returned an error (no details available)"
+    fi
+    echo ""
+    return 0
+}
+
 # Send query to AI agent (configurable tool or fallback)
 lacy_shell_query_agent() {
     local query="$1"
@@ -191,6 +260,10 @@ EOF
         lacy_stop_spinner
 
         if [[ $exit_code -eq 0 ]]; then
+            # Check for structured errors (e.g. invalid API key)
+            if lacy_format_tool_error "$json_output" "$tool"; then
+                return 1
+            fi
             local result_text
             result_text=$(lacy_preheat_claude_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
@@ -210,6 +283,11 @@ EOF
             exit_code=$?
             lacy_stop_spinner
 
+            # Check for structured errors before processing
+            if lacy_format_tool_error "$json_output" "$tool"; then
+                return 1
+            fi
+
             if [[ $exit_code -eq 0 ]]; then
                 local result_text
                 result_text=$(lacy_preheat_claude_extract_result "$json_output")
@@ -223,11 +301,11 @@ EOF
                 echo ""
                 return 0
             fi
-            printf '%s\n' "$json_output"
+            lacy_format_tool_error "$json_output" "$tool" || printf '%s\n' "$json_output"
             echo ""
             return $exit_code
         else
-            printf '%s\n' "$json_output"
+            lacy_format_tool_error "$json_output" "$tool" || printf '%s\n' "$json_output"
             echo ""
             return $exit_code
         fi
@@ -238,6 +316,8 @@ EOF
     lacy_start_spinner
     _lacy_run_tool_cmd "$cmd" "$query" </dev/tty 2>&1 | {
         local _spinner_killed=false
+        local _full_output=""
+        local _line_count=0
         while IFS= read -r line; do
             if ! $_spinner_killed; then
                 if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
@@ -247,12 +327,25 @@ EOF
                 fi
                 _spinner_killed=true
             fi
-            printf '%s\n' "$line"
+            _full_output+="$line"
+            (( _line_count++ ))
+            # Only buffer first line to check for JSON errors
+            if (( _line_count > 1 )); then
+                # Multi-line output — not a JSON error blob, flush everything
+                if [[ $_line_count -eq 2 ]]; then
+                    printf '%s\n' "$_full_output"
+                fi
+                printf '%s\n' "$line"
+            fi
         done
         if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
             kill "$LACY_SPINNER_PID" 2>/dev/null
             sleep "$LACY_TERMINAL_FLUSH_DELAY"
             printf '\e[2K\r\e[?25h\e[?7h'
+        fi
+        # Single-line output — check if it's a JSON error
+        if (( _line_count <= 1 )); then
+            lacy_format_tool_error "$_full_output" "$tool" || printf '%s\n' "$_full_output"
         fi
     }
     local exit_code
