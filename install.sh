@@ -26,6 +26,9 @@ INSTALL_DIR="${HOME}/.lacy"
 REPO_URL="https://github.com/lacymorrow/lacy.git"
 CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 
+# Release channel (set via --beta, --channel, or LACY_CHANNEL env var)
+LACY_CHANNEL="${LACY_CHANNEL:-latest}"
+
 # Selected tool (set during installation)
 SELECTED_TOOL=""
 CUSTOM_COMMAND=""
@@ -106,16 +109,21 @@ use_node_installer() {
 
 # Run Node installer via npx
 run_node_installer() {
+    local pkg="lacy@${LACY_CHANNEL}"
+
     # Quietly check if package exists first
-    if ! npm view lacy version >/dev/null 2>&1; then
+    if ! npm view "$pkg" version >/dev/null 2>&1; then
         return 1
     fi
 
+    if [[ "$LACY_CHANNEL" != "latest" ]]; then
+        printf "${MAGENTA}Channel: ${LACY_CHANNEL}${NC}\n"
+    fi
     printf "${BLUE}Using interactive installer...${NC}\n"
     printf "\n"
     # Redirect stdin from /dev/tty so the Node process gets an interactive TTY
     # even when this script is piped (curl | bash)
-    if npx --yes lacy@latest < /dev/tty; then
+    if npx --yes "$pkg" < /dev/tty; then
         exit 0
     fi
 
@@ -137,6 +145,9 @@ print_banner() {
     printf "                  |___/  \n"
     printf "${NC}"
     printf "${CYAN}Talk directly to your shell${NC}\n"
+    if [[ "$LACY_CHANNEL" != "latest" ]]; then
+        printf "${MAGENTA}${BOLD}  [${LACY_CHANNEL}]${NC}\n"
+    fi
     printf "\n"
 }
 
@@ -324,13 +335,21 @@ install_lash_cli() {
 install_plugin() {
     printf "${BLUE}Installing Lacy...${NC}\n"
 
+    # Determine git branch: beta channel clones beta branch, otherwise main
+    local branch="main"
+    if [[ "$LACY_CHANNEL" != "latest" ]]; then
+        branch="$LACY_CHANNEL"
+    fi
+
     if [[ -d "$INSTALL_DIR" ]]; then
         printf "${YELLOW}Existing installation found. Updating...${NC}\n"
         cd "$INSTALL_DIR" || exit 1
-        git pull origin main 2>/dev/null || git pull 2>/dev/null || {
+        git pull origin "$branch" 2>/dev/null || git pull origin main 2>/dev/null || git pull 2>/dev/null || {
             printf "${YELLOW}Could not update, using existing installation${NC}\n"
         }
     else
+        # Try channel branch first, fall back to main
+        git clone --depth 1 -b "$branch" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || \
         git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
             printf "${RED}Failed to clone repository${NC}\n"
             exit 1
@@ -653,22 +672,46 @@ main() {
     main_bash
 }
 
+# Parse flags that can appear anywhere (--beta, --channel)
+_args=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --beta)
+            LACY_CHANNEL="beta"
+            shift
+            ;;
+        --channel)
+            LACY_CHANNEL="${2:?--channel requires a value}"
+            shift 2
+            ;;
+        *)
+            _args+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${_args[@]}"
+
 # Handle command line arguments
-case "$1" in
+case "${1:-}" in
     "--help"|"-h")
         printf "Lacy Shell Installation Script\n"
         printf "\n"
         printf "Usage: $0 [options]\n"
         printf "\n"
         printf "Options:\n"
-        printf "  --help       Show this help message\n"
-        printf "  --uninstall  Uninstall Lacy Shell\n"
-        printf "  --bash       Force bash installer (skip Node)\n"
-        printf "  --shell X    Force shell type (zsh, bash)\n"
-        printf "  --tool X     Pre-select tool (lash, claude, opencode, gemini, codex, custom, auto)\n"
+        printf "  --help        Show this help message\n"
+        printf "  --uninstall   Uninstall Lacy Shell\n"
+        printf "  --bash        Force bash installer (skip Node)\n"
+        printf "  --shell X     Force shell type (zsh, bash)\n"
+        printf "  --tool X      Pre-select tool (lash, claude, opencode, gemini, codex, custom, auto)\n"
+        printf "  --beta        Use beta release channel\n"
+        printf "  --channel X   Use a named release channel (beta, rc, etc.)\n"
         printf "\n"
         printf "Examples:\n"
         printf "  curl -fsSL https://lacy.sh/install | bash\n"
+        printf "  curl -fsSL https://lacy.sh/install/beta | bash\n"
+        printf "  curl -fsSL https://lacy.sh/install | bash -s -- --beta\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --uninstall\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool claude\n"
         printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool custom \"claude -p\"\n"

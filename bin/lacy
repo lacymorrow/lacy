@@ -99,10 +99,12 @@ yaml_write() {
 
 # Try Node CLI for rich interactive experience
 # Falls back silently if Node unavailable or LACY_NO_NODE=1
+# Respects LACY_CHANNEL (default: latest) for beta testing
 try_node() {
     [[ "${LACY_NO_NODE:-}" == "1" ]] && return 1
     command_exists npx && [[ -t 0 ]] || return 1
-    npx --yes lacy@latest "$@" && exit 0
+    local pkg="lacy@${LACY_CHANNEL:-latest}"
+    npx --yes "$pkg" "$@" && exit 0
     return 1
 }
 
@@ -602,6 +604,7 @@ ${BOLD}Commands:${NC}
   update         Pull latest changes
   reinstall      Fresh installation
   status         Show installation status
+  info           Show basic information and help
   doctor         Diagnose common issues
   config         Show/edit configuration
   version        Show version

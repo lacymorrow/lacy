@@ -10,7 +10,9 @@
     "index.mjs"
   ],
   "scripts": {
-    "start": "node index.mjs"
+    "start": "node index.mjs",
+    "release": "npm publish",
+    "release:beta": "npm version prerelease --preid=beta && npm publish --tag beta"
   },
   "keywords": [
     "lacy",
