@@ -589,6 +589,27 @@ do_uninstall() {
         exit 0
     fi
 
+    # Ask about keeping config
+    local keep_config="n"
+    if [[ -f "$CONFIG_FILE" ]]; then
+        if [[ -t 0 ]]; then
+            printf "Keep configuration for future reinstall? [Y/n]: "
+            read -r keep_config
+        elif { true < /dev/tty; } 2>/dev/null; then
+            printf "Keep configuration for future reinstall? [Y/n]: "
+            read -r keep_config < /dev/tty 2>/dev/null || keep_config="y"
+        else
+            keep_config="y"  # Non-interactive: default to keeping config
+        fi
+    fi
+
+    # Backup config if keeping
+    local config_backup=""
+    if [[ ! "$keep_config" =~ ^[Nn]$ ]] && [[ -f "$CONFIG_FILE" ]]; then
+        config_backup=$(mktemp)
+        cp "$CONFIG_FILE" "$config_backup"
+    fi
+
     # Remove from all possible RC files
     _remove_from_rc "${HOME}/.zshrc"
     _remove_from_rc "${HOME}/.bashrc"
@@ -605,6 +626,14 @@ do_uninstall() {
         printf "${BLUE}Removing ${HOME}/.lacy-shell...${NC}\n"
         rm -rf "${HOME}/.lacy-shell"
         printf "  ${GREEN}✓${NC} Removed\n"
+    fi
+
+    # Restore config if keeping
+    if [[ -n "$config_backup" ]]; then
+        mkdir -p "$INSTALL_DIR"
+        cp "$config_backup" "$CONFIG_FILE"
+        rm -f "$config_backup"
+        printf "  ${GREEN}✓${NC} Configuration preserved\n"
     fi
 
     printf "\n"

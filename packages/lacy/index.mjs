@@ -170,24 +170,36 @@ function removeLacyFromFile(filePath) {
   return true;
 }
 
-async function uninstall() {
-  console.clear();
-  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)));
+// Shared uninstall logic — removes RC lines and install dirs, optionally keeps config
+async function doUninstall({ askConfirm = true } = {}) {
+  if (askConfirm) {
+    const confirm = await p.confirm({
+      message: "Are you sure you want to uninstall Lacy Shell?",
+      initialValue: false,
+    });
 
-  if (!isInstalled()) {
-    p.log.warn("Lacy Shell is not installed");
-    p.outro("Nothing to uninstall");
-    process.exit(0);
+    if (p.isCancel(confirm) || !confirm) {
+      p.cancel("Uninstall cancelled");
+      process.exit(0);
+    }
   }
 
-  const confirm = await p.confirm({
-    message: "Are you sure you want to uninstall Lacy Shell?",
-    initialValue: false,
-  });
+  // Ask about config
+  let keepConfig = false;
+  if (existsSync(CONFIG_FILE)) {
+    const configChoice = await p.confirm({
+      message: "Keep configuration for future reinstall?",
+      initialValue: true,
+    });
+    if (!p.isCancel(configChoice)) {
+      keepConfig = configChoice;
+    }
+  }
 
-  if (p.isCancel(confirm) || !confirm) {
-    p.cancel("Uninstall cancelled");
-    process.exit(0);
+  // Backup config if keeping
+  let configBackup = null;
+  if (keepConfig && existsSync(CONFIG_FILE)) {
+    configBackup = readFileSync(CONFIG_FILE, "utf-8");
   }
 
   // Remove from all possible RC files
@@ -218,13 +230,34 @@ async function uninstall() {
     rmSync(INSTALL_DIR_OLD, { recursive: true, force: true });
   }
 
-  removeSpinner.stop("Installation removed");
+  // Restore config if keeping
+  if (configBackup) {
+    mkdirSync(INSTALL_DIR, { recursive: true });
+    writeFileSync(CONFIG_FILE, configBackup);
+  }
+
+  removeSpinner.stop(
+    configBackup ? "Installation removed (config preserved)" : "Installation removed",
+  );
 
   p.log.success("Lacy Shell uninstalled");
 
   await restartShell("Restart shell now?");
 
   p.outro("Restart your terminal to apply changes.");
+}
+
+async function uninstall() {
+  console.clear();
+  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)));
+
+  if (!isInstalled()) {
+    p.log.warn("Lacy Shell is not installed");
+    p.outro("Nothing to uninstall");
+    process.exit(0);
+  }
+
+  await doUninstall();
 }
 
 // setup() is handled by the already-installed dashboard in main()
@@ -806,36 +839,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
       }
 
       if (action === "uninstall") {
-        const confirm = await p.confirm({
-          message: "Are you sure you want to uninstall Lacy Shell?",
-          initialValue: false,
-        });
-
-        if (p.isCancel(confirm) || !confirm) {
-          p.log.info("Uninstall cancelled");
-          continue;
-        }
-
-        const rcSpinner2 = p.spinner();
-        rcSpinner2.start("Removing from shell configs");
-        for (const rcFile of ALL_RC_FILES) {
-          removeLacyFromFile(rcFile);
-        }
-        rcSpinner2.stop("Shell configs cleaned");
-
-        const removeSpinner = p.spinner();
-        removeSpinner.start("Removing installation");
-        if (existsSync(INSTALL_DIR)) {
-          rmSync(INSTALL_DIR, { recursive: true, force: true });
-        }
-        if (existsSync(INSTALL_DIR_OLD)) {
-          rmSync(INSTALL_DIR_OLD, { recursive: true, force: true });
-        }
-        removeSpinner.stop("Installation removed");
-
-        p.log.success("Lacy Shell uninstalled");
-        await restartShell("Restart shell now?");
-        p.outro("Restart your terminal to apply changes.");
+        await doUninstall();
         return;
       }
 
