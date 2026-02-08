@@ -361,8 +361,8 @@ cmd_info() {
         printf '  • %s\n' "Type natural language for AI assistance"
         printf '  • %s\n' "Press Ctrl+Space to toggle modes"
         echo
-        printf '%s\n' "Run '\e[38;5;200mlacy setup\e[0m' to configure your AI tool and settings."
-        printf '%s\n' "Run '\e[38;5;200mlacy mode\e[0m' to see current mode and legend."
+        printf '%b\n' "Run '\e[38;5;200mlacy setup\e[0m' to configure your AI tool and settings."
+        printf '%b\n' "Run '\e[38;5;200mlacy mode\e[0m' to see current mode and legend."
     fi
 }
 

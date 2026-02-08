@@ -22,13 +22,10 @@ lacy_shell_setup_keybindings() {
     bind -x '"\C-x\C-l": lacy_shell_smart_accept_line_bash'
     bind '"\C-m": "\C-x\C-l\C-j"'
 
-    # Ctrl+Space: Toggle mode
-    # Bash can't redraw the prompt from bind -x (PS1 changes don't take
-    # effect until next prompt cycle). So we bind Ctrl+Space to a macro
-    # that clears the current line, types our internal toggle command,
-    # and sends accept-line (\C-j). We use \C-j (newline) instead of
-    # \C-m because \C-m is overridden by our macro.
-    bind '"\C-@": "\C-a\C-k _lacy_mode_toggle_\C-j"'
+    # Ctrl+Space: Toggle mode via bind -x
+    # We save/restore READLINE_LINE so the user's in-progress input is preserved.
+    # After toggling, we update PS1 and force readline to redraw the prompt.
+    bind -x '"\C-@": _lacy_ctrl_space_toggle'
 
     # Ensure \C-j is bound to accept-line (used by macros above)
     bind '"\C-j": accept-line'
@@ -37,21 +34,27 @@ lacy_shell_setup_keybindings() {
     IGNOREEOF=1000
 }
 
-# Hidden command executed by the Ctrl+Space macro.
-# Runs as a real command so PROMPT_COMMAND fires afterward with updated PS1.
-_lacy_mode_toggle_() {
-    # Remove this injected command from history
-    history -d "$(history 1 | awk '{print $1}')" 2>/dev/null
+# Ctrl+Space handler via bind -x.
+# Toggles mode, prints feedback, updates PS1, and redraws the prompt
+# in-place without exposing any internal command text to the user.
+_lacy_ctrl_space_toggle() {
+    local saved_line="$READLINE_LINE"
+    local saved_point="$READLINE_POINT"
+
     lacy_shell_toggle_mode
     lacy_shell_update_prompt
+
     local new_mode="$LACY_SHELL_CURRENT_MODE"
-    # Move up and clear the echoed command line, then print feedback
-    printf '\e[A\e[2K\r'
+    # Print mode feedback above the prompt
     case "$new_mode" in
-        "shell") printf '  \e[38;5;%dm%s\e[0m SHELL mode\n' "$LACY_COLOR_SHELL" "$LACY_INDICATOR_CHAR" ;;
-        "agent") printf '  \e[38;5;%dm%s\e[0m AGENT mode\n' "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR" ;;
-        "auto")  printf '  \e[38;5;%dm%s\e[0m AUTO mode\n' "$LACY_COLOR_AUTO" "$LACY_INDICATOR_CHAR" ;;
+        "shell") printf '\n  \e[38;5;%dm%s\e[0m SHELL mode' "$LACY_COLOR_SHELL" "$LACY_INDICATOR_CHAR" ;;
+        "agent") printf '\n  \e[38;5;%dm%s\e[0m AGENT mode' "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR" ;;
+        "auto")  printf '\n  \e[38;5;%dm%s\e[0m AUTO mode' "$LACY_COLOR_AUTO" "$LACY_INDICATOR_CHAR" ;;
     esac
+
+    # Restore the user's in-progress input
+    READLINE_LINE="$saved_line"
+    READLINE_POINT="$saved_point"
 }
 
 # Interrupt handler for double Ctrl-C quit
@@ -104,6 +107,7 @@ lacy_shell_cleanup_keybindings_bash() {
     bind -r '"\C-x\C-l"' 2>/dev/null
 
     # Restore Ctrl+Space and \C-j to defaults
+    bind -r '"\C-@"' 2>/dev/null
     bind '"\C-@": set-mark' 2>/dev/null
     bind '"\C-j": accept-line' 2>/dev/null
 
