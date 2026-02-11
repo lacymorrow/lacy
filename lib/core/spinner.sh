@@ -36,6 +36,13 @@ lacy_start_spinner() {
         LACY_SPINNER_NOTIFY_WAS_SET=""
     fi
 
+    # Initialize animation frames (global array, inherited by forked subshell)
+    lacy_set_spinner_animation "${LACY_SPINNER_STYLE:-braille}"
+    # Guard: if animation failed to load, use hardcoded fallback
+    if [[ ${#LACY_SPINNER_ANIM[@]} -eq 0 ]]; then
+        LACY_SPINNER_ANIM=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    fi
+
     {
         trap 'printf "\e[?25h"' EXIT
         trap 'exit 0' TERM INT HUP
@@ -43,7 +50,8 @@ lacy_start_spinner() {
         # Hide cursor
         printf '\e[?25l'
 
-        local frames="$LACY_SPINNER_FRAMES"
+        local num_frames=${#LACY_SPINNER_ANIM[@]}
+
         local text="$LACY_SPINNER_TEXT"
         local text_len=${#text}
         local frame_num=0
@@ -55,12 +63,11 @@ lacy_start_spinner() {
 
         while true; do
             if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-                spinner_idx=$(( (frame_num % ${#frames}) + 1 ))
-                spinner_char="${frames[$spinner_idx]}"
+                spinner_idx=$(( (frame_num % num_frames) + 1 ))
             else
-                spinner_idx=$(( frame_num % ${#frames} ))
-                spinner_char="${frames:$spinner_idx:1}"
+                spinner_idx=$(( frame_num % num_frames ))
             fi
+            spinner_char="${LACY_SPINNER_ANIM[$spinner_idx]}"
 
             # Build shimmer text
             shimmer=""

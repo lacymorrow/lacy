@@ -334,7 +334,7 @@ lacy_shell_quit() {
     fi
 
     # Unset aliases
-    unalias ask mode tool quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
+    unalias ask mode tool spinner quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
@@ -485,10 +485,61 @@ lacy_shell_tool() {
     esac
 }
 
+# Spinner animation command
+lacy_shell_spinner() {
+    case "$1" in
+        "")
+            echo ""
+            echo "Active spinner: ${LACY_SPINNER_STYLE:-braille}"
+            echo ""
+            echo "Available animations:"
+            lacy_list_spinner_animations
+            echo ""
+            echo "Usage: spinner set <name>"
+            echo "       spinner preview [name]"
+            echo ""
+            ;;
+        set)
+            if [[ -z "$2" ]]; then
+                echo "Usage: spinner set <name>"
+                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]}"
+                return 1
+            fi
+            if _lacy_in_list "$2" "${LACY_SPINNER_ANIMATIONS[@]}"; then
+                LACY_SPINNER_STYLE="$2"
+                export LACY_SPINNER_STYLE
+                echo "Spinner set to: $2"
+            else
+                echo "Unknown animation: $2"
+                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]}"
+                return 1
+            fi
+            ;;
+        preview)
+            local style="${2:-${LACY_SPINNER_STYLE:-braille}}"
+            if ! _lacy_in_list "$style" "${LACY_SPINNER_ANIMATIONS[@]}"; then
+                echo "Unknown animation: $style"
+                return 1
+            fi
+            local _saved="$LACY_SPINNER_STYLE"
+            LACY_SPINNER_STYLE="$style"
+            echo "Previewing: $style (Ctrl+C to stop)"
+            lacy_start_spinner
+            sleep 3
+            lacy_stop_spinner
+            LACY_SPINNER_STYLE="$_saved"
+            ;;
+        *)
+            echo "Usage: spinner [set <name> | preview [name]]"
+            ;;
+    esac
+}
+
 # Aliases
 alias ask="lacy_shell_query_agent"
 alias mode="lacy_shell_mode"
 alias tool="lacy_shell_tool"
+alias spinner="lacy_shell_spinner"
 alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
 alias stop="lacy_shell_quit"
