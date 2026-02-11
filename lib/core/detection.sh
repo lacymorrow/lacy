@@ -136,6 +136,29 @@ lacy_shell_classify_input() {
         return
     fi
 
+    # Inline env var assignment: VAR=value command args
+    # Skip past any VAR=value prefixes to find the actual command
+    if [[ "$first_word" == *=* ]]; then
+        local -a _words
+        if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+            _words=( ${=input} )
+        else
+            read -ra _words <<< "$input"
+        fi
+        local _w
+        for _w in "${_words[@]}"; do
+            if [[ "$_w" == *=* ]]; then
+                continue
+            fi
+            # Found the actual command after env var(s)
+            if lacy_shell_is_valid_command "$_w"; then
+                echo "shell"
+                return
+            fi
+            break
+        done
+    fi
+
     # Check if it's a valid command (cached)
     if lacy_shell_is_valid_command "$first_word"; then
         echo "shell"
@@ -246,6 +269,9 @@ lacy_shell_test_detection() {
         "yes lets go"
         "no I dont want that"
         "yes"
+        "RUST_LOG=debug cargo run"
+        "FOO=bar BAZ=qux node index.js"
+        "CC=gcc make -j4"
     )
 
     echo "Testing auto-detection logic:"

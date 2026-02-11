@@ -120,6 +120,14 @@ assert_eq "no I dont → agent" "agent" "$(lacy_shell_classify_input 'no I dont 
 assert_eq "perfect lets move on → agent" "agent" "$(lacy_shell_classify_input 'perfect lets move on')"
 assert_eq "thanks for the help → agent" "agent" "$(lacy_shell_classify_input 'thanks for the help')"
 
+# Inline env var assignments → shell
+assert_eq "RUST_LOG=debug cargo run → shell" "shell" "$(lacy_shell_classify_input 'RUST_LOG=debug cargo run')"
+assert_eq "FOO=bar node index.js → shell" "shell" "$(lacy_shell_classify_input 'FOO=bar node index.js')"
+assert_eq "FOO=bar BAZ=qux node index.js → shell" "shell" "$(lacy_shell_classify_input 'FOO=bar BAZ=qux node index.js')"
+assert_eq "CC=gcc make -j4 → shell" "shell" "$(lacy_shell_classify_input 'CC=gcc make -j4')"
+assert_eq "FOO=bar (bare assignment, no cmd) → shell" "shell" "$(lacy_shell_classify_input 'FOO=bar')"
+assert_eq "FOO=bar nonexistent thing → agent" "agent" "$(lacy_shell_classify_input 'FOO=bar nonexistent_cmd thing')"
+
 # Single word non-command → shell (typo)
 assert_eq "asdfgh → shell" "shell" "$(lacy_shell_classify_input 'asdfgh')"
 

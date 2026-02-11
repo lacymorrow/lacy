@@ -6,7 +6,7 @@ Route natural language input away from the shell and toward the agent
 
 ### Summary
 
-Users sometimes type natural language in shell mode where the first word happens to be a valid command or shell keyword. Two complementary layers catch this: a pre-execution filter for shell reserved words that are never valid standalone commands, and a post-execution heuristic that detects natural language after a real command fails.
+Users sometimes type natural language in shell mode where the first word happens to be a valid command or shell keyword. Two complementary layers catch this: a pre-execution filter for shell reserved words that are never valid standalone commands, and a post-execution heuristic that detects natural language after a real command fails. Additionally, common shell syntax patterns (like inline environment variable assignments `VAR=value command`) are recognized before the `command -v` check to avoid false agent routing.
 
 This spec is a shared reference for both lash (opencode) and lacyshell. The algorithm is intentionally simple — pure string matching with no dependencies.
 
@@ -31,6 +31,21 @@ Examples caught by this layer:
 - `do We already have an easy way to uninstall lacy?`
 - `in the codebase where is the auth module?`
 - `then what should I do next?`
+
+---
+
+### Inline environment variable assignments
+
+Shell syntax like `VAR=value command args` prepends environment variables to a command. The first token (`VAR=value`) is not a command and fails `command -v`, but the input is clearly shell syntax, not natural language.
+
+When the first token contains `=`, skip past all `VAR=value` tokens to find the actual command. If that command passes `command -v`, route to shell. If no valid command follows (or no tokens remain), fall through to the normal multi-word heuristic.
+
+Examples:
+
+- `RUST_LOG=debug cargo run` → `cargo` is valid → shell
+- `FOO=bar BAZ=qux node index.js` → skip both assignments, `node` is valid → shell
+- `CC=gcc make -j4` → `make` is valid → shell
+- `FOO=bar unknown_thing here` → `unknown_thing` not valid → falls through to agent (multi-word, non-command first word)
 
 ---
 
@@ -144,6 +159,8 @@ When natural language is detected, silently reroute the input to the agent. No u
 | `go ahead and fix the tests`             | `go`        | 2     | Runs — "unknown command" + "ahead" is NL — reroute              |
 | `go for it and deploy`                   | `go`        | 2     | Runs — "unknown command" + "for" is NL — reroute                |
 | `cargo ahead with the release`           | `cargo`     | 2     | Runs — "no such command" + "ahead" is NL — reroute              |
+| `RUST_LOG=debug cargo run`               | `RUST_LOG=…`| —     | Env var prefix — `cargo` is valid command — shell               |
+| `FOO=bar BAZ=qux node index.js`         | `FOO=…`     | —     | Multiple env var prefixes — `node` is valid — shell             |
 | `ls -la`                                 | `ls`        | —     | Succeeds — no detection                                         |
 | `grep -r foo`                            | `grep`      | —     | May fail but error doesn't match NL heuristic                   |
 
