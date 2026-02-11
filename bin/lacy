@@ -9,7 +9,7 @@
 
 set -e
 
-VERSION_FALLBACK="1.7.6"
+VERSION_FALLBACK="1.7.7"
 INSTALL_DIR="${HOME}/.lacy"
 INSTALL_DIR_OLD="${HOME}/.lacy-shell"
 CONFIG_FILE="${INSTALL_DIR}/config.yaml"
