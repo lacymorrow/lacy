@@ -23,6 +23,17 @@ LACY_SPINNER_ANIMATIONS=(
 lacy_set_spinner_animation() {
     local name="${1:-braille}"
 
+    # "random" picks a random animation each time
+    if [[ "$name" == "random" ]]; then
+        local count=${#LACY_SPINNER_ANIMATIONS[@]}
+        local arr_off=${_LACY_ARR_OFFSET:-0}
+        if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+            name="${LACY_SPINNER_ANIMATIONS[$(( (RANDOM % count) + 1 ))]}"
+        else
+            name="${LACY_SPINNER_ANIMATIONS[$(( RANDOM % count ))]}"
+        fi
+    fi
+
     case "$name" in
         braille)
             # Classic rotating dots
@@ -108,4 +119,9 @@ lacy_list_spinner_animations() {
             lacy_print_color "$LACY_COLOR_NEUTRAL" "  ○ $name"
         fi
     done
+    if [[ "$current" == "random" ]]; then
+        lacy_print_color "$LACY_COLOR_AGENT" "  ● random (active)"
+    else
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "  ○ random"
+    fi
 }

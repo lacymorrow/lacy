@@ -502,22 +502,22 @@ lacy_shell_spinner() {
         set)
             if [[ -z "$2" ]]; then
                 echo "Usage: spinner set <name>"
-                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]}"
+                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]} random"
                 return 1
             fi
-            if _lacy_in_list "$2" "${LACY_SPINNER_ANIMATIONS[@]}"; then
+            if [[ "$2" == "random" ]] || _lacy_in_list "$2" "${LACY_SPINNER_ANIMATIONS[@]}"; then
                 LACY_SPINNER_STYLE="$2"
                 export LACY_SPINNER_STYLE
                 echo "Spinner set to: $2"
             else
                 echo "Unknown animation: $2"
-                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]}"
+                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]} random"
                 return 1
             fi
             ;;
         preview)
             local style="${2:-${LACY_SPINNER_STYLE:-braille}}"
-            if ! _lacy_in_list "$style" "${LACY_SPINNER_ANIMATIONS[@]}"; then
+            if [[ "$style" != "random" ]] && ! _lacy_in_list "$style" "${LACY_SPINNER_ANIMATIONS[@]}"; then
                 echo "Unknown animation: $style"
                 return 1
             fi
