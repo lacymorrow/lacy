@@ -49,14 +49,14 @@ lacy_set_spinner_animation() {
             LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⠁⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⣛⠀⠀⠀⠀" "⣿⠀⠀⠀⠀" "⣛⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠁⠀⠀⠀⠀")
             ;;
         snake)
-            # Diagonal wave across 3 cells (3 cells + 2 padding)
-            LACY_SPINNER_ANIM=("⠁⠂⠄⠀⠀" "⠂⠄⡀⠀⠀" "⠄⡀⢀⠀⠀" "⡀⢀⠠⠀⠀" "⢀⠠⠐⠀⠀" "⠠⠐⠈⠀⠀" "⠐⠈⠁⠀⠀" "⠈⠁⠂⠀⠀")
+            # Diagonal wave across 5 cells
+            LACY_SPINNER_ANIM=("⠁⠂⠄⡀⢀" "⠂⠄⡀⢀⠠" "⠄⡀⢀⠠⠐" "⡀⢀⠠⠐⠈" "⢀⠠⠐⠈⠁" "⠠⠐⠈⠁⠂" "⠐⠈⠁⠂⠄" "⠈⠁⠂⠄⡀")
             ;;
         fill_sweep)
-            # Fill rows left-to-right, clear left-to-right (2 cells + 3 padding)
+            # Fill rows left-to-right, clear left-to-right (3 cells + 2 padding)
             LACY_SPINNER_ANIM=(
-                "⠀⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⠿⠀⠀⠀⠀" "⣿⠀⠀⠀⠀" "⣿⠉⠀⠀⠀" "⣿⠛⠀⠀⠀" "⣿⠿⠀⠀⠀"
-                "⣿⣿⠀⠀⠀" "⣶⣿⠀⠀⠀" "⣤⣿⠀⠀⠀" "⣀⣿⠀⠀⠀" "⠀⣿⠀⠀⠀" "⠀⣶⠀⠀⠀" "⠀⣤⠀⠀⠀" "⠀⣀⠀⠀⠀"
+                "⠀⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⣿⠀⠀⠀⠀" "⣿⠛⠀⠀⠀" "⣿⣿⠀⠀⠀" "⣿⣿⠛⠀⠀" "⣿⣿⣿⠀⠀"
+                "⣤⣿⣿⠀⠀" "⠀⣿⣿⠀⠀" "⠀⣤⣿⠀⠀" "⠀⠀⣿⠀⠀" "⠀⠀⣤⠀⠀"
             )
             ;;
         pulse)
@@ -64,31 +64,35 @@ lacy_set_spinner_animation() {
             LACY_SPINNER_ANIM=("⣿⠀⠀⠀⠀" "⠛⠁⠀⠀⠀" "⠉⠉⠀⠀⠀" "⠁⠛⠀⠀⠀" "⠀⣿⠀⠀⠀" "⠁⠛⠀⠀⠀" "⠉⠉⠀⠀⠀" "⠛⠁⠀⠀⠀")
             ;;
         columns)
-            # Vertical bars appearing one at a time (3 cells + 2 padding)
-            LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⡇⠀⠀⠀⠀" "⡇⡇⠀⠀⠀" "⡇⡇⡇⠀⠀" "⠀⡇⡇⠀⠀" "⠀⠀⡇⠀⠀")
+            # Vertical bars appearing one at a time (5 cells)
+            LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⡇⠀⠀⠀⠀" "⡇⡇⠀⠀⠀" "⡇⡇⡇⠀⠀" "⡇⡇⡇⡇⠀" "⡇⡇⡇⡇⡇" "⠀⡇⡇⡇⡇" "⠀⠀⡇⡇⡇" "⠀⠀⠀⡇⡇" "⠀⠀⠀⠀⡇")
             ;;
         checkerboard)
-            # Alternating dot patterns (3 cells + 2 padding)
-            LACY_SPINNER_ANIM=("⢕⡪⢕⠀⠀" "⣿⣿⣿⠀⠀" "⡪⢕⡪⠀⠀" "⣿⣿⣿⠀⠀")
+            # Alternating dot patterns (5 cells)
+            LACY_SPINNER_ANIM=("⢕⡪⢕⡪⢕" "⣿⣿⣿⣿⣿" "⡪⢕⡪⢕⡪" "⣿⣿⣿⣿⣿")
             ;;
         scan)
-            # Lit column scanning back and forth (3 cells + 2 padding)
-            LACY_SPINNER_ANIM=("⡇⠀⠀⠀⠀" "⠀⡇⠀⠀⠀" "⠀⠀⡇⠀⠀" "⠀⡇⠀⠀⠀")
+            # Lit column scanning back and forth (5 cells)
+            LACY_SPINNER_ANIM=("⡇⠀⠀⠀⠀" "⠀⡇⠀⠀⠀" "⠀⠀⡇⠀⠀" "⠀⠀⠀⡇⠀" "⠀⠀⠀⠀⡇" "⠀⠀⠀⡇⠀" "⠀⠀⡇⠀⠀" "⠀⡇⠀⠀⠀")
             ;;
         rain)
-            # Dots falling at staggered heights (4 cells + 1 padding)
-            LACY_SPINNER_ANIM=("⠁⠐⠄⢀⠀" "⠂⠠⡀⠈⠀" "⠄⢀⠁⠐⠀" "⡀⠈⠂⠠⠀")
+            # Dots falling at staggered heights (5 cells)
+            LACY_SPINNER_ANIM=("⠁⠐⠄⢀⠂" "⠂⠠⡀⠈⠄" "⠄⢀⠁⠐⡀" "⡀⠈⠂⠠⠁")
             ;;
         cascade)
-            # Waterfall filling and draining columns (2 cells + 3 padding)
+            # Waterfall filling and draining 3 columns (3 cells + 2 padding)
             LACY_SPINNER_ANIM=(
-                "⠀⠀⠀⠀⠀" "⠁⠀⠀⠀⠀" "⠃⠀⠀⠀⠀" "⠇⠀⠀⠀⠀" "⡇⠁⠀⠀⠀" "⡇⠃⠀⠀⠀" "⡇⠇⠀⠀⠀"
-                "⡇⡇⠀⠀⠀" "⠆⡇⠀⠀⠀" "⠄⡇⠀⠀⠀" "⠀⡇⠀⠀⠀" "⠀⠆⠀⠀⠀" "⠀⠄⠀⠀⠀"
+                "⠀⠀⠀⠀⠀" "⠁⠀⠀⠀⠀" "⠃⠀⠀⠀⠀" "⠇⠀⠀⠀⠀"
+                "⡇⠁⠀⠀⠀" "⡇⠃⠀⠀⠀" "⡇⠇⠀⠀⠀"
+                "⡇⡇⠁⠀⠀" "⡇⡇⠃⠀⠀" "⡇⡇⠇⠀⠀" "⡇⡇⡇⠀⠀"
+                "⠆⡇⡇⠀⠀" "⠄⡇⡇⠀⠀" "⠀⡇⡇⠀⠀"
+                "⠀⠆⡇⠀⠀" "⠀⠄⡇⠀⠀" "⠀⠀⡇⠀⠀"
+                "⠀⠀⠆⠀⠀" "⠀⠀⠄⠀⠀"
             )
             ;;
         sparkle)
-            # Pseudo-random twinkling dots (3 cells + 2 padding)
-            LACY_SPINNER_ANIM=("⠐⡀⠂⠀⠀" "⢁⠠⠈⠀⠀" "⠀⢄⡁⠀⠀" "⠈⠂⠐⠀⠀" "⡀⠁⠄⠀⠀" "⠂⡈⠐⠀⠀" "⢈⠐⡂⠀⠀" "⠄⢂⠁⠀⠀")
+            # Pseudo-random twinkling dots (5 cells)
+            LACY_SPINNER_ANIM=("⠐⡀⠂⢁⠄" "⢁⠠⠈⠄⡀" "⠀⢄⡁⠐⠂" "⠈⠂⠐⡀⢁" "⡀⠁⠄⠂⠈" "⠂⡈⠐⢀⡁" "⢈⠐⡂⠁⠄" "⠄⢂⠁⡀⠐")
             ;;
         wave_rows)
             # Traveling sine wave across 5 cells
@@ -99,14 +103,121 @@ lacy_set_spinner_animation() {
             LACY_SPINNER_ANIM=("⢁⠢⠔⡈⠔" "⠢⠔⡈⠔⠢" "⠔⡈⠔⠢⢁" "⡈⠔⠢⢁⠢" "⠔⠢⢁⠢⠔" "⠢⢁⠢⠔⡈")
             ;;
         diagonal_swipe)
-            # Diagonal fill and clear (2 cells + 3 padding)
-            LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠉⠀⠀⠀" "⠿⠛⠀⠀⠀" "⣿⠿⠀⠀⠀" "⣿⣿⠀⠀⠀" "⣶⣿⠀⠀⠀" "⣤⣶⠀⠀⠀" "⣀⣤⠀⠀⠀" "⠀⣀⠀⠀⠀")
+            # Diagonal fill and clear across 5 cells
+            LACY_SPINNER_ANIM=(
+                "⠀⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠉⠀⠀⠀" "⠿⠛⠉⠀⠀" "⣿⠿⠛⠉⠀" "⣿⣿⠿⠛⠉"
+                "⣿⣿⣿⠿⠛" "⣿⣿⣿⣿⠿" "⣿⣿⣿⣿⣿" "⣶⣿⣿⣿⣿" "⣤⣶⣿⣿⣿" "⣀⣤⣶⣿⣿"
+                "⠀⣀⣤⣶⣿" "⠀⠀⣀⣤⣶" "⠀⠀⠀⣀⣤" "⠀⠀⠀⠀⣀"
+            )
             ;;
         *)
             # Unknown — fall back to braille
             LACY_SPINNER_ANIM=("⠋⠀⠀⠀⠀" "⠙⠀⠀⠀⠀" "⠹⠀⠀⠀⠀" "⠸⠀⠀⠀⠀" "⠼⠀⠀⠀⠀" "⠴⠀⠀⠀⠀" "⠦⠀⠀⠀⠀" "⠧⠀⠀⠀⠀" "⠇⠀⠀⠀⠀" "⠏⠀⠀⠀⠀")
             ;;
     esac
+}
+
+# Preview all animations simultaneously
+# Each animation shown on its own line with its name as the shimmer label
+lacy_preview_all_spinners() {
+    local duration="${1:-4}"
+    local delay="${LACY_SPINNER_FRAME_DELAY:-0.05}"
+    local num_anims=${#LACY_SPINNER_ANIMATIONS[@]}
+    local arr_off=${_LACY_ARR_OFFSET:-0}
+
+    # Shimmer colors — ZSH doesn't word-split $var, use ${=var}
+    local -a shimmer_colors
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        shimmer_colors=("${LACY_COLOR_SHIMMER[@]}")
+    else
+        shimmer_colors=("${LACY_COLOR_SHIMMER[@]}")
+    fi
+    local num_colors=${#shimmer_colors[@]}
+
+    # Declare ALL loop variables here — ZSH's local/typeset prints values
+    # when re-declared inside a loop, causing garbage output
+    local _n _a _name _nf _fidx _spinner _text_len _shimmer _center
+    local _i _char _dist _cidx _color _dots_phase _dots
+    local _loop_start _loop_end
+    local frame_num=0
+    local start=$SECONDS
+
+    # Hide cursor
+    printf '\e[?25l'
+
+    # Print initial blank lines
+    for ((_n = 0; _n < num_anims; _n++)); do
+        printf '\n'
+    done
+
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        _loop_start=1; _loop_end=$num_anims
+    else
+        _loop_start=0; _loop_end=$((num_anims - 1))
+    fi
+
+    while (( SECONDS - start < duration )); do
+        # Move cursor up to first line
+        printf '\e[%dA' "$num_anims"
+
+        for ((_a = _loop_start; _a <= _loop_end; _a++)); do
+            _name="${LACY_SPINNER_ANIMATIONS[$_a]}"
+
+            # Load this animation's frames
+            lacy_set_spinner_animation "$_name"
+            _nf=${#LACY_SPINNER_ANIM[@]}
+
+            if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+                _fidx=$(( (frame_num % _nf) + 1 ))
+            else
+                _fidx=$(( frame_num % _nf ))
+            fi
+            _spinner="${LACY_SPINNER_ANIM[$_fidx]}"
+
+            # Build shimmer text for the animation name
+            _text_len=${#_name}
+            _shimmer=""
+            _center=$(( frame_num % (_text_len + 4) ))
+
+            for ((_i = 0; _i < _text_len; _i++)); do
+                if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+                    _char="${_name[$((_i + 1))]}"
+                else
+                    _char="${_name:$_i:1}"
+                fi
+                _dist=$(( _center - _i ))
+                (( _dist < 0 )) && _dist=$(( -_dist ))
+
+                if (( _dist < num_colors )); then
+                    _cidx=$(( _dist + arr_off ))
+                else
+                    _cidx=$(( num_colors - 1 + arr_off ))
+                fi
+                _color=${shimmer_colors[$_cidx]}
+                _shimmer+="\e[38;5;${_color}m${_char}"
+            done
+            _shimmer+="\e[0m"
+
+            # Cycling dots
+            _dots_phase=$(( (frame_num / 3) % 4 ))
+            _dots=""
+            case $_dots_phase in
+                1) _dots="." ;; 2) _dots=".." ;; 3) _dots="..." ;;
+            esac
+
+            printf "\e[2K\r \e[38;5;${LACY_COLOR_AGENT}m%s\e[0m %b\e[38;5;${LACY_COLOR_NEUTRAL}m%s\e[0m\n" \
+                "$_spinner" "$_shimmer" "$_dots"
+        done
+
+        frame_num=$((frame_num + 1))
+        sleep "$delay"
+    done
+
+    # Show cursor
+    printf '\e[?25h'
+
+    # Restore active spinner
+    lacy_set_spinner_animation "${LACY_SPINNER_STYLE:-braille}"
 }
 
 # List available animations

@@ -55,8 +55,7 @@ lacy_start_spinner() {
         local text="$LACY_SPINNER_TEXT"
         local text_len=${#text}
         local frame_num=0
-        local shimmer_colors_str="${LACY_COLOR_SHIMMER[*]}"
-        local -a shimmer_colors=($shimmer_colors_str)
+        local -a shimmer_colors=("${LACY_COLOR_SHIMMER[@]}")
         local num_colors=${#shimmer_colors[@]}
         local arr_off=${_LACY_ARR_OFFSET:-0}
         local spinner_idx spinner_char shimmer center i char dist color_idx color dots_phase dots

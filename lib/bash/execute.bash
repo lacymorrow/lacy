@@ -334,7 +334,7 @@ lacy_shell_spinner() {
             lacy_list_spinner_animations
             echo ""
             echo "Usage: spinner set <name>"
-            echo "       spinner preview [name]"
+            echo "       spinner preview [name|all]"
             echo ""
             ;;
         set)
@@ -354,21 +354,27 @@ lacy_shell_spinner() {
             fi
             ;;
         preview)
-            local style="${2:-${LACY_SPINNER_STYLE:-braille}}"
-            if [[ "$style" != "random" ]] && ! _lacy_in_list "$style" "${LACY_SPINNER_ANIMATIONS[@]}"; then
-                echo "Unknown animation: $style"
-                return 1
+            if [[ "$2" == "all" ]]; then
+                echo "Previewing all animations (Ctrl+C to stop)"
+                echo ""
+                lacy_preview_all_spinners 5
+            else
+                local style="${2:-${LACY_SPINNER_STYLE:-braille}}"
+                if [[ "$style" != "random" ]] && ! _lacy_in_list "$style" "${LACY_SPINNER_ANIMATIONS[@]}"; then
+                    echo "Unknown animation: $style"
+                    return 1
+                fi
+                local _saved="$LACY_SPINNER_STYLE"
+                LACY_SPINNER_STYLE="$style"
+                echo "Previewing: $style (Ctrl+C to stop)"
+                lacy_start_spinner
+                sleep 3
+                lacy_stop_spinner
+                LACY_SPINNER_STYLE="$_saved"
             fi
-            local _saved="$LACY_SPINNER_STYLE"
-            LACY_SPINNER_STYLE="$style"
-            echo "Previewing: $style (Ctrl+C to stop)"
-            lacy_start_spinner
-            sleep 3
-            lacy_stop_spinner
-            LACY_SPINNER_STYLE="$_saved"
             ;;
         *)
-            echo "Usage: spinner [set <name> | preview [name]]"
+            echo "Usage: spinner [set <name> | preview [name|all]]"
             ;;
     esac
 }
