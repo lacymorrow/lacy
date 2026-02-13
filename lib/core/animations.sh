@@ -2,7 +2,8 @@
 
 # Braille Loading Animations for Lacy Shell
 # 15 Unicode Braille animations for the agent spinner
-# Each animation is an array of frame strings (single or multi-character)
+# ALL frames are exactly 5 braille characters wide (pad with ⠀ U+2800)
+# to prevent horizontal shifting when switching animations
 #
 # Braille dot layout:
 #   1 4
@@ -36,74 +37,74 @@ lacy_set_spinner_animation() {
 
     case "$name" in
         braille)
-            # Classic rotating dots
-            LACY_SPINNER_ANIM=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+            # Classic rotating dots (1 cell + 4 padding)
+            LACY_SPINNER_ANIM=("⠋⠀⠀⠀⠀" "⠙⠀⠀⠀⠀" "⠹⠀⠀⠀⠀" "⠸⠀⠀⠀⠀" "⠼⠀⠀⠀⠀" "⠴⠀⠀⠀⠀" "⠦⠀⠀⠀⠀" "⠧⠀⠀⠀⠀" "⠇⠀⠀⠀⠀" "⠏⠀⠀⠀⠀")
             ;;
         orbit)
-            # Single dot circling clockwise
-            LACY_SPINNER_ANIM=("⠁" "⠈" "⠐" "⠠" "⢀" "⡀" "⠄" "⠂")
+            # Single dot circling clockwise (1 cell + 4 padding)
+            LACY_SPINNER_ANIM=("⠁⠀⠀⠀⠀" "⠈⠀⠀⠀⠀" "⠐⠀⠀⠀⠀" "⠠⠀⠀⠀⠀" "⢀⠀⠀⠀⠀" "⡀⠀⠀⠀⠀" "⠄⠀⠀⠀⠀" "⠂⠀⠀⠀⠀")
             ;;
         breathe)
-            # Expand from center, contract back
-            LACY_SPINNER_ANIM=("⠀" "⠁" "⠉" "⠛" "⣛" "⣿" "⣛" "⠛" "⠉" "⠁")
+            # Expand from center, contract back (1 cell + 4 padding)
+            LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⠁⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⣛⠀⠀⠀⠀" "⣿⠀⠀⠀⠀" "⣛⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠁⠀⠀⠀⠀")
             ;;
         snake)
-            # Diagonal wave across 3 cells
-            LACY_SPINNER_ANIM=("⠁⠂⠄" "⠂⠄⡀" "⠄⡀⢀" "⡀⢀⠠" "⢀⠠⠐" "⠠⠐⠈" "⠐⠈⠁" "⠈⠁⠂")
+            # Diagonal wave across 3 cells (3 cells + 2 padding)
+            LACY_SPINNER_ANIM=("⠁⠂⠄⠀⠀" "⠂⠄⡀⠀⠀" "⠄⡀⢀⠀⠀" "⡀⢀⠠⠀⠀" "⢀⠠⠐⠀⠀" "⠠⠐⠈⠀⠀" "⠐⠈⠁⠀⠀" "⠈⠁⠂⠀⠀")
             ;;
         fill_sweep)
-            # Fill rows left-to-right, clear left-to-right (2 cells)
+            # Fill rows left-to-right, clear left-to-right (2 cells + 3 padding)
             LACY_SPINNER_ANIM=(
-                "⠀⠀" "⠉⠀" "⠛⠀" "⠿⠀" "⣿⠀" "⣿⠉" "⣿⠛" "⣿⠿"
-                "⣿⣿" "⣶⣿" "⣤⣿" "⣀⣿" "⠀⣿" "⠀⣶" "⠀⣤" "⠀⣀"
+                "⠀⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠀⠀⠀⠀" "⠿⠀⠀⠀⠀" "⣿⠀⠀⠀⠀" "⣿⠉⠀⠀⠀" "⣿⠛⠀⠀⠀" "⣿⠿⠀⠀⠀"
+                "⣿⣿⠀⠀⠀" "⣶⣿⠀⠀⠀" "⣤⣿⠀⠀⠀" "⣀⣿⠀⠀⠀" "⠀⣿⠀⠀⠀" "⠀⣶⠀⠀⠀" "⠀⣤⠀⠀⠀" "⠀⣀⠀⠀⠀"
             )
             ;;
         pulse)
-            # Two cells pulsing in antiphase
-            LACY_SPINNER_ANIM=("⣿⠀" "⠛⠁" "⠉⠉" "⠁⠛" "⠀⣿" "⠁⠛" "⠉⠉" "⠛⠁")
+            # Two cells pulsing in antiphase (2 cells + 3 padding)
+            LACY_SPINNER_ANIM=("⣿⠀⠀⠀⠀" "⠛⠁⠀⠀⠀" "⠉⠉⠀⠀⠀" "⠁⠛⠀⠀⠀" "⠀⣿⠀⠀⠀" "⠁⠛⠀⠀⠀" "⠉⠉⠀⠀⠀" "⠛⠁⠀⠀⠀")
             ;;
         columns)
-            # Vertical bars appearing one at a time
-            LACY_SPINNER_ANIM=("⠀⠀⠀" "⡇⠀⠀" "⡇⡇⠀" "⡇⡇⡇" "⠀⡇⡇" "⠀⠀⡇")
+            # Vertical bars appearing one at a time (3 cells + 2 padding)
+            LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⡇⠀⠀⠀⠀" "⡇⡇⠀⠀⠀" "⡇⡇⡇⠀⠀" "⠀⡇⡇⠀⠀" "⠀⠀⡇⠀⠀")
             ;;
         checkerboard)
-            # Alternating dot patterns (3 cells)
-            LACY_SPINNER_ANIM=("⢕⡪⢕" "⣿⣿⣿" "⡪⢕⡪" "⣿⣿⣿")
+            # Alternating dot patterns (3 cells + 2 padding)
+            LACY_SPINNER_ANIM=("⢕⡪⢕⠀⠀" "⣿⣿⣿⠀⠀" "⡪⢕⡪⠀⠀" "⣿⣿⣿⠀⠀")
             ;;
         scan)
-            # Lit column scanning back and forth
-            LACY_SPINNER_ANIM=("⡇⠀⠀" "⠀⡇⠀" "⠀⠀⡇" "⠀⡇⠀")
+            # Lit column scanning back and forth (3 cells + 2 padding)
+            LACY_SPINNER_ANIM=("⡇⠀⠀⠀⠀" "⠀⡇⠀⠀⠀" "⠀⠀⡇⠀⠀" "⠀⡇⠀⠀⠀")
             ;;
         rain)
-            # Dots falling at staggered heights (4 cells)
-            LACY_SPINNER_ANIM=("⠁⠐⠄⢀" "⠂⠠⡀⠈" "⠄⢀⠁⠐" "⡀⠈⠂⠠")
+            # Dots falling at staggered heights (4 cells + 1 padding)
+            LACY_SPINNER_ANIM=("⠁⠐⠄⢀⠀" "⠂⠠⡀⠈⠀" "⠄⢀⠁⠐⠀" "⡀⠈⠂⠠⠀")
             ;;
         cascade)
-            # Waterfall filling and draining columns
+            # Waterfall filling and draining columns (2 cells + 3 padding)
             LACY_SPINNER_ANIM=(
-                "⠀⠀" "⠁⠀" "⠃⠀" "⠇⠀" "⡇⠁" "⡇⠃" "⡇⠇"
-                "⡇⡇" "⠆⡇" "⠄⡇" "⠀⡇" "⠀⠆" "⠀⠄"
+                "⠀⠀⠀⠀⠀" "⠁⠀⠀⠀⠀" "⠃⠀⠀⠀⠀" "⠇⠀⠀⠀⠀" "⡇⠁⠀⠀⠀" "⡇⠃⠀⠀⠀" "⡇⠇⠀⠀⠀"
+                "⡇⡇⠀⠀⠀" "⠆⡇⠀⠀⠀" "⠄⡇⠀⠀⠀" "⠀⡇⠀⠀⠀" "⠀⠆⠀⠀⠀" "⠀⠄⠀⠀⠀"
             )
             ;;
         sparkle)
-            # Pseudo-random twinkling dots (3 cells)
-            LACY_SPINNER_ANIM=("⠐⡀⠂" "⢁⠠⠈" "⠀⢄⡁" "⠈⠂⠐" "⡀⠁⠄" "⠂⡈⠐" "⢈⠐⡂" "⠄⢂⠁")
+            # Pseudo-random twinkling dots (3 cells + 2 padding)
+            LACY_SPINNER_ANIM=("⠐⡀⠂⠀⠀" "⢁⠠⠈⠀⠀" "⠀⢄⡁⠀⠀" "⠈⠂⠐⠀⠀" "⡀⠁⠄⠀⠀" "⠂⡈⠐⠀⠀" "⢈⠐⡂⠀⠀" "⠄⢂⠁⠀⠀")
             ;;
         wave_rows)
             # Traveling sine wave across 5 cells
             LACY_SPINNER_ANIM=("⠁⠂⠄⡀⠄" "⠂⠄⡀⠄⠂" "⠄⡀⠄⠂⠁" "⡀⠄⠂⠁⠂" "⠄⠂⠁⠂⠄" "⠂⠁⠂⠄⡀")
             ;;
         helix)
-            # Double helix — two strands crossing (left col + right col)
+            # Double helix — two strands crossing
             LACY_SPINNER_ANIM=("⢁⠢⠔⡈⠔" "⠢⠔⡈⠔⠢" "⠔⡈⠔⠢⢁" "⡈⠔⠢⢁⠢" "⠔⠢⢁⠢⠔" "⠢⢁⠢⠔⡈")
             ;;
         diagonal_swipe)
-            # Diagonal fill and clear across 2 cells
-            LACY_SPINNER_ANIM=("⠀⠀" "⠉⠀" "⠛⠉" "⠿⠛" "⣿⠿" "⣿⣿" "⣶⣿" "⣤⣶" "⣀⣤" "⠀⣀")
+            # Diagonal fill and clear (2 cells + 3 padding)
+            LACY_SPINNER_ANIM=("⠀⠀⠀⠀⠀" "⠉⠀⠀⠀⠀" "⠛⠉⠀⠀⠀" "⠿⠛⠀⠀⠀" "⣿⠿⠀⠀⠀" "⣿⣿⠀⠀⠀" "⣶⣿⠀⠀⠀" "⣤⣶⠀⠀⠀" "⣀⣤⠀⠀⠀" "⠀⣀⠀⠀⠀")
             ;;
         *)
             # Unknown — fall back to braille
-            LACY_SPINNER_ANIM=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+            LACY_SPINNER_ANIM=("⠋⠀⠀⠀⠀" "⠙⠀⠀⠀⠀" "⠹⠀⠀⠀⠀" "⠸⠀⠀⠀⠀" "⠼⠀⠀⠀⠀" "⠴⠀⠀⠀⠀" "⠦⠀⠀⠀⠀" "⠧⠀⠀⠀⠀" "⠇⠀⠀⠀⠀" "⠏⠀⠀⠀⠀")
             ;;
     esac
 }
