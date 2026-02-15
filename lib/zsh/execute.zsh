@@ -91,13 +91,30 @@ lacy_shell_execute_agent() {
     local query="$1"
 
     if ! lacy_shell_query_agent "$query"; then
-        # Only show install hints if query_agent didn't already format the error
         if [[ -z "$LACY_ACTIVE_TOOL" ]] && ! command -v lash >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; then
+            # No tool found at all
             echo ""
             lacy_print_color 196 "  No AI tool configured"
             echo ""
             lacy_print_color 238 "  Install one:  npm install -g lashcode"
             lacy_print_color 238 "  Or configure: lacy setup"
+            echo ""
+        else
+            # Tool was found but failed — show recovery hints
+            local _tool="${LACY_ACTIVE_TOOL}"
+            if [[ -z "$_tool" ]]; then
+                local _t
+                for _t in lash claude opencode gemini codex; do
+                    if command -v "$_t" >/dev/null 2>&1; then
+                        _tool="$_t"
+                        break
+                    fi
+                done
+            fi
+            echo ""
+            lacy_print_color 238 "  Try: tool set <name>    Switch to a different tool"
+            lacy_print_color 238 "       ask \"your query\"   Send directly to agent"
+            lacy_print_color 238 "       lacy doctor        Diagnose issues"
             echo ""
         fi
     fi
@@ -425,8 +442,22 @@ lacy_shell_tool() {
             echo ""
             if [[ "$LACY_ACTIVE_TOOL" == "custom" ]]; then
                 echo "Active tool: custom (${LACY_CUSTOM_TOOL_CMD:-not configured})"
+            elif [[ -z "$LACY_ACTIVE_TOOL" ]]; then
+                local _detected=""
+                local _t
+                for _t in lash claude opencode gemini codex; do
+                    if command -v "$_t" >/dev/null 2>&1; then
+                        _detected="$_t"
+                        break
+                    fi
+                done
+                if [[ -n "$_detected" ]]; then
+                    echo "Active tool: auto-detect (using $_detected)"
+                else
+                    echo "Active tool: auto-detect (no tools found)"
+                fi
             else
-                echo "Active tool: ${LACY_ACTIVE_TOOL:-auto-detect}"
+                echo "Active tool: ${LACY_ACTIVE_TOOL}"
             fi
             echo ""
             echo "Available tools:"

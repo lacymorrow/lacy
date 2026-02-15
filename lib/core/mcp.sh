@@ -109,11 +109,13 @@ lacy_shell_query_agent() {
     local tool="${LACY_ACTIVE_TOOL}"
 
     # Auto-detect if not set
+    local _auto_detected=false
     if [[ -z "$tool" ]]; then
         local t
         for t in lash claude opencode gemini codex; do
             if command -v "$t" >/dev/null 2>&1; then
                 tool="$t"
+                _auto_detected=true
                 break
             fi
         done
@@ -227,6 +229,11 @@ EOF
         cmd="$LACY_CUSTOM_TOOL_CMD"
     else
         cmd=$(lacy_tool_cmd "$tool")
+    fi
+
+    # Show which tool was auto-detected
+    if [[ "$_auto_detected" == true ]]; then
+        lacy_print_color 238 "  Using $tool (auto-detected)"
     fi
 
     # === Preheat: lash/opencode background server ===
