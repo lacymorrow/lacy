@@ -126,13 +126,7 @@ lacy_preheat_server_query() {
             "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
         [[ $? -ne 0 ]] && return 1
 
-        if command -v jq >/dev/null 2>&1; then
-            LACY_PREHEAT_SERVER_SESSION_ID=$(printf '%s\n' "$session_json" | jq -r '.id // empty' 2>/dev/null)
-        elif command -v python3 >/dev/null 2>&1; then
-            LACY_PREHEAT_SERVER_SESSION_ID=$(printf '%s\n' "$session_json" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('id',''))" 2>/dev/null)
-        else
-            LACY_PREHEAT_SERVER_SESSION_ID=$(printf '%s' "$session_json" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"id"[[:space:]]*:[[:space:]]*"//' | sed 's/"//')
-        fi
+        LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
         [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
     fi
 
@@ -233,13 +227,7 @@ lacy_preheat_claude_capture_session() {
     local json="$1"
     local session_id=""
 
-    if command -v jq >/dev/null 2>&1; then
-        session_id=$(printf '%s\n' "$json" | jq -r '.session_id // empty' 2>/dev/null)
-    elif command -v python3 >/dev/null 2>&1; then
-        session_id=$(printf '%s\n' "$json" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('session_id',''))" 2>/dev/null)
-    else
-        session_id=$(printf '%s' "$json" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//' | sed 's/"//')
-    fi
+    session_id=$(_lacy_json_get "$json" "session_id")
 
     if [[ -n "$session_id" ]]; then
         LACY_PREHEAT_CLAUDE_SESSION_ID="$session_id"
@@ -249,14 +237,7 @@ lacy_preheat_claude_capture_session() {
 
 lacy_preheat_claude_extract_result() {
     local json="$1"
-
-    if command -v jq >/dev/null 2>&1; then
-        printf '%s\n' "$json" | jq -r '.result // empty' 2>/dev/null
-    elif command -v python3 >/dev/null 2>&1; then
-        printf '%s\n' "$json" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('result',''))" 2>/dev/null
-    else
-        printf '%s' "$json" | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/","[a-z_]*":.*//' | sed 's/\\n/\'$'\n''/g; s/\\"/"/g; s/\\\\/\\/g'
-    fi
+    _lacy_json_get "$json" "result"
 }
 
 lacy_preheat_claude_reset_session() {

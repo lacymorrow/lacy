@@ -4,6 +4,78 @@
 # Routes queries to configured AI CLI tools
 # Shared across Bash 4+ and ZSH
 
+# ============================================================================
+# JSON Extraction Helpers
+# ============================================================================
+
+# Extract a value from JSON using the best available tool (jq > python3 > grep).
+# For top-level fields: _lacy_json_get "$json" "field_name"
+# Returns the field value on stdout, or empty string if not found.
+_lacy_json_get() {
+    local json="$1"
+    local field="$2"
+
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$json" | jq -r --arg f "$field" '.[$f] // empty' 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' "$json" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    v = d.get('$field')
+    if v is not None:
+        print(v if isinstance(v, str) else json.dumps(v))
+except: pass" 2>/dev/null
+    else
+        # Grep fallback — handles simple "key": "value" and "key": true/false/number
+        local val
+        val=$(printf '%s' "$json" | grep -o "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed "s/\"${field}\"[[:space:]]*:[[:space:]]*\"//" | sed 's/"$//')
+        if [[ -n "$val" ]]; then
+            printf '%s' "$val"
+        else
+            # Try unquoted values (booleans, numbers)
+            printf '%s' "$json" | grep -o "\"${field}\"[[:space:]]*:[[:space:]]*[^,}\"]*" | head -1 | sed "s/\"${field}\"[[:space:]]*:[[:space:]]*//" | tr -d ' '
+        fi
+    fi
+}
+
+# Run an arbitrary query expression against JSON (jq syntax, python3 fallback).
+# Usage: _lacy_json_query "$json" '.choices[0].message.content'
+# The second argument is a jq expression. A python3 equivalent is auto-generated
+# for common patterns: .a.b.c and .a[N].b.c
+# Returns empty string if the query fails or tools are unavailable.
+_lacy_json_query() {
+    local json="$1"
+    local expr="$2"
+
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$json" | jq -r "$expr // empty" 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' "$json" | python3 -c "
+import json, sys, re
+try:
+    d = json.loads(sys.stdin.read())
+    # Parse jq-like expression: .key[0].key2
+    parts = re.findall(r'\.(\w+)|\[(\d+)\]', '''$expr''')
+    obj = d
+    for key, idx in parts:
+        if key:
+            obj = obj[key]
+        else:
+            obj = obj[int(idx)]
+    if obj is not None:
+        print(obj if isinstance(obj, str) else json.dumps(obj))
+except: pass" 2>/dev/null
+    else
+        # No structured parser available — return empty
+        return 1
+    fi
+}
+
+# ============================================================================
+# Tool Command Execution
+# ============================================================================
+
 # Run a tool command safely — splits command string into array to avoid eval.
 # Usage: _lacy_run_tool_cmd "cmd string" "query"
 _lacy_run_tool_cmd() {
@@ -45,30 +117,8 @@ lacy_format_tool_error() {
     [[ "$output" == "{"* ]] || return 1
 
     local is_error="" result_text=""
-
-    if command -v jq >/dev/null 2>&1; then
-        is_error=$(printf '%s\n' "$output" | jq -r 'if .is_error == true then "true" else "" end' 2>/dev/null)
-        result_text=$(printf '%s\n' "$output" | jq -r '.result // empty' 2>/dev/null)
-    elif command -v python3 >/dev/null 2>&1; then
-        is_error=$(printf '%s\n' "$output" | python3 -c "
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-    print('true' if d.get('is_error') else '')
-except: pass" 2>/dev/null)
-        result_text=$(printf '%s\n' "$output" | python3 -c "
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('result', ''))
-except: pass" 2>/dev/null)
-    else
-        # Fallback: grep for is_error and result fields
-        if printf '%s' "$output" | grep -q '"is_error"[[:space:]]*:[[:space:]]*true'; then
-            is_error="true"
-            result_text=$(printf '%s' "$output" | grep -o '"result"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"result"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-        fi
-    fi
+    is_error=$(_lacy_json_get "$output" "is_error")
+    result_text=$(_lacy_json_get "$output" "result")
 
     [[ "$is_error" == "true" ]] || return 1
 
@@ -101,6 +151,21 @@ except: pass" 2>/dev/null)
     fi
     echo ""
     return 0
+}
+
+# Strip non-JSON leading lines from captured output.
+# Agent CLIs (e.g. claude) emit startup/build text to stderr which gets
+# merged into stdout by 2>&1. This strips everything before the first '{'.
+_lacy_strip_leading_noise() {
+    local output="$1"
+    while [[ -n "$output" && "$output" != "{"* ]]; do
+        # Remove everything up to and including the first newline
+        local rest="${output#*$'\n'}"
+        # If no newline found, the whole string is noise
+        [[ "$rest" == "$output" ]] && output="" && break
+        output="$rest"
+    done
+    printf '%s' "$output"
 }
 
 # Send query to AI agent (configurable tool or fallback)
@@ -266,6 +331,9 @@ EOF
         local exit_code=$?
         lacy_stop_spinner
 
+        # Strip agent startup noise (e.g. "> build · big-pickle") before JSON parsing
+        json_output=$(_lacy_strip_leading_noise "$json_output")
+
         if [[ $exit_code -eq 0 ]]; then
             # Check for structured errors (e.g. invalid API key)
             if lacy_format_tool_error "$json_output" "$tool"; then
@@ -289,6 +357,9 @@ EOF
             json_output=$(_lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
             exit_code=$?
             lacy_stop_spinner
+
+            # Strip agent startup noise before JSON parsing
+            json_output=$(_lacy_strip_leading_noise "$json_output")
 
             # Check for structured errors before processing
             if lacy_format_tool_error "$json_output" "$tool"; then
@@ -326,6 +397,9 @@ EOF
         local _full_output=""
         local _line_count=0
         while IFS= read -r line; do
+            # Skip agent startup noise (e.g. "> build · big-pickle", "exit_code=0")
+            [[ "$line" =~ ^'> '[a-z]+' · ' ]] && continue
+            [[ "$line" =~ ^exit_code= ]] && continue
             if ! $_spinner_killed; then
                 if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
                     kill "$LACY_SPINNER_PID" 2>/dev/null
@@ -407,7 +481,7 @@ lacy_shell_query_openai() {
         -d "{\"model\":\"${LACY_API_MODEL_OPENAI}\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_tokens\":1500}" \
         "https://api.openai.com/v1/chat/completions")
 
-    echo "$response" | grep -o '"content":"[^"]*' | sed 's/"content":"//' | head -1
+    _lacy_json_query "$response" '.choices[0].message.content'
 }
 
 lacy_shell_query_anthropic() {
@@ -423,7 +497,7 @@ lacy_shell_query_anthropic() {
         -d "{\"model\":\"${LACY_API_MODEL_ANTHROPIC}\",\"max_tokens\":1500,\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}]}" \
         "https://api.anthropic.com/v1/messages")
 
-    echo "$response" | grep -o '"text":"[^"]*' | sed 's/"text":"//' | head -1
+    _lacy_json_query "$response" '.content[0].text'
 }
 
 # Stub for MCP init (no-op, lash handles MCP)
