@@ -40,7 +40,7 @@ lacy_start_spinner() {
     lacy_set_spinner_animation "${LACY_SPINNER_STYLE:-braille}"
     # Guard: if animation failed to load, use hardcoded fallback
     if [[ ${#LACY_SPINNER_ANIM[@]} -eq 0 ]]; then
-        LACY_SPINNER_ANIM=("⠋⠀⠀⠀⠀" "⠙⠀⠀⠀⠀" "⠹⠀⠀⠀⠀" "⠸⠀⠀⠀⠀" "⠼⠀⠀⠀⠀" "⠴⠀⠀⠀⠀" "⠦⠀⠀⠀⠀" "⠧⠀⠀⠀⠀" "⠇⠀⠀⠀⠀" "⠏⠀⠀⠀⠀")
+        LACY_SPINNER_ANIM=("⠋⠀⠀⠀" "⠙⠀⠀⠀" "⠹⠀⠀⠀" "⠸⠀⠀⠀" "⠼⠀⠀⠀" "⠴⠀⠀⠀" "⠦⠀⠀⠀" "⠧⠀⠀⠀" "⠇⠀⠀⠀" "⠏⠀⠀⠀")
     fi
 
     {
