@@ -246,7 +246,7 @@ detect_tools() {
         printf "  ${YELLOW}○${NC} No AI CLI tools found\n"
         printf "\n"
         printf "${YELLOW}Lacy Shell requires an AI CLI tool to work.${NC}\n"
-        printf "Would you like to install ${GREEN}lash${NC} (recommended)?\n"
+        printf "Would you like to install ${GREEN}lash${NC}? (AI coding agent — lash.lacy.sh)\n"
         printf "\n"
         read -p "Install lash now? [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
         if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
@@ -266,7 +266,7 @@ detect_tools() {
 select_tool() {
     printf "${BOLD}Which AI CLI tool do you want to use?${NC}\n"
     printf "\n"
-    printf "  1) lash       ${DIM}- recommended${NC}\n"
+    printf "  1) lash       ${DIM}- AI coding agent (recommended) — lash.lacy.sh${NC}\n"
     printf "  2) claude     ${DIM}- Claude Code CLI${NC}\n"
     printf "  3) opencode   ${DIM}- OpenCode CLI${NC}\n"
     printf "  4) gemini     ${DIM}- Google Gemini CLI${NC}\n"
@@ -342,7 +342,7 @@ select_tool() {
 
         if [[ -z "$first_tool_found" ]]; then
             printf "${YELLOW}No AI CLI tools are installed.${NC}\n"
-            printf "Would you like to install ${GREEN}lash${NC} (recommended)?\n"
+            printf "Would you like to install ${GREEN}lash${NC}? (AI coding agent — lash.lacy.sh)\n"
             printf "\n"
             local do_install=""
             read -p "Install lash now? [Y/n]: " do_install < /dev/tty 2>/dev/null || do_install="n"

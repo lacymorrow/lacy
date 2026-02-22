@@ -416,7 +416,7 @@ cmd_doctor() {
         success "AI CLI tool available"
     else
         printf "  ${YELLOW}!${NC} No AI CLI tool installed\n"
-        printf "    Fix: ${CYAN}npm install -g lashcode${NC} or ${CYAN}brew install claude${NC}\n"
+        printf "    Fix: ${CYAN}npm install -g lashcode${NC} (recommended) — lash.lacy.sh\n"
         issues=$((issues + 1))
     fi
 
@@ -534,7 +534,7 @@ setup_tool() {
 
     local i=1
     local tools=("lash" "claude" "opencode" "gemini" "codex" "custom" "auto")
-    local hints=("recommended" "Claude Code CLI" "OpenCode CLI" "Google Gemini CLI" "OpenAI Codex CLI" "enter your own command" "use first available")
+    local hints=("AI coding agent (recommended)" "Claude Code CLI" "OpenCode CLI" "Google Gemini CLI" "OpenAI Codex CLI" "enter your own command" "use first available")
 
     for t in "${tools[@]}"; do
         local hint="${hints[$((i-1))]}"

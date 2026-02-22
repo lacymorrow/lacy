@@ -219,7 +219,7 @@ EOF
 
         if [[ "$can_prompt" == true ]]; then
             local install_now=""
-            echo "Would you like to install lash (recommended)?"
+            echo "Would you like to install lash? (AI coding agent — lash.lacy.sh)"
             echo ""
             if [[ -t 0 ]]; then
                 read -p "Install lash now? [Y/n]: " install_now
@@ -271,7 +271,7 @@ EOF
         else
             echo "Install an AI CLI tool to get started:"
             echo ""
-            echo "  npm install -g lashcode     (recommended)"
+            echo "  npm install -g lashcode     (recommended) — lash.lacy.sh"
             echo "  brew install claude"
             echo "  brew install opencode"
             echo "  brew install gemini"

@@ -115,12 +115,14 @@ Minimum 2 words required. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full algo
 
 | Tool     | Command                | Prompt Flag  |
 | -------- | ---------------------- | ------------ |
-| lash     | `lash run -c "query"`  | `-c`         |
+| lash (recommended) | `lash run -c "query"`  | `-c`         |
 | claude   | `claude -p "query"`    | `-p`         |
 | opencode | `opencode run -c "query"` | `-c`         |
 | gemini   | `gemini --resume -p "query"` | `-p`         |
 | codex    | `codex exec resume --last "query"` | positional   |
 | custom   | user-defined command   | user-defined |
+
+lash is the recommended default — it's an opencode fork built by the same author. Website: lash.lacy.sh. During onboarding, lacy offers to install lash if no AI CLI tool is detected.
 
 All tools handle their own authentication - no API keys needed from lacy.
 

@@ -117,7 +117,7 @@ const ALL_RC_FILES = [
 ];
 
 const TOOLS = [
-  { value: "lash", label: "lash", hint: "recommended" },
+  { value: "lash", label: "lash", hint: "AI coding agent — lash.lacy.sh (recommended)" },
   { value: "claude", label: "claude", hint: "Claude Code CLI" },
   { value: "opencode", label: "opencode", hint: "OpenCode CLI" },
   { value: "gemini", label: "gemini", hint: "Google Gemini CLI" },
@@ -380,7 +380,7 @@ async function install() {
     p.log.info("Lacy Shell requires an AI CLI tool to work.");
 
     const installLashNow = await p.confirm({
-      message: `Would you like to install ${pc.green("lash")} (recommended)?`,
+      message: `Would you like to install ${pc.green("lash")}? (AI coding agent — lash.lacy.sh)`,
       initialValue: true,
     });
 
