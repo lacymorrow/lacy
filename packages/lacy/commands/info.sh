@@ -12,7 +12,7 @@ _lacy_info_version() {
     fi
 }
 
-printf '\e[38;5;75m%s\e[0m\n' "🔧 Lacy Shell v$(_lacy_info_version)"
+printf '\033[38;5;75m%s\033[0m\n' "🔧 Lacy Shell v$(_lacy_info_version)"
 echo
 printf '%s\n' "Lacy Shell detects natural language and routes it to AI coding agents."
 echo
@@ -21,5 +21,5 @@ printf '  • %s\n' "Type normally for shell commands"
 printf '  • %s\n' "Type natural language for AI assistance"
 printf '  • %s\n' "Press Ctrl+Space to toggle modes"
 echo
-printf '%b\n' "Run '\e[38;5;200mlacy setup\e[0m' to configure your AI tool and settings."
-printf '%b\n' "Run '\e[38;5;200mlacy mode\e[0m' to see current mode and legend."
+printf '%b\n' "Run '\033[38;5;200mlacy setup\033[0m' to configure your AI tool and settings."
+printf '%b\n' "Run '\033[38;5;200mlacy mode\033[0m' to see current mode and legend."
