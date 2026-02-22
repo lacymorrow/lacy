@@ -9,6 +9,10 @@ LACY_SPINNER_MONITOR_WAS_SET=""
 LACY_SPINNER_NOTIFY_WAS_SET=""
 
 lacy_start_spinner() {
+    # Signal to Bash interrupt handler that an agent/spinner is active.
+    # In ZSH this is unnecessary — TRAPINT checks $ZLE_STATE instead.
+    LACY_SHELL_AGENT_RUNNING=true
+
     # Guard against double-start
     if [[ -n "$LACY_SPINNER_PID" ]]; then
         lacy_stop_spinner
@@ -146,6 +150,7 @@ lacy_stop_spinner() {
     fi
 
     LACY_SPINNER_PID=""
+    LACY_SHELL_AGENT_RUNNING=false
 
     _lacy_spinner_restore_jobctl
 }

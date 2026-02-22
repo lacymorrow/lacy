@@ -8,6 +8,9 @@ LACY_SHELL_LAST_INTERRUPT_TIME=0
 LACY_SHELL_QUITTING=false
 LACY_SHELL_INPUT_TYPE=""
 
+# Track agent execution state for interrupt handling
+LACY_SHELL_AGENT_RUNNING=false
+
 # Save original IGNOREEOF
 _LACY_ORIGINAL_IGNOREEOF="${IGNOREEOF:-}"
 
@@ -61,6 +64,17 @@ _lacy_ctrl_space_toggle() {
 lacy_shell_interrupt_handler_bash() {
     # Don't handle if disabled
     if [[ "$LACY_SHELL_ENABLED" != true ]]; then
+        return
+    fi
+
+    # During agent execution, just stop the spinner and return cleanly.
+    # The agent child process already received SIGINT from the kernel.
+    # This mirrors ZSH's TRAPINT behavior which checks $ZLE_STATE and
+    # lets SIGINT propagate to child processes when ZLE is inactive.
+    if [[ "$LACY_SHELL_AGENT_RUNNING" == true ]]; then
+        lacy_stop_spinner
+        LACY_SHELL_AGENT_RUNNING=false
+        echo ""
         return
     fi
 
