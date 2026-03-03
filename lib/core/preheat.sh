@@ -10,6 +10,7 @@ LACY_PREHEAT_SERVER_PID=""
 LACY_PREHEAT_SERVER_PASSWORD=""
 LACY_PREHEAT_SERVER_PID_FILE="$LACY_SHELL_HOME/.server.pid"
 LACY_PREHEAT_SERVER_SESSION_ID=""
+LACY_PREHEAT_SERVER_SESSION_FILE="$LACY_SHELL_HOME/.server_session_id"
 LACY_PREHEAT_CLAUDE_SESSION_ID=""
 LACY_PREHEAT_SESSION_FILE="$LACY_SHELL_HOME/.claude_session_id"
 
@@ -128,6 +129,8 @@ lacy_preheat_server_query() {
 
         LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
         [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
+        # Persist to file so parent shell can read it (subshell workaround)
+        echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
     fi
 
     local escaped_query
@@ -143,6 +146,7 @@ lacy_preheat_server_query() {
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
         LACY_PREHEAT_SERVER_SESSION_ID=""
+        rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
         return 1
     fi
 
@@ -203,6 +207,14 @@ lacy_preheat_server_stop() {
 
     LACY_PREHEAT_SERVER_PASSWORD=""
     LACY_PREHEAT_SERVER_SESSION_ID=""
+    rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+}
+
+# Restore server session ID from file (survives subshell boundary)
+lacy_preheat_server_restore_session() {
+    if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" && -f "$LACY_PREHEAT_SERVER_SESSION_FILE" ]]; then
+        LACY_PREHEAT_SERVER_SESSION_ID=$(cat "$LACY_PREHEAT_SERVER_SESSION_FILE" 2>/dev/null)
+    fi
 }
 
 # ============================================================================

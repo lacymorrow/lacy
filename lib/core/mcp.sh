@@ -106,6 +106,43 @@ lacy_tool_cmd() {
 # Active tool (set during install or via config)
 : "${LACY_ACTIVE_TOOL:=""}"
 
+# Last resume command (set after each successful agent query)
+LACY_LAST_RESUME_CMD=""
+
+# Resume command registry — returns the command to resume a conversation
+# Usage: cmd=$(lacy_resume_cmd <tool_name>)
+lacy_resume_cmd() {
+    case "$1" in
+        claude)
+            [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]] && \
+                echo "claude --resume $LACY_PREHEAT_CLAUDE_SESSION_ID"
+            ;;
+        lash)
+            [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
+                echo "lash --session $LACY_PREHEAT_SERVER_SESSION_ID"
+            ;;
+        opencode)
+            [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
+                echo "opencode --session $LACY_PREHEAT_SERVER_SESSION_ID"
+            ;;
+        gemini)   echo "gemini --resume" ;;
+        codex)    echo "codex exec resume --last" ;;
+    esac
+}
+
+# Print resume hint after successful agent query
+# Usage: _lacy_print_resume_hint <tool_name>
+_lacy_print_resume_hint() {
+    local tool="$1"
+    local resume_cmd
+    resume_cmd=$(lacy_resume_cmd "$tool")
+
+    if [[ -n "$resume_cmd" ]]; then
+        LACY_LAST_RESUME_CMD="$resume_cmd"
+        lacy_print_color 238 "  $resume_cmd # Resume"
+    fi
+}
+
 # Format tool error output — detects JSON error blobs and prints a clean message.
 # Returns 0 if an error was detected and formatted, 1 if output is not a tool error.
 # Usage: lacy_format_tool_error "$output" "$tool_name"
@@ -166,6 +203,40 @@ _lacy_strip_leading_noise() {
         output="$rest"
     done
     printf '%s' "$output"
+}
+
+# Normalize claude JSON output — handles startup noise, JSON arrays, and NDJSON.
+# Claude --output-format json wraps all events in a JSON array: [{init},{assistant},{result}]
+# This extracts the last element (the result object) so downstream parsing works.
+_lacy_claude_normalize_output() {
+    local output="$1"
+
+    # Strip non-JSON leading lines (agent startup text on stderr merged via 2>&1)
+    local stripped="$output"
+    while [[ -n "$stripped" && "$stripped" != "{"* && "$stripped" != "["* ]]; do
+        local rest="${stripped#*$'\n'}"
+        [[ "$rest" == "$stripped" ]] && stripped="" && break
+        stripped="$rest"
+    done
+    [[ -z "$stripped" ]] && stripped="$output"
+
+    # JSON array — extract the last element (the result object)
+    if [[ "$stripped" == "["* ]]; then
+        local last_obj=""
+        if command -v jq >/dev/null 2>&1; then
+            last_obj=$(printf '%s\n' "$stripped" | jq -c '.[-1]' 2>/dev/null)
+        elif command -v python3 >/dev/null 2>&1; then
+            last_obj=$(printf '%s\n' "$stripped" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    if isinstance(d, list): print(json.dumps(d[-1]))
+except: pass" 2>/dev/null)
+        fi
+        [[ -n "$last_obj" ]] && stripped="$last_obj"
+    fi
+
+    printf '%s' "$stripped"
 }
 
 # Send query to AI agent (configurable tool or fallback)
@@ -310,9 +381,12 @@ EOF
             server_result=$(lacy_preheat_server_query "$query")
             local exit_code=$?
             lacy_stop_spinner
+            # Restore session ID from file (lost in subshell)
+            lacy_preheat_server_restore_session
             if [[ $exit_code -eq 0 && -n "$server_result" ]]; then
                 while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
                 printf '%s\n' "$server_result"
+                _lacy_print_resume_hint "$tool"
                 echo ""
                 return 0
             fi
@@ -327,12 +401,12 @@ EOF
         echo ""
         lacy_start_spinner
         local json_output
-        json_output=$(_lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
+        json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
         local exit_code=$?
         lacy_stop_spinner
 
-        # Strip agent startup noise (e.g. "> build · big-pickle") before JSON parsing
-        json_output=$(_lacy_strip_leading_noise "$json_output")
+        # Normalize: strip noise, extract last element from JSON array
+        json_output=$(_lacy_claude_normalize_output "$json_output")
 
         if [[ $exit_code -eq 0 ]]; then
             # Check for structured errors (e.g. invalid API key)
@@ -348,18 +422,19 @@ EOF
                 printf '%s\n' "$json_output"
             fi
             lacy_preheat_claude_capture_session "$json_output"
+            _lacy_print_resume_hint "$tool"
             echo ""
             return 0
         elif [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]]; then
             lacy_preheat_claude_reset_session
             claude_cmd=$(lacy_preheat_claude_build_cmd)
             lacy_start_spinner
-            json_output=$(_lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
+            json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
             exit_code=$?
             lacy_stop_spinner
 
-            # Strip agent startup noise before JSON parsing
-            json_output=$(_lacy_strip_leading_noise "$json_output")
+            # Normalize: strip noise, extract last element from JSON array
+            json_output=$(_lacy_claude_normalize_output "$json_output")
 
             # Check for structured errors before processing
             if lacy_format_tool_error "$json_output" "$tool"; then
@@ -376,6 +451,7 @@ EOF
                     printf '%s\n' "$json_output"
                 fi
                 lacy_preheat_claude_capture_session "$json_output"
+                _lacy_print_resume_hint "$tool"
                 echo ""
                 return 0
             fi
@@ -436,6 +512,9 @@ EOF
         exit_code=${PIPESTATUS[0]}
     fi
     lacy_stop_spinner
+    if [[ $exit_code -eq 0 ]]; then
+        _lacy_print_resume_hint "$tool"
+    fi
     echo ""
     return $exit_code
 }
