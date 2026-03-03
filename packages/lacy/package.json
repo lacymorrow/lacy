@@ -1,6 +1,6 @@
 {
   "name": "lacy",
-  "version": "1.7.14",
+  "version": "1.8.0",
   "description": "Install lacy — talk to your terminal",
   "type": "module",
   "bin": {
