@@ -241,7 +241,9 @@ except: pass" 2>/dev/null)
 
 # Send query to AI agent (configurable tool or fallback)
 lacy_shell_query_agent() {
-    local query="$1"
+    local query
+    # Enrich query with recent shell history context if available
+    query=$(lacy_build_context_query "$1")
     local tool="${LACY_ACTIVE_TOOL}"
 
     # Auto-detect if not set

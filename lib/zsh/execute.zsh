@@ -2,6 +2,12 @@
 
 # Command execution logic for Lacy Shell
 
+# preexec hook — captures the command typed by the user before it runs.
+# ZSH calls preexec_functions before each user-entered command.
+lacy_shell_preexec() {
+    LACY_LAST_CMD="$1"
+}
+
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
     # If Lacy Shell is disabled, use normal accept-line
@@ -131,6 +137,12 @@ lacy_shell_execute_smart_auto() {
 lacy_shell_precmd() {
     # Capture exit code immediately — must be the first line
     local last_exit=$?
+
+    # Log last shell command + exit code (preexec set LACY_LAST_CMD)
+    if [[ -n "$LACY_LAST_CMD" ]]; then
+        lacy_history_log "$LACY_LAST_CMD" "$last_exit"
+        LACY_LAST_CMD=""
+    fi
 
     # Ensure terminal state is clean (safety net for interrupted spinners / agent tools)
     printf '\e[?25h'   # Cursor visible
@@ -319,9 +331,10 @@ lacy_shell_quit() {
     echo "👋 Exiting Lacy Shell..."
     echo ""
     
-    # CRITICAL: Remove precmd hooks FIRST to prevent redrawing
+    # CRITICAL: Remove precmd/preexec hooks FIRST to prevent redrawing
     precmd_functions=(${precmd_functions:#lacy_shell_precmd})
     precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
+    preexec_functions=(${preexec_functions:#lacy_shell_preexec})
     
     # Disable input interception (only if ZLE is active)
     if [[ -n "$ZLE_VERSION" ]]; then

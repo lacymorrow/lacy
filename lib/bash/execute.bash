@@ -108,10 +108,29 @@ lacy_shell_execute_agent() {
     fi
 }
 
+# Last HISTCMD value logged — prevents logging the same entry twice
+_LACY_LAST_HISTCMD=""
+
 # Precmd equivalent for Bash — called via PROMPT_COMMAND
 lacy_shell_precmd_bash() {
     # Capture exit code immediately
     _lacy_last_exit=$?
+
+    # Log last shell command via Bash history (no preexec equivalent in Bash)
+    if [[ -n "$HISTCMD" && "$HISTCMD" != "$_LACY_LAST_HISTCMD" ]]; then
+        local _raw _num _last_cmd
+        _raw=$(HISTTIMEFORMAT='' builtin history 1 2>/dev/null)
+        # Strip leading whitespace, then strip history number, then strip whitespace
+        _raw="${_raw#"${_raw%%[![:space:]]*}"}"
+        _num="${_raw%%[[:space:]]*}"
+        _last_cmd="${_raw#"${_num}"}"
+        _last_cmd="${_last_cmd#"${_last_cmd%%[![:space:]]*}"}"
+        # Only log if it looks like a real command (not an agent query already handled)
+        if [[ -n "$_last_cmd" && "$_last_cmd" != "$LACY_SHELL_PENDING_QUERY" ]]; then
+            lacy_history_log "$_last_cmd" "$_lacy_last_exit"
+        fi
+        _LACY_LAST_HISTCMD="$HISTCMD"
+    fi
 
     # Ensure terminal state is clean
     printf '\e[?25h'   # Cursor visible

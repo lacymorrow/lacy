@@ -53,6 +53,7 @@ lacy_shell_cleanup() {
 
 # Set up hooks
 zle -N accept-line lacy_shell_smart_accept_line
+preexec_functions+=(lacy_shell_preexec)
 precmd_functions+=(lacy_shell_precmd)
 
 # Initialize
