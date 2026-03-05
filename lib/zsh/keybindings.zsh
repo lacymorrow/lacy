@@ -90,6 +90,45 @@ lacy_shell_line_pre_redraw() {
 # Register the pre-redraw hook
 zle -N zle-line-pre-redraw lacy_shell_line_pre_redraw
 
+# ============================================================================
+# Feature 2: @file Tab completion widget
+#
+# When Tab is pressed and the word under the cursor starts with @,
+# complete it as a filename (stripping the @ for matching, re-adding it
+# when inserting). Falls through to normal ZSH completion otherwise.
+# ============================================================================
+lacy_shell_at_complete_widget() {
+    # Extract the word up to the cursor
+    local before_cursor="${BUFFER[1,$CURSOR]}"
+    local cur_word="${before_cursor##* }"   # last space-delimited token
+
+    if [[ "$cur_word" == @?* ]]; then
+        local prefix="${cur_word#@}"
+        # Expand glob — (N) suppresses error if no match, (f) splits on newline
+        local -a matches
+        matches=( ${(N)~prefix}*(N) )
+
+        if (( ${#matches} == 0 )); then
+            # No matches — fall through to default completion
+            zle expand-or-complete
+        elif (( ${#matches} == 1 )); then
+            # Single match — complete in-place
+            local insert="${matches[1]}"
+            local offset=$(( CURSOR - ${#cur_word} ))
+            BUFFER="${BUFFER[1,$offset]}@${insert}${BUFFER[$(( CURSOR + 1 )),-1]}"
+            CURSOR=$(( offset + ${#insert} + 1 ))
+        else
+            # Multiple matches — list them in dim gray and let user keep typing
+            zle -M "$(printf '\e[38;5;238m  @%s\e[0m\n' "${matches[@]}")"
+        fi
+    else
+        # Default Tab behavior
+        zle expand-or-complete
+    fi
+    zle reset-prompt
+}
+zle -N lacy_shell_at_complete_widget
+
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
     # Only add our custom bindings - don't touch existing terminal shortcuts
@@ -99,6 +138,9 @@ lacy_shell_setup_keybindings() {
 
     # Alternative keybindings
     bindkey '^T' lacy_shell_toggle_mode_widget      # Ctrl+T: Toggle mode (backup)
+
+    # @file Tab completion (overrides default Tab only when word starts with @)
+    bindkey '^I' lacy_shell_at_complete_widget      # Tab: @file-aware completion
 
     # Direct mode switches (Ctrl+X prefix)
     # bindkey '^X^A' lacy_shell_agent_mode_widget     # Ctrl+X Ctrl+A: Agent mode
@@ -367,6 +409,7 @@ lacy_shell_cleanup_keybindings() {
     bindkey '^D' delete-char-or-list
     bindkey '^@' set-mark-command
     bindkey '^T' transpose-chars
+    bindkey '^I' expand-or-complete
 
     # Remove real-time indicator hook
     zle -D zle-line-pre-redraw 2>/dev/null
@@ -374,6 +417,7 @@ lacy_shell_cleanup_keybindings() {
     # Remove custom widgets
     zle -D lacy_shell_toggle_mode_widget 2>/dev/null
     zle -D lacy_shell_delete_char_or_quit_widget 2>/dev/null
+    zle -D lacy_shell_at_complete_widget 2>/dev/null
 }
 
 # Register widgets

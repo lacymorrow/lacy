@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Shell execution history capture for Lacy Shell
+# Shell execution history capture + query enrichment for Lacy Shell
 # Logs commands + exit codes to conversation.log.
 # Shared across Bash 4+ and ZSH.
 
@@ -28,6 +28,58 @@ lacy_history_log() {
         [[ -n "$timestamp" ]] && printf 'TS: %s\n' "$timestamp"
         printf -- '---\n'
     } >> "$LACY_SHELL_CONVERSATION_FILE"
+}
+
+# ============================================================================
+# Feature 2: @file reference expansion
+#
+# Scans a query string for @path tokens. For each token that resolves to a
+# readable file, the file's contents are appended to the query so the agent
+# can read them directly.
+#
+# Rules:
+#   - Token must start with @ and contain at least one non-@ character
+#   - Trailing punctuation (,.;:!?) is stripped before resolving
+#   - Files larger than 8 KB are truncated
+#   - Each file is included at most once (deduplication)
+#
+# Usage: expanded=$(lacy_expand_file_refs "fix the bug in @src/main.go")
+# ============================================================================
+LACY_EXPANDED_FILES=()   # populated by lacy_expand_file_refs, read by mcp.sh
+
+lacy_expand_file_refs() {
+    local query="$1"
+    local result="$query"
+    local seen=":"   # colon-delimited list of already-expanded paths
+    LACY_EXPANDED_FILES=()
+
+    local tmp="$query"
+    while [[ "$tmp" == *"@"* ]]; do
+        tmp="${tmp#*@}"                         # advance past the next @
+        local token="${tmp%%[[:space:]]*}"       # grab word up to whitespace
+        tmp="${tmp#"$token"}"                   # advance past the token
+
+        [[ -z "$token" ]] && continue
+
+        # Strip trailing punctuation characters
+        local path="$token"
+        while [[ -n "$path" && "${path: -1}" == [,.:;!?] ]]; do
+            path="${path%?}"
+        done
+
+        [[ -z "$path" ]] && continue
+
+        # Expand readable files not yet seen
+        if [[ -f "$path" && -r "$path" && "$seen" != *":${path}:"* ]]; then
+            seen+=":${path}:"
+            LACY_EXPANDED_FILES+=("$path")
+            local contents
+            contents=$(head -c 8192 "$path" 2>/dev/null)
+            result+=$'\n\n'"--- @${path} ---"$'\n'"${contents}"$'\n'"---"
+        fi
+    done
+
+    printf '%s' "$result"
 }
 
 # Return a query enriched with recent command history as context.
