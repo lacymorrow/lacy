@@ -27,6 +27,7 @@ source "$LACY_SHELL_DIR/lib/core/modes.sh"
 source "$LACY_SHELL_DIR/lib/core/animations.sh"
 source "$LACY_SHELL_DIR/lib/core/spinner.sh"
 source "$LACY_SHELL_DIR/lib/core/mcp.sh"
+source "$LACY_SHELL_DIR/lib/core/render.sh"
 source "$LACY_SHELL_DIR/lib/core/preheat.sh"
 source "$LACY_SHELL_DIR/lib/core/detection.sh"
 
