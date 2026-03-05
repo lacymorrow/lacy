@@ -4,19 +4,51 @@
 # Post-processes agent response text before display.
 # Shared across Bash 4+ and ZSH.
 
-# ============================================================================
-# Feature 1: Todo list rendering
-# Converts markdown checkboxes to terminal symbols with color.
-#   - [ ] item  →  ☐ item  (gray/238)
-#   - [x] item  →  ☑ item  (green/34)
-# ============================================================================
+# State: are we currently inside a fenced code block?
+# Persists across _lacy_render_line calls in the same process.
+_LACY_IN_CODE_BLOCK=0
+_LACY_CODE_BLOCK_LANG=""
 
-# Render a single line — called inline or from lacy_render_response.
-# Usage: _lacy_render_line "line text"
+# ============================================================================
+# _lacy_render_line "line"
+#
+# Handles (in order of priority):
+#   Feature 4a: fenced code blocks (``` ... ```) — dim fence, preserve content
+#   Feature 4b: diff lines inside code blocks — green/red/cyan coloring
+#   Feature 1:  markdown todo items outside code blocks — ☐/☑ symbols
+# ============================================================================
 _lacy_render_line() {
     local line="$1"
 
-    # Strip leading whitespace to check prefix (preserves indent for output)
+    # --- Feature 4a: fenced code block toggle ---
+    if [[ "$line" == '```'* ]]; then
+        if (( _LACY_IN_CODE_BLOCK == 0 )); then
+            _LACY_IN_CODE_BLOCK=1
+            _LACY_CODE_BLOCK_LANG="${line#'```'}"
+            lacy_print_color 238 "$line"
+        else
+            _LACY_IN_CODE_BLOCK=0
+            _LACY_CODE_BLOCK_LANG=""
+            lacy_print_color 238 "$line"
+        fi
+        return
+    fi
+
+    # --- Feature 4b: inside a code block ---
+    if (( _LACY_IN_CODE_BLOCK == 1 )); then
+        # Diff coloring (unified diff format)
+        case "$line" in
+            "@@"*"@@"*) lacy_print_color 75  "$line" ;; # cyan  — hunk header
+            "--- "*)     lacy_print_color 238 "$line" ;; # gray  — old file header
+            "+++ "*)     lacy_print_color 238 "$line" ;; # gray  — new file header
+            "+"*)        lacy_print_color 34  "$line" ;; # green — added line
+            "-"*)        lacy_print_color 196 "$line" ;; # red   — removed line
+            *)           printf '%s\n' "$line" ;;
+        esac
+        return
+    fi
+
+    # --- Feature 1: markdown todo items (outside code blocks) ---
     local stripped="$line"
     while [[ "${stripped:0:1}" == " " || "${stripped:0:1}" == $'\t' ]]; do
         stripped="${stripped:1}"
@@ -34,9 +66,17 @@ _lacy_render_line() {
     fi
 }
 
-# Render agent response from stdin, line by line.
+# ============================================================================
+# lacy_render_response
+#
+# Read agent response from stdin, render line by line.
+# Resets code-block state at the start of each response so buffered
+# paths (server/claude) always start clean.
 # Usage: printf '%s\n' "$result" | lacy_render_response
+# ============================================================================
 lacy_render_response() {
+    _LACY_IN_CODE_BLOCK=0
+    _LACY_CODE_BLOCK_LANG=""
     local line
     while IFS= read -r line; do
         _lacy_render_line "$line"
