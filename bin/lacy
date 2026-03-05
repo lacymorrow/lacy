@@ -631,10 +631,17 @@ cmd_help() {
 ${BOLD}Lacy Shell${NC} ${DIM}v${VERSION}${NC} — Talk directly to your shell
 
 ${BOLD}Usage:${NC}
-  lacy                Enter Lacy Shell (or re-enter after quit)
-  lacy [command]      Run a command
+  lacy                Activate Lacy Shell (or show status if already active)
+  lacy on             Activate Lacy Shell explicitly
+  lacy off            Deactivate Lacy Shell, return to normal shell
+  lacy [command]      Run a CLI command
 
-${BOLD}Commands:${NC}
+${BOLD}Activation commands${NC} (type in your shell):
+  lacy on             Activate — hook into your shell
+  lacy off            Deactivate — restore normal shell behaviour
+  lacy                Toggle: activate if off, show status if on
+
+${BOLD}CLI commands:${NC}
   setup          Interactive settings (tool, mode, config)
   install        Install Lacy Shell (interactive)
   uninstall      Remove Lacy Shell completely
@@ -654,6 +661,7 @@ ${BOLD}In-shell commands${NC} (available when Lacy is active):
   Ctrl+Space     Toggle between modes
 
 ${BOLD}Environment:${NC}
+  LACY_AUTO_START=false     Load functions but don't activate on shell start
   LACY_NO_NODE=1            Force bash-only mode (skip Node UI)
 
 ${DIM}https://github.com/lacymorrow/lacy${NC}
