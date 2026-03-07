@@ -114,6 +114,10 @@ lacy_shell_setup_keybindings() {
 
     # Override Ctrl+D behavior
     bindkey '^D' lacy_shell_delete_char_or_quit_widget  # Ctrl+D: Quit if buffer empty
+
+    # Fix Command+Delete on macOS: send ^U, which ZSH defaults to kill-whole-line.
+    # Rebind to backward-kill-line so only text before the cursor is deleted.
+    bindkey '^U' backward-kill-line
 }
 
 # Widget to toggle mode
@@ -367,6 +371,7 @@ lacy_shell_cleanup_keybindings() {
     bindkey '^D' delete-char-or-list
     bindkey '^@' set-mark-command
     bindkey '^T' transpose-chars
+    bindkey '^U' kill-whole-line
 
     # Remove real-time indicator hook
     zle -D zle-line-pre-redraw 2>/dev/null

@@ -142,7 +142,7 @@ _lacy_print_resume_hint() {
 
     if [[ -n "$resume_cmd" ]]; then
         LACY_LAST_RESUME_CMD="$resume_cmd"
-        lacy_print_color 238 "  $resume_cmd # Resume"
+        lacy_print_color 238 "$resume_cmd"
     fi
 }
 
