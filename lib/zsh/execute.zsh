@@ -60,6 +60,9 @@ lacy_shell_smart_accept_line() {
         "agent")
             # Add to history before clearing buffer
             print -s -- "$input"
+            # Flush to HISTFILE immediately — needed for INC_APPEND_HISTORY / SHARE_HISTORY users,
+            # since the subsequent empty-buffer accept-line doesn't trigger a file write.
+            fc -AI 2>/dev/null
 
             # Defer agent execution to precmd — output produced inside a ZLE
             # widget (after zle .accept-line) confuses ZLE's cursor tracking,
