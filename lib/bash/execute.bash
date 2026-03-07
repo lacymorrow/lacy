@@ -64,6 +64,9 @@ lacy_shell_smart_accept_line_bash() {
         "agent")
             # Add to Bash history
             history -s -- "$input"
+            # Flush to HISTFILE immediately — needed when HISTFILE/PROMPT_COMMAND
+            # write-on-exit isn't sufficient (e.g. with HISTAPPEND set).
+            history -a 2>/dev/null
 
             # Defer agent execution to PROMPT_COMMAND
             LACY_SHELL_PENDING_QUERY="$input"

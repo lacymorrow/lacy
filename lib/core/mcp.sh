@@ -97,7 +97,7 @@ lacy_tool_cmd() {
         lash)     echo "lash run -c" ;;
         claude)   echo "claude -p" ;;
         opencode) echo "opencode run -c" ;;
-        gemini)   echo "gemini --resume -p" ;;
+        gemini)   echo "gemini -p" ;;
         codex)    echo "codex exec resume --last" ;;
         *)        echo "" ;;
     esac
@@ -108,6 +108,9 @@ lacy_tool_cmd() {
 
 # Last resume command (set after each successful agent query)
 LACY_LAST_RESUME_CMD=""
+
+# Gemini session flag — exists when a previous session is available to resume
+LACY_GEMINI_SESSION_FILE="${LACY_SHELL_HOME:-$HOME/.lacy}/.gemini_session"
 
 # Resume command registry — returns the command to resume a conversation
 # Usage: cmd=$(lacy_resume_cmd <tool_name>)
@@ -125,7 +128,7 @@ lacy_resume_cmd() {
             [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
                 echo "opencode --session $LACY_PREHEAT_SERVER_SESSION_ID"
             ;;
-        gemini)   echo "gemini --resume" ;;
+        gemini)   [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && echo "gemini --resume" ;;
         codex)    echo "codex exec resume --last" ;;
     esac
 }
@@ -243,6 +246,13 @@ except: pass" 2>/dev/null)
 lacy_shell_query_agent() {
     local query="$1"
     local tool="${LACY_ACTIVE_TOOL}"
+
+    # Prepend current working directory so the agent always knows where it is.
+    # Critical when using preheat (background server / claude session reuse) since
+    # those processes retain the directory context from where they were started.
+    local _cwd
+    _cwd=$(pwd 2>/dev/null)
+    # [[ -n "$_cwd" ]] && query="[cwd: $_cwd] $query"
 
     # Auto-detect if not set
     local _auto_detected=false
@@ -465,7 +475,37 @@ EOF
         fi
     fi
 
-    # === Generic path (gemini, codex, custom, and fallback) ===
+    # === Gemini session reuse ===
+    # Use --resume only when a previous session is known to exist.
+    # On first use or after session expiry, run without --resume to avoid
+    # "No previous sessions found" errors.
+    # Gemini emits startup noise (skill conflicts, credential messages) on stderr —
+    # redirect to /dev/null so only the actual response reaches the terminal.
+    # Prepend context so gemini knows what tools are available in -p (headless) mode
+    # and doesn't attempt run_shell_command which only exists in interactive mode.
+    if [[ "$tool" == "gemini" ]]; then
+        local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
+        local gemini_query="$_gemini_ctx $query"
+        local gemini_cmd="gemini -p"
+        [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && gemini_cmd="gemini --resume -p"
+        echo ""
+        _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+        local exit_code=$?
+        if [[ $exit_code -ne 0 && -f "$LACY_GEMINI_SESSION_FILE" ]]; then
+            # --resume failed (session expired/missing) — retry without it
+            rm -f "$LACY_GEMINI_SESSION_FILE"
+            _lacy_run_tool_cmd "gemini -p" "$gemini_query" </dev/tty 2>/dev/null
+            exit_code=$?
+        fi
+        if [[ $exit_code -eq 0 ]]; then
+            touch "$LACY_GEMINI_SESSION_FILE"
+            _lacy_print_resume_hint "$tool"
+        fi
+        echo ""
+        return $exit_code
+    fi
+
+    # === Generic path (codex, custom, and fallback) ===
     echo ""
     lacy_start_spinner
     _lacy_run_tool_cmd "$cmd" "$query" </dev/tty 2>&1 | {

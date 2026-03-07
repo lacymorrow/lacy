@@ -119,10 +119,15 @@ lacy_preheat_server_query() {
     local query="$1"
 
     if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
-        local session_json
+        # Pass the current working directory via the x-opencode-directory header.
+        # The lash/opencode server stores this on the session and uses it for all
+        # file operations — the server's own process.cwd() is irrelevant.
+        local _session_dir session_json
+        _session_dir=$(pwd 2>/dev/null)
         session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
             -X POST \
             -H "Content-Type: application/json" \
+            -H "x-opencode-directory: ${_session_dir}" \
             -d '{}' \
             "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
         [[ $? -ne 0 ]] && return 1
@@ -136,10 +141,18 @@ lacy_preheat_server_query() {
     local escaped_query
     escaped_query=$(printf '%s' "$query" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')
 
+    # Pass the current working directory on every message request.
+    # lash/opencode wraps each request in Instance.provide({ directory }) so
+    # per-message directory takes effect even on an existing session — this
+    # preserves conversation continuity while keeping CWD always accurate.
+    local _msg_dir
+    _msg_dir=$(pwd 2>/dev/null)
+
     local response
     response=$(curl -sf --max-time "$LACY_SESSION_MESSAGE_TIMEOUT" \
         -X POST \
         -H "Content-Type: application/json" \
+        -H "x-opencode-directory: ${_msg_dir}" \
         -d "{\"parts\": [{\"type\": \"text\", \"text\": \"${escaped_query}\"}]}" \
         "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session/${LACY_PREHEAT_SERVER_SESSION_ID}/message" 2>/dev/null)
 

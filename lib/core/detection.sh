@@ -128,10 +128,54 @@ lacy_shell_classify_input() {
         return
     fi
 
-    # Layer 1b: Common English words always route to agent.
-    # These are conversational responses (perfect, yes, sure, thanks, etc.)
-    # that are almost never intentional shell commands.
+    # Layer 1b: Common English words almost always route to agent.
+    # Exception: if the word is also a valid shell command AND the arguments
+    # look like shell syntax, defer to shell. Heuristic is conservative:
+    # only shell when operators are present OR there is at most one bare word
+    # argument (after flags/paths/numbers) that is not an NL marker.
+    # Examples: `which python` → shell, `yes | cmd` → shell
+    #           `which version to use` → agent, `yes lets go` → agent
     if _lacy_in_list "$first_word_lower" "${LACY_AGENT_WORDS[@]}"; then
+        if lacy_shell_is_valid_command "$first_word"; then
+            # Shell operators anywhere → shell
+            local _op
+            for _op in "${LACY_SHELL_OPERATORS[@]}"; do
+                [[ "$input" == *"$_op"* ]] && { echo "shell"; return; }
+            done
+            # Count bare words (non-flag, non-path, non-number, non-variable)
+            if [[ "$input" == *" "* ]]; then
+                local _rest="${input#* }"
+                local -a _tokens
+                if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+                    _tokens=( ${=_rest} )
+                else
+                    read -ra _tokens <<< "$_rest"
+                fi
+                local -a _bare=()
+                local _tok _ltok
+                for _tok in "${_tokens[@]}"; do
+                    [[ "$_tok" == -* ]] && continue
+                    [[ "$_tok" == /* || "$_tok" == ./* || "$_tok" == ~/* ]] && continue
+                    [[ "$_tok" =~ ^[0-9]+$ ]] && continue
+                    [[ "$_tok" == \$* ]] && continue
+                    _ltok=$(_lacy_lowercase "$_tok")
+                    _bare+=( "$_ltok" )
+                done
+                # 0 bare words (flags only) → shell
+                if (( ${#_bare[@]} == 0 )); then
+                    echo "shell"
+                    return
+                fi
+                # Exactly 1 bare word that is not an NL marker → shell
+                if (( ${#_bare[@]} == 1 )); then
+                    if ! _lacy_in_list "${_bare[${_LACY_ARR_OFFSET}]}" "${LACY_NL_MARKERS[@]}"; then
+                        echo "shell"
+                        return
+                    fi
+                fi
+                # 2+ bare words, or the single bare word is an NL marker → agent
+            fi
+        fi
         echo "agent"
         return
     fi
@@ -272,6 +316,17 @@ lacy_shell_test_detection() {
         "RUST_LOG=debug cargo run"
         "FOO=bar BAZ=qux node index.js"
         "CC=gcc make -j4"
+        # Agent words that are also valid commands — should use heuristics
+        "which python"
+        "which -a git"
+        "which version should I install"
+        "which"
+        "yes | apt-get install -y"
+        "nice -n 10 make"
+        "nice work"
+        "who"
+        "who root"
+        "who am I"
     )
 
     echo "Testing auto-detection logic:"
