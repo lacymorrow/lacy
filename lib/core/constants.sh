@@ -181,7 +181,7 @@ LACY_SHELL_OPERATORS=('|' '&&' '||' ';' '>')
 # === UI ===
 LACY_INDICATOR_CHAR="▌"
 LACY_SPINNER_FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-: "${LACY_SPINNER_STYLE:="braille"}"
+: "${LACY_SPINNER_STYLE:="random"}"
 LACY_SPINNER_TEXT='Thinking'
 
 # === Timing (seconds) ===
