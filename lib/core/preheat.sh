@@ -271,11 +271,55 @@ lacy_preheat_claude_reset_session() {
 }
 
 # ============================================================================
+# Gemini Session Reuse
+# ============================================================================
+
+LACY_GEMINI_SESSION_ID=""
+LACY_GEMINI_SESSION_ID_FILE="$LACY_SHELL_HOME/.gemini_session_id"
+
+lacy_preheat_gemini_restore_session() {
+    if [[ -f "$LACY_GEMINI_SESSION_ID_FILE" ]]; then
+        LACY_GEMINI_SESSION_ID=$(cat "$LACY_GEMINI_SESSION_ID_FILE" 2>/dev/null)
+    fi
+}
+
+lacy_preheat_gemini_build_cmd() {
+    if [[ -n "$LACY_GEMINI_SESSION_ID" ]]; then
+        echo "gemini --resume ${LACY_GEMINI_SESSION_ID} --output-format json -p"
+    else
+        echo "gemini --output-format json -p"
+    fi
+}
+
+lacy_preheat_gemini_capture_session() {
+    local json="$1"
+    local session_id=""
+
+    session_id=$(_lacy_json_get "$json" "session_id")
+
+    if [[ -n "$session_id" ]]; then
+        LACY_GEMINI_SESSION_ID="$session_id"
+        echo "$session_id" > "$LACY_GEMINI_SESSION_ID_FILE"
+    fi
+}
+
+lacy_preheat_gemini_extract_result() {
+    local json="$1"
+    _lacy_json_get "$json" "response"
+}
+
+lacy_preheat_gemini_reset_session() {
+    LACY_GEMINI_SESSION_ID=""
+    rm -f "$LACY_GEMINI_SESSION_ID_FILE"
+}
+
+# ============================================================================
 # Lifecycle
 # ============================================================================
 
 lacy_preheat_init() {
     lacy_preheat_claude_restore_session
+    lacy_preheat_gemini_restore_session
 
     if [[ "$LACY_PREHEAT_EAGER" == "true" ]]; then
         local tool="${LACY_ACTIVE_TOOL}"
