@@ -109,8 +109,75 @@ lacy_tool_cmd() {
 # Last resume command (set after each successful agent query)
 LACY_LAST_RESUME_CMD=""
 
-# Gemini session flag — exists when a previous session is available to resume
+# Gemini session — stores session ID (UUID) for --resume SESSION_ID support
 LACY_GEMINI_SESSION_FILE="${LACY_SHELL_HOME:-$HOME/.lacy}/.gemini_session"
+LACY_GEMINI_SESSION_ID=""
+
+# Capture latest Gemini session ID from ~/.gemini/tmp/<project>/chats/session-*.json
+# Sessions are stored per-project, keyed by current working directory.
+_lacy_gemini_capture_session_id() {
+    local session_base="$HOME/.gemini/tmp"
+    [[ ! -d "$session_base" ]] && return 1
+    local current_dir
+    current_dir=$(pwd 2>/dev/null)
+    # Find the project directory whose .project_root matches current dir
+    local project_dir=""
+    local d
+    for d in "$session_base"/*/; do
+        local root_file="${d}.project_root"
+        if [[ -f "$root_file" ]]; then
+            local root_path
+            root_path=$(cat "$root_file" 2>/dev/null)
+            if [[ "$root_path" == "$current_dir" ]]; then
+                project_dir="$d"
+                break
+            fi
+        fi
+    done
+    [[ -z "$project_dir" ]] && return 1
+    local chats_dir="${project_dir}chats"
+    [[ ! -d "$chats_dir" ]] && return 1
+    # Find latest session file (no glob — avoids ZSH nomatch)
+    local latest_name
+    latest_name=$(ls -t "$chats_dir" 2>/dev/null | grep '^session-.*\.json$' | head -1)
+    [[ -z "$latest_name" ]] && return 1
+    # Extract sessionId UUID from the JSON file
+    local session_id
+    session_id=$(grep -o '"sessionId": *"[^"]*"' "$chats_dir/$latest_name" 2>/dev/null \
+        | head -1 | grep -o '"[^"]*"$' | tr -d '"')
+    [[ -z "$session_id" ]] && return 1
+    echo "$session_id"
+}
+
+# Run a Gemini command with a spinner for the full duration.
+# Captures output to a temp file so the spinner is always visible.
+# Usage: _lacy_gemini_run_with_spinner "gemini -p" "query"
+# Returns the exit code of the gemini command.
+_lacy_gemini_run_with_spinner() {
+    local _cmd="$1" _query="$2"
+    local _tmpfile
+    _tmpfile=$(mktemp)
+    lacy_start_spinner
+    _lacy_run_tool_cmd "$_cmd" "$_query" </dev/tty 2>/dev/null > "$_tmpfile"
+    local _ec=$?
+    lacy_stop_spinner
+    printf '\e[2K\r'
+    cat "$_tmpfile"
+    rm -f "$_tmpfile"
+    return $_ec
+}
+
+# Restore Gemini session ID from file (survives shell restarts)
+lacy_gemini_restore_session() {
+    if [[ -f "$LACY_GEMINI_SESSION_FILE" ]]; then
+        local content
+        content=$(cat "$LACY_GEMINI_SESSION_FILE" 2>/dev/null)
+        # Only use if it looks like a UUID session ID (non-empty, no spaces)
+        if [[ -n "$content" && "$content" != *" "* ]]; then
+            LACY_GEMINI_SESSION_ID="$content"
+        fi
+    fi
+}
 
 # Resume command registry — returns the command to resume a conversation
 # Usage: cmd=$(lacy_resume_cmd <tool_name>)
@@ -128,7 +195,13 @@ lacy_resume_cmd() {
             [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
                 echo "opencode --session $LACY_PREHEAT_SERVER_SESSION_ID"
             ;;
-        gemini)   [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && echo "gemini --resume" ;;
+        gemini)
+            if [[ -n "$LACY_GEMINI_SESSION_ID" ]]; then
+                echo "gemini --resume $LACY_GEMINI_SESSION_ID"
+            elif [[ -f "$LACY_GEMINI_SESSION_FILE" ]]; then
+                echo "gemini --resume"
+            fi
+            ;;
         codex)    echo "codex exec resume --last" ;;
     esac
 }
@@ -487,18 +560,30 @@ EOF
         local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
         local gemini_query="$_gemini_ctx $query"
         local gemini_cmd="gemini -p"
-        [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && gemini_cmd="gemini --resume -p"
+        if [[ -n "$LACY_GEMINI_SESSION_ID" ]]; then
+            gemini_cmd="gemini --resume $LACY_GEMINI_SESSION_ID -p"
+        elif [[ -f "$LACY_GEMINI_SESSION_FILE" ]]; then
+            gemini_cmd="gemini --resume -p"
+        fi
         echo ""
-        _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+        _lacy_gemini_run_with_spinner "$gemini_cmd" "$gemini_query"
         local exit_code=$?
-        if [[ $exit_code -ne 0 && -f "$LACY_GEMINI_SESSION_FILE" ]]; then
+        if [[ $exit_code -ne 0 && ( -n "$LACY_GEMINI_SESSION_ID" || -f "$LACY_GEMINI_SESSION_FILE" ) ]]; then
             # --resume failed (session expired/missing) — retry without it
+            LACY_GEMINI_SESSION_ID=""
             rm -f "$LACY_GEMINI_SESSION_FILE"
-            _lacy_run_tool_cmd "gemini -p" "$gemini_query" </dev/tty 2>/dev/null
+            _lacy_gemini_run_with_spinner "gemini -p" "$gemini_query"
             exit_code=$?
         fi
         if [[ $exit_code -eq 0 ]]; then
-            touch "$LACY_GEMINI_SESSION_FILE"
+            local _new_session_id
+            _new_session_id=$(_lacy_gemini_capture_session_id)
+            if [[ -n "$_new_session_id" ]]; then
+                LACY_GEMINI_SESSION_ID="$_new_session_id"
+                echo "$_new_session_id" > "$LACY_GEMINI_SESSION_FILE"
+            else
+                touch "$LACY_GEMINI_SESSION_FILE"
+            fi
             _lacy_print_resume_hint "$tool"
         fi
         echo ""

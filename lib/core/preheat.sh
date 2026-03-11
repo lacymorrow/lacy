@@ -276,6 +276,7 @@ lacy_preheat_claude_reset_session() {
 
 lacy_preheat_init() {
     lacy_preheat_claude_restore_session
+    lacy_gemini_restore_session
 
     if [[ "$LACY_PREHEAT_EAGER" == "true" ]]; then
         local tool="${LACY_ACTIVE_TOOL}"
