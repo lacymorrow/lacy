@@ -717,8 +717,8 @@ main() {
     shift 2>/dev/null || true
 
     case "$cmd" in
-        new|reset|clear) cmd_new "$@" ;;
-        resume)         cmd_resume "$@" ;;
+        new|/new|reset|/reset|clear|/clear) cmd_new "$@" ;;
+        resume|/resume)         cmd_resume "$@" ;;
         setup)      cmd_setup "$@" ;;
         install)    cmd_install "$@" ;;
         uninstall)  cmd_uninstall "$@" ;;
