@@ -6,13 +6,23 @@
 # Start a fresh session with fresh context
 lacy_shell_new() {
     lacy_preheat_server_stop
-    lacy_preheat_claude_reset_session
-    lacy_preheat_gemini_reset_session
     
-    # Clear latest session files
-    rm -f "${LACY_PREHEAT_SERVER_SESSION_FILE%_*}_latest" \
-          "${LACY_PREHEAT_SESSION_FILE%_*}_latest" \
-          "${LACY_GEMINI_SESSION_ID_FILE%_*}_latest" 2>/dev/null
+    # Reset sessions and clear latest files for all supported tools
+    local t
+    for t in lash claude opencode gemini; do
+        # Tool-specific reset functions
+        case "$t" in
+            claude) lacy_preheat_claude_reset_session ;;
+            gemini) lacy_preheat_gemini_reset_session ;;
+        esac
+
+        # Clear latest session files
+        local session_file var_name
+        eval $(_lacy_get_session_vars_for_tool "$t")
+        if [[ -n "$session_file" ]]; then
+            rm -f "${session_file%_*}_latest" 2>/dev/null
+        fi
+    done
     
     # Clear conversation history
     rm -f "$LACY_SHELL_CONVERSATION_FILE"
