@@ -575,7 +575,45 @@ lacy_shell_spinner() {
     esac
 }
 
+# Lacy command handler (handles subcommands like new, resume, setup, etc.)
+lacy_shell_command() {
+    local cmd="$1"
+    # Remove leading slash if present
+    cmd="${cmd#/}"
+    
+    case "$cmd" in
+        "new"|"reset"|"clear")
+            lacy_preheat_reset_session
+            echo ""
+            print -P "  %F{${LACY_COLOR_AGENT}}✨%f Session reset - fresh context started"
+            echo ""
+            ;;
+        "resume")
+            lacy_preheat_resume_most_recent_session
+            echo ""
+            print -P "  %F{${LACY_COLOR_AGENT}}🔄%f Resumed most recent session"
+            echo ""
+            ;;
+        "")
+            # Enter lacy shell (handled by original lacy function logic)
+            if [[ "${LACY_SHELL_ACTIVE:-}" == "1" ]]; then
+                lacy_shell_mode status
+            else
+                # Call original entry point
+                local _ldir="$LACY_SHELL_DIR"
+                LACY_SHELL_LOADED=false
+                source "${_ldir}/lacy.plugin.zsh"
+            fi
+            ;;
+        *)
+            # Delegate all other commands to the bin/lacy CLI
+            command lacy "$@"
+            ;;
+    esac
+}
+
 # Aliases
+alias lacy="lacy_shell_command"
 alias ask="lacy_shell_query_agent"
 alias mode="lacy_shell_mode"
 alias tool="lacy_shell_tool"

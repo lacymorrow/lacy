@@ -477,10 +477,17 @@ EOF
 
     # === Gemini session reuse ===
     if [[ "$tool" == "gemini" ]]; then
-        local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
-        local gemini_query="$_gemini_ctx $query"
         local gemini_cmd
         gemini_cmd=$(lacy_preheat_gemini_build_cmd)
+
+        # Only include context on the first message of a session (when ID is empty)
+        local gemini_query
+        if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
+            local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
+            gemini_query="$_gemini_ctx $query"
+        else
+            gemini_query="$query"
+        fi
 
         echo ""
         lacy_start_spinner
@@ -493,6 +500,11 @@ EOF
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
             gemini_cmd=$(lacy_preheat_gemini_build_cmd)
+            
+            # Since we reset the session, this retry is now the "first" message — add context
+            local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
+            gemini_query="$_gemini_ctx $query"
+
             lacy_start_spinner
             json_output=$(_lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null)
             exit_code=$?
