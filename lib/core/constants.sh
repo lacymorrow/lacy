@@ -184,7 +184,17 @@ LACY_SPINNER_FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 : "${LACY_SPINNER_STYLE:="random"}"
 LACY_SPINNER_TEXT='Thinking'
 
-# === Timing (seconds) ===
+# === Gemini ===
+LACY_GEMINI_CONTEXT="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: {cwd}]"
+
+# === API URLs ===
+LACY_API_URL_OPENAI="https://api.openai.com/v1/chat/completions"
+LACY_API_URL_ANTHROPIC="https://api.anthropic.com/v1/messages"
+
+# === timing (seconds) ===
+LACY_HEALTH_CHECK_TIMEOUT_SYNC=0.3
+LACY_HEALTH_CHECK_TIMEOUT_ASYNC=0.5
+
 LACY_SPINNER_FRAME_DELAY=0.05
 LACY_TERMINAL_FLUSH_DELAY=0.02
 LACY_HEALTH_CHECK_ATTEMPTS=30
