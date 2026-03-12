@@ -269,8 +269,9 @@ _lacy_session_capture() {
     local json="$1"
     local file="$2"
     local var_name="$3"
+    local key_name="${4:-session_id}"
     local session_id
-    session_id=$(_lacy_json_get "$json" "session_id")
+    session_id=$(_lacy_json_get "$json" "$key_name")
 
     if [[ -n "$session_id" ]]; then
         eval "$var_name=\"\$session_id\""
@@ -299,7 +300,7 @@ lacy_preheat_claude_build_cmd() {
 }
 
 lacy_preheat_claude_capture_session() {
-    _lacy_session_capture "$1" "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID"
+    _lacy_session_capture "$1" "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID" "session_id"
 }
 
 lacy_preheat_claude_extract_result() {
@@ -326,7 +327,7 @@ lacy_preheat_gemini_build_cmd() {
 }
 
 lacy_preheat_gemini_capture_session() {
-    _lacy_session_capture "$1" "$LACY_GEMINI_SESSION_ID_FILE" "LACY_GEMINI_SESSION_ID"
+    _lacy_session_capture "$1" "$LACY_GEMINI_SESSION_ID_FILE" "LACY_GEMINI_SESSION_ID" "session_id"
 }
 
 lacy_preheat_gemini_extract_result() {
