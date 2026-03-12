@@ -48,11 +48,11 @@ lacy_start_spinner() {
     fi
 
     {
-        trap 'printf "\e[?25h"' EXIT
+        trap 'printf "\e[?25h" >&2' EXIT
         trap 'exit 0' TERM INT HUP
 
         # Hide cursor
-        printf '\e[?25l'
+        printf '\e[?25l' >&2
 
         local num_frames=${#LACY_SPINNER_ANIM[@]}
 
@@ -111,7 +111,7 @@ lacy_start_spinner() {
 
             # Render: clear line, carriage return, draw
             printf "\e[2K\r \e[38;5;${LACY_COLOR_AGENT}m%s\e[0m %b\e[38;5;${LACY_COLOR_NEUTRAL}m%s\e[0m" \
-                "$spinner_char" "$shimmer" "$dots"
+                "$spinner_char" "$shimmer" "$dots" >&2
 
             frame_num=$(( frame_num + 1 ))
 
@@ -130,8 +130,8 @@ lacy_start_spinner() {
 
 lacy_stop_spinner() {
     # Unconditional terminal state restore
-    printf '\e[?25h'   # Cursor visible
-    printf '\e[?7h'    # Line wrapping enabled
+    printf '\e[?25h' >&2   # Cursor visible
+    printf '\e[?7h' >&2    # Line wrapping enabled
 
     if [[ -z "$LACY_SPINNER_PID" ]]; then
         _lacy_spinner_restore_jobctl
@@ -146,7 +146,7 @@ lacy_stop_spinner() {
             wait "$LACY_SPINNER_PID" 2>/dev/null
         fi
         sleep "$LACY_TERMINAL_FLUSH_DELAY"
-        printf '\e[2K\r'
+        printf '\e[2K\r' >&2
     fi
 
     LACY_SPINNER_PID=""

@@ -90,6 +90,30 @@ _lacy_run_tool_cmd() {
     "${cmd_parts[@]}" "$query"
 }
 
+# Internal helper to build and run a Gemini query with session context and spinner.
+# Returns 0 on success, non-zero on error. Outputs JSON to stdout.
+_lacy_gemini_query_exec() {
+    local query="$1"
+    local gemini_cmd
+    gemini_cmd=$(lacy_preheat_gemini_build_cmd)
+
+    # Only include context on the first message of a session (when ID is empty)
+    local gemini_query
+    if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
+        local _gemini_ctx
+        _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
+        gemini_query="$_gemini_ctx $query"
+    else
+        gemini_query="$query"
+    fi
+
+    lacy_start_spinner
+    _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+    local exit_code=$?
+    lacy_stop_spinner
+    return $exit_code
+}
+
 # Tool registry — function-based for maximum portability
 # Usage: cmd=$(lacy_tool_cmd <tool_name>)
 lacy_tool_cmd() {
@@ -477,40 +501,16 @@ EOF
 
     # === Gemini session reuse ===
     if [[ "$tool" == "gemini" ]]; then
-        local gemini_cmd
-        gemini_cmd=$(lacy_preheat_gemini_build_cmd)
-
-        # Only include context on the first message of a session (when ID is empty)
-        local gemini_query
-        if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
-            local _gemini_ctx
-            _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
-            gemini_query="$_gemini_ctx $query"
-        else
-            gemini_query="$query"
-        fi
-
         echo ""
-        lacy_start_spinner
         local json_output
-        json_output=$(_lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null)
+        json_output=$(_lacy_gemini_query_exec "$query")
         local exit_code=$?
-        lacy_stop_spinner
 
         if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
-            gemini_cmd=$(lacy_preheat_gemini_build_cmd)
-            
-            # Since we reset the session, this retry is now the "first" message — add context
-            local _gemini_ctx
-            _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
-            gemini_query="$_gemini_ctx $query"
-
-            lacy_start_spinner
-            json_output=$(_lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null)
+            json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
-            lacy_stop_spinner
         fi
 
         if [[ $exit_code -eq 0 ]]; then
