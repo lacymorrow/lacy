@@ -83,7 +83,7 @@ lacy_preheat_server_check_async() {
 
         kill -0 "$pid" 2>/dev/null || { echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE" && return; }
 
-        if curl -sf --max-time 0.5 "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1; then
+        if curl -sf --max-time "$LACY_HEALTH_CHECK_TIMEOUT_ASYNC" "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1; then
             echo "0" > "$LACY_SHELL_HEALTH_CACHE_FILE"
         else
             echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE"
@@ -112,7 +112,7 @@ lacy_preheat_server_is_healthy() {
 
     kill -0 "$LACY_PREHEAT_SERVER_PID" 2>/dev/null || return 1
 
-    curl -sf --max-time 0.3 "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1
+    curl -sf --max-time "$LACY_HEALTH_CHECK_TIMEOUT_SYNC" "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1
 }
 
 # Send query to background server via REST API
