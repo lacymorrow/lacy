@@ -107,11 +107,7 @@ _lacy_gemini_query_exec() {
         gemini_query="$query"
     fi
 
-    lacy_start_spinner
     _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
-    local exit_code=$?
-    lacy_stop_spinner
-    return $exit_code
 }
 
 # Tool registry — function-based for maximum portability
@@ -490,15 +486,19 @@ EOF
     # === Gemini session reuse ===
     if [[ "$tool" == "gemini" ]]; then
         echo ""
+        lacy_start_spinner
         local json_output
         json_output=$(_lacy_gemini_query_exec "$query")
         local exit_code=$?
+        lacy_stop_spinner
 
         if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
+            lacy_start_spinner
             json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
+            lacy_stop_spinner
         fi
 
         if [[ $exit_code -eq 0 ]]; then
