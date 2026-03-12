@@ -137,6 +137,9 @@ lacy_preheat_server_query() {
         [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
         # Persist to file so parent shell can read it (subshell workaround)
         echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+        # Also persist to a global 'latest' file for resume support
+        local latest_file="${LACY_PREHEAT_SERVER_SESSION_FILE%_*}_latest"
+        echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$latest_file"
     fi
 
     local escaped_query
@@ -276,6 +279,10 @@ _lacy_session_capture() {
     if [[ -n "$session_id" ]]; then
         eval "$var_name=\"\$session_id\""
         echo "$session_id" > "$file"
+        
+        # Also persist to a global 'latest' file for resume support across shells
+        local latest_file="${file%_*}_latest"
+        echo "$session_id" > "$latest_file"
     fi
 }
 
@@ -346,6 +353,10 @@ lacy_preheat_init() {
     # Per-shell session files ensure a fresh session on every new shell start.
     # We no longer need to restore here because the PID-specific file won't exist yet.
 
+    if [[ "$LACY_RESUME_SESSION" == "1" ]]; then
+        lacy_preheat_resume_latest
+    fi
+
     if [[ "$LACY_PREHEAT_EAGER" == "true" ]]; then
         local tool="${LACY_ACTIVE_TOOL}"
 
@@ -360,4 +371,53 @@ lacy_preheat_init() {
 
 lacy_preheat_cleanup() {
     lacy_preheat_server_stop
+}
+
+# Resume the latest session across all shells for the current tool
+lacy_preheat_resume_latest() {
+    # Ensure config is loaded to know which tool to use
+    [[ -n "$(declare -f lacy_shell_load_config)" ]] && lacy_shell_load_config
+
+    local tool="${LACY_ACTIVE_TOOL}"
+    # Auto-detect if not set
+    if [[ -z "$tool" ]]; then
+        local t
+        for t in lash claude opencode gemini; do
+            if command -v "$t" >/dev/null 2>&1; then
+                tool="$t"
+                break
+            fi
+        done
+    fi
+
+    [[ -z "$tool" ]] && return 1
+
+    local latest_file
+    case "$tool" in
+        lash|opencode)
+            latest_file="${LACY_PREHEAT_SERVER_SESSION_FILE%_*}_latest"
+            if [[ -f "$latest_file" ]]; then
+                LACY_PREHEAT_SERVER_SESSION_ID=$(cat "$latest_file" 2>/dev/null)
+                echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+                return 0
+            fi
+            ;;
+        claude)
+            latest_file="${LACY_PREHEAT_SESSION_FILE%_*}_latest"
+            if [[ -f "$latest_file" ]]; then
+                LACY_PREHEAT_CLAUDE_SESSION_ID=$(cat "$latest_file" 2>/dev/null)
+                echo "$LACY_PREHEAT_CLAUDE_SESSION_ID" > "$LACY_PREHEAT_SESSION_FILE"
+                return 0
+            fi
+            ;;
+        gemini)
+            latest_file="${LACY_GEMINI_SESSION_ID_FILE%_*}_latest"
+            if [[ -f "$latest_file" ]]; then
+                LACY_GEMINI_SESSION_ID=$(cat "$latest_file" 2>/dev/null)
+                echo "$LACY_GEMINI_SESSION_ID" > "$LACY_GEMINI_SESSION_ID_FILE"
+                return 0
+            fi
+            ;;
+    esac
+    return 1
 }
