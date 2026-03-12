@@ -282,6 +282,7 @@ lacy_shell_tool() {
                 lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL=""
                 export LACY_ACTIVE_TOOL
+                lacy_shell_write_config_value "active" ""
                 echo "Tool set to: auto-detect"
             elif [[ "$2" == "custom" ]]; then
                 if [[ -z "$3" ]]; then
@@ -292,11 +293,14 @@ lacy_shell_tool() {
                 LACY_ACTIVE_TOOL="custom"
                 LACY_CUSTOM_TOOL_CMD="$3"
                 export LACY_ACTIVE_TOOL LACY_CUSTOM_TOOL_CMD
+                lacy_shell_write_config_value "active" "custom"
+                lacy_shell_write_config_value "custom_command" "\"$3\""
                 echo "Tool set to: custom ($LACY_CUSTOM_TOOL_CMD)"
             else
                 lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL="$2"
                 export LACY_ACTIVE_TOOL
+                lacy_shell_write_config_value "active" "$2"
                 echo "Tool set to: $2"
             fi
             ;;
