@@ -9,7 +9,7 @@ lacy_shell_new() {
     
     # Reset sessions and clear latest files for all supported tools
     local t
-    for t in lash claude opencode gemini; do
+    for t in lash claude opencode gemini codex; do
         # Tool-specific reset functions
         case "$t" in
             claude) lacy_preheat_claude_reset_session ;;

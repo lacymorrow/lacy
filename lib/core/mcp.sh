@@ -107,7 +107,7 @@ _lacy_gemini_query_exec() {
         gemini_query="$query"
     fi
 
-    _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+    _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" < /dev/null 2>/dev/null
 }
 
 # Tool registry — function-based for maximum portability
