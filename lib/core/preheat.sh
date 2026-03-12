@@ -133,13 +133,8 @@ lacy_preheat_server_query() {
             "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
         [[ $? -ne 0 ]] && return 1
 
-        LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
+        _lacy_session_capture "$session_json" "$LACY_PREHEAT_SERVER_SESSION_FILE" "LACY_PREHEAT_SERVER_SESSION_ID" "id"
         [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
-        # Persist to file so parent shell can read it (subshell workaround)
-        echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
-        # Also persist to a global 'latest' file for resume support
-        local latest_file="${LACY_PREHEAT_SERVER_SESSION_FILE%_*}_latest"
-        echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$latest_file"
     fi
 
     local escaped_query
@@ -392,32 +387,33 @@ lacy_preheat_resume_latest() {
 
     [[ -z "$tool" ]] && return 1
 
-    local latest_file
+    local session_file var_name
     case "$tool" in
         lash|opencode)
-            latest_file="${LACY_PREHEAT_SERVER_SESSION_FILE%_*}_latest"
-            if [[ -f "$latest_file" ]]; then
-                LACY_PREHEAT_SERVER_SESSION_ID=$(cat "$latest_file" 2>/dev/null)
-                echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
-                return 0
-            fi
+            session_file="$LACY_PREHEAT_SERVER_SESSION_FILE"
+            var_name="LACY_PREHEAT_SERVER_SESSION_ID"
             ;;
         claude)
-            latest_file="${LACY_PREHEAT_SESSION_FILE%_*}_latest"
-            if [[ -f "$latest_file" ]]; then
-                LACY_PREHEAT_CLAUDE_SESSION_ID=$(cat "$latest_file" 2>/dev/null)
-                echo "$LACY_PREHEAT_CLAUDE_SESSION_ID" > "$LACY_PREHEAT_SESSION_FILE"
-                return 0
-            fi
+            session_file="$LACY_PREHEAT_SESSION_FILE"
+            var_name="LACY_PREHEAT_CLAUDE_SESSION_ID"
             ;;
         gemini)
-            latest_file="${LACY_GEMINI_SESSION_ID_FILE%_*}_latest"
-            if [[ -f "$latest_file" ]]; then
-                LACY_GEMINI_SESSION_ID=$(cat "$latest_file" 2>/dev/null)
-                echo "$LACY_GEMINI_SESSION_ID" > "$LACY_GEMINI_SESSION_ID_FILE"
-                return 0
-            fi
+            session_file="$LACY_GEMINI_SESSION_ID_FILE"
+            var_name="LACY_GEMINI_SESSION_ID"
             ;;
     esac
+
+    if [[ -n "$session_file" ]]; then
+        local latest_file="${session_file%_*}_latest"
+        if [[ -f "$latest_file" ]]; then
+            local session_id
+            session_id=$(cat "$latest_file" 2>/dev/null)
+            if [[ -n "$session_id" ]]; then
+                eval "$var_name=\"\$session_id\""
+                echo "$session_id" > "$session_file"
+                return 0
+            fi
+        fi
+    fi
     return 1
 }
