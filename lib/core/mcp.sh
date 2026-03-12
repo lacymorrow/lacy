@@ -483,7 +483,8 @@ EOF
         # Only include context on the first message of a session (when ID is empty)
         local gemini_query
         if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
-            local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
+            local _gemini_ctx
+            _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
             gemini_query="$_gemini_ctx $query"
         else
             gemini_query="$query"
@@ -502,7 +503,8 @@ EOF
             gemini_cmd=$(lacy_preheat_gemini_build_cmd)
             
             # Since we reset the session, this retry is now the "first" message — add context
-            local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
+            local _gemini_ctx
+            _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
             gemini_query="$_gemini_ctx $query"
 
             lacy_start_spinner
@@ -620,7 +622,7 @@ lacy_shell_query_openai() {
     response=$(curl -s -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
         -d "{\"model\":\"${LACY_API_MODEL_OPENAI}\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_tokens\":1500}" \
-        "https://api.openai.com/v1/chat/completions")
+        "$LACY_API_URL_OPENAI")
 
     _lacy_json_query "$response" '.choices[0].message.content'
 }
@@ -636,7 +638,7 @@ lacy_shell_query_anthropic() {
         -H "x-api-key: $api_key" \
         -H "anthropic-version: 2023-06-01" \
         -d "{\"model\":\"${LACY_API_MODEL_ANTHROPIC}\",\"max_tokens\":1500,\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}]}" \
-        "https://api.anthropic.com/v1/messages")
+        "$LACY_API_URL_ANTHROPIC")
 
     _lacy_json_query "$response" '.content[0].text'
 }
