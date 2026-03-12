@@ -487,21 +487,31 @@ EOF
     if [[ "$tool" == "gemini" ]]; then
         echo ""
         lacy_start_spinner
-        local json_output
-        json_output=$(_lacy_gemini_query_exec "$query")
+        
+        local json_out_file
+        json_out_file=$(mktemp)
+        
+        _lacy_gemini_query_exec "$query" > "$json_out_file"
         local exit_code=$?
         lacy_stop_spinner
+
+        local json_output
+        json_output=$(cat "$json_out_file" 2>/dev/null)
+        rm -f "$json_out_file"
 
         if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
             lacy_start_spinner
-            json_output=$(_lacy_gemini_query_exec "$query")
+            json_out_file=$(mktemp)
+            _lacy_gemini_query_exec "$query" > "$json_out_file"
             exit_code=$?
             lacy_stop_spinner
+            json_output=$(cat "$json_out_file" 2>/dev/null)
+            rm -f "$json_out_file"
         fi
 
-        if [[ $exit_code -eq 0 ]]; then
+        if [[ $exit_code -eq 0 && -n "$json_output" ]]; then
             local result_text
             result_text=$(lacy_preheat_gemini_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
