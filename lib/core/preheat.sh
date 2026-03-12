@@ -16,6 +16,50 @@ LACY_PREHEAT_CLAUDE_SESSION_ID=""
 LACY_PREHEAT_SESSION_FILE="$LACY_SHELL_HOME/.claude_session_id_$$"
 
 # ============================================================================
+# Tool & Session Helpers
+# ============================================================================
+
+# Internal helper to detect the active AI tool
+_lacy_detect_active_tool() {
+    # Ensure config is loaded
+    [[ -n "$(declare -f lacy_shell_load_config)" ]] && lacy_shell_load_config
+
+    local tool="${LACY_ACTIVE_TOOL}"
+    # Auto-detect if not set
+    if [[ -z "$tool" ]]; then
+        local t
+        for t in lash claude opencode gemini codex; do
+            if command -v "$t" >/dev/null 2>&1; then
+                tool="$t"
+                break
+            fi
+        done
+    fi
+    echo "$tool"
+}
+
+# Internal helper to get session file and variable name for a tool
+# Usage: eval $(_lacy_get_session_vars_for_tool "$tool")
+_lacy_get_session_vars_for_tool() {
+    local tool="$1"
+    case "$tool" in
+        lash|opencode)
+            echo "session_file=\"$LACY_PREHEAT_SERVER_SESSION_FILE\" var_name=\"LACY_PREHEAT_SERVER_SESSION_ID\""
+            ;;
+        claude)
+            echo "session_file=\"$LACY_PREHEAT_SESSION_FILE\" var_name=\"LACY_PREHEAT_CLAUDE_SESSION_ID\""
+            ;;
+        gemini)
+            echo "session_file=\"$LACY_GEMINI_SESSION_ID_FILE\" var_name=\"LACY_GEMINI_SESSION_ID\""
+            ;;
+        codex)
+            # Codex uses its own session management (resume --last)
+            echo "session_file=\"\" var_name=\"\""
+            ;;
+    esac
+}
+
+# ============================================================================
 # Background Server (lash + opencode)
 # ============================================================================
 
@@ -370,38 +414,12 @@ lacy_preheat_cleanup() {
 
 # Resume the latest session across all shells for the current tool
 lacy_preheat_resume_latest() {
-    # Ensure config is loaded to know which tool to use
-    [[ -n "$(declare -f lacy_shell_load_config)" ]] && lacy_shell_load_config
-
-    local tool="${LACY_ACTIVE_TOOL}"
-    # Auto-detect if not set
-    if [[ -z "$tool" ]]; then
-        local t
-        for t in lash claude opencode gemini; do
-            if command -v "$t" >/dev/null 2>&1; then
-                tool="$t"
-                break
-            fi
-        done
-    fi
-
+    local tool
+    tool=$(_lacy_detect_active_tool)
     [[ -z "$tool" ]] && return 1
 
     local session_file var_name
-    case "$tool" in
-        lash|opencode)
-            session_file="$LACY_PREHEAT_SERVER_SESSION_FILE"
-            var_name="LACY_PREHEAT_SERVER_SESSION_ID"
-            ;;
-        claude)
-            session_file="$LACY_PREHEAT_SESSION_FILE"
-            var_name="LACY_PREHEAT_CLAUDE_SESSION_ID"
-            ;;
-        gemini)
-            session_file="$LACY_GEMINI_SESSION_ID_FILE"
-            var_name="LACY_GEMINI_SESSION_ID"
-            ;;
-    esac
+    eval $(_lacy_get_session_vars_for_tool "$tool")
 
     if [[ -n "$session_file" ]]; then
         local latest_file="${session_file%_*}_latest"

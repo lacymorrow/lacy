@@ -269,7 +269,8 @@ except: pass" 2>/dev/null)
 # Send query to AI agent (configurable tool or fallback)
 lacy_shell_query_agent() {
     local query="$1"
-    local tool="${LACY_ACTIVE_TOOL}"
+    local tool
+    tool=$(_lacy_detect_active_tool)
 
     # Prepend current working directory so the agent always knows where it is.
     # Critical when using preheat (background server / claude session reuse) since
@@ -277,19 +278,6 @@ lacy_shell_query_agent() {
     local _cwd
     _cwd=$(pwd 2>/dev/null)
     # [[ -n "$_cwd" ]] && query="[cwd: $_cwd] $query"
-
-    # Auto-detect if not set
-    local _auto_detected=false
-    if [[ -z "$tool" ]]; then
-        local t
-        for t in lash claude opencode gemini codex; do
-            if command -v "$t" >/dev/null 2>&1; then
-                tool="$t"
-                _auto_detected=true
-                break
-            fi
-        done
-    fi
 
     # If still no tool, try API fallback
     if [[ -z "$tool" ]]; then
