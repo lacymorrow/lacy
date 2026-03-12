@@ -22,6 +22,22 @@ lacy_shell_smart_accept_line_bash() {
         return
     fi
 
+    # Handle / commands
+    case "$input" in
+        "/new"|"/reset"|"/clear")
+            lacy_shell_new
+            READLINE_LINE=""
+            READLINE_POINT=0
+            return
+            ;;
+        "/resume")
+            lacy_shell_resume
+            READLINE_LINE=""
+            READLINE_POINT=0
+            return
+            ;;
+    esac
+
     # Classify using centralized detection
     local classification
     classification=$(lacy_shell_classify_input "$input")
@@ -349,6 +365,33 @@ lacy_shell_clear_conversation() {
     echo "Conversation history cleared"
 }
 
+lacy_shell_new() {
+    lacy_preheat_server_stop
+    lacy_preheat_claude_reset_session
+    lacy_preheat_gemini_reset_session
+    # Clear latest files too
+    rm -f "${LACY_PREHEAT_SERVER_SESSION_FILE%_*}_latest" 2>/dev/null
+    rm -f "${LACY_PREHEAT_SESSION_FILE%_*}_latest" 2>/dev/null
+    rm -f "${LACY_GEMINI_SESSION_ID_FILE%_*}_latest" 2>/dev/null
+    
+    rm -f "$LACY_SHELL_CONVERSATION_FILE"
+    echo ""
+    lacy_print_color 34 "✨ Fresh session started"
+    echo ""
+}
+
+lacy_shell_resume() {
+    if lacy_preheat_resume_latest; then
+        echo ""
+        lacy_print_color 34 "🔄 Resumed latest session"
+        echo ""
+    else
+        echo ""
+        lacy_print_color 196 "❌ No session found to resume"
+        echo ""
+    fi
+}
+
 lacy_shell_show_conversation() {
     if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
         cat "$LACY_SHELL_CONVERSATION_FILE"
@@ -418,5 +461,7 @@ ask() { lacy_shell_query_agent "$*"; }
 mode() { lacy_shell_mode "$@"; }
 tool() { lacy_shell_tool "$@"; }
 spinner() { lacy_shell_spinner "$@"; }
+new() { lacy_shell_new; }
+resume() { lacy_shell_resume; }
 quit() { lacy_shell_quit; }
 stop() { lacy_shell_quit; }
