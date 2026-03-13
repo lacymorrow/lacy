@@ -613,7 +613,8 @@ cmd_enter() {
 }
 
 cmd_new() {
-    local last_session_file="${INSTALL_DIR}/.last_session"
+    local shell_home="${LACY_SHELL_HOME:-${HOME}/.lacy}"
+    local last_session_file="${shell_home}/.last_session"
     if [[ -f "$last_session_file" ]]; then
         rm -f "$last_session_file"
         success "Last session cleared"
@@ -624,7 +625,8 @@ cmd_new() {
 }
 
 cmd_resume() {
-    local last_session_file="${INSTALL_DIR}/.last_session"
+    local shell_home="${LACY_SHELL_HOME:-${HOME}/.lacy}"
+    local last_session_file="${shell_home}/.last_session"
     if [[ ! -f "$last_session_file" ]]; then
         warn "No previous session found"
         printf '\n%b\n' "Start chatting to create a session, then use ${CYAN}resume${NC} to pick it up in another shell."

@@ -92,6 +92,7 @@ _lacy_run_tool_cmd() {
 
 # Internal helper to build and run a Gemini query with session context and spinner.
 # Returns 0 on success, non-zero on error. Outputs JSON to stdout.
+# NOTE: Uses LACY_GEMINI_SESSION_ID which is managed in lib/core/preheat.sh.
 _lacy_gemini_query_exec() {
     local query="$1"
     local gemini_cmd
@@ -107,11 +108,8 @@ _lacy_gemini_query_exec() {
         gemini_query="$query"
     fi
 
-    lacy_start_spinner
     _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
-    local exit_code=$?
-    lacy_stop_spinner
-    return $exit_code
+    return $?
 }
 
 # Tool registry — function-based for maximum portability
@@ -505,14 +503,18 @@ EOF
     if [[ "$tool" == "gemini" ]]; then
         echo ""
         local json_output
+        lacy_start_spinner
         json_output=$(_lacy_gemini_query_exec "$query")
         local exit_code=$?
+        lacy_stop_spinner
 
         if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
+            lacy_start_spinner
             json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
+            lacy_stop_spinner
         fi
 
         if [[ $exit_code -eq 0 ]]; then
