@@ -84,7 +84,7 @@ section "Gemini Session State"
 
 # Initial state
 assert_eq "LACY_GEMINI_SESSION_ID should be empty" "" "$LACY_GEMINI_SESSION_ID"
-assert_eq "Initial build cmd" "gemini --output-format json -p" "$(lacy_preheat_gemini_build_cmd)"
+assert_eq "Initial build cmd" "gemini -p" "$(lacy_preheat_gemini_build_cmd)"
 
 # Capture session
 MOCK_JSON='{"session_id": "test-uuid-123", "response": "hello"}'
@@ -92,7 +92,7 @@ lacy_preheat_gemini_capture_session "$MOCK_JSON"
 
 assert_eq "LACY_GEMINI_SESSION_ID should be captured" "test-uuid-123" "$LACY_GEMINI_SESSION_ID"
 assert_eq "Session ID should be persisted to file" "test-uuid-123" "$(cat "$LACY_GEMINI_SESSION_ID_FILE")"
-assert_eq "Resumed build cmd" "gemini --resume test-uuid-123 --output-format json -p" "$(lacy_preheat_gemini_build_cmd)"
+assert_eq "Resumed build cmd" "gemini --resume test-uuid-123 -p" "$(lacy_preheat_gemini_build_cmd)"
 
 # Extract result
 assert_eq "Extract result from JSON" "hello" "$(lacy_preheat_gemini_extract_result "$MOCK_JSON")"
@@ -113,7 +113,7 @@ else
     FAIL=$(( FAIL + 1 ))
 fi
 
-# Cleanup
-rm -rf "$TEST_TMPDIR"
+# Cleanup via trap (ensures cleanup even on script errors)
+trap 'rm -rf "$TEST_TMPDIR"' EXIT
 
 summary

@@ -91,7 +91,8 @@ _lacy_run_tool_cmd() {
 }
 
 # Internal helper to build and run a Gemini query with session context and spinner.
-# Returns 0 on success, non-zero on error. Outputs JSON to stdout.
+# Returns 0 on success, non-zero on error. Outputs tool response to stdout.
+# NOTE: Uses LACY_GEMINI_SESSION_ID which is managed in lib/core/preheat.sh.
 _lacy_gemini_query_exec() {
     local query="$1"
     local gemini_cmd
@@ -101,17 +102,14 @@ _lacy_gemini_query_exec() {
     local gemini_query
     if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
         local _gemini_ctx
-        _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
+        _gemini_ctx="${LACY_GEMINI_CONTEXT//\{cwd\}/$(pwd 2>/dev/null)}"
         gemini_query="$_gemini_ctx $query"
     else
         gemini_query="$query"
     fi
 
-    lacy_start_spinner
     _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
-    local exit_code=$?
-    lacy_stop_spinner
-    return $exit_code
+    return $?
 }
 
 # Tool registry — function-based for maximum portability
@@ -167,6 +165,8 @@ _lacy_print_resume_hint() {
     if [[ -n "$resume_cmd" ]]; then
         LACY_LAST_RESUME_CMD="$resume_cmd"
         lacy_print_color 238 "$resume_cmd"
+        # Persist for cross-shell resume (lacy /resume in a new shell)
+        _lacy_save_last_session
     fi
 }
 
@@ -503,14 +503,20 @@ EOF
     if [[ "$tool" == "gemini" ]]; then
         echo ""
         local json_output
+        lacy_start_spinner
         json_output=$(_lacy_gemini_query_exec "$query")
         local exit_code=$?
+        lacy_stop_spinner
+        # Restore session ID lost in subshell
+        lacy_preheat_gemini_restore_session
 
         if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
+            lacy_start_spinner
             json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
+            lacy_stop_spinner
         fi
 
         if [[ $exit_code -eq 0 ]]; then
