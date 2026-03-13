@@ -612,6 +612,41 @@ cmd_enter() {
     exec "$shell" -li
 }
 
+cmd_new() {
+    local shell_home="${LACY_SHELL_HOME:-${HOME}/.lacy}"
+    local last_session_file="${shell_home}/.last_session"
+    if [[ -f "$last_session_file" ]]; then
+        rm -f "$last_session_file"
+        success "Last session cleared"
+    else
+        info "No saved session to clear"
+    fi
+    printf '\n%b\n' "Next query will start a fresh context."
+}
+
+cmd_resume() {
+    local shell_home="${LACY_SHELL_HOME:-${HOME}/.lacy}"
+    local last_session_file="${shell_home}/.last_session"
+    if [[ ! -f "$last_session_file" ]]; then
+        warn "No previous session found"
+        printf '\n%b\n' "Start chatting to create a session, then use ${CYAN}resume${NC} to pick it up in another shell."
+        return 1
+    fi
+
+    local saved_tool saved_id
+    { read -r saved_tool; read -r saved_id; } < "$last_session_file"
+
+    if [[ -z "$saved_tool" || -z "$saved_id" ]]; then
+        warn "Saved session file is empty"
+        return 1
+    fi
+
+    printf '\n%b\n' "${BOLD}Last session${NC}"
+    printf '  Tool:    %s\n' "$saved_tool"
+    printf '  Session: %s\n' "$saved_id"
+    printf '\n%b\n' "Type ${CYAN}resume${NC} inside Lacy Shell to load this session."
+}
+
 cmd_version() {
     echo "lacy $VERSION"
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
@@ -644,6 +679,8 @@ ${BOLD}Commands:${NC}
   info           Show basic information and help
   doctor         Diagnose common issues
   config         Show/edit configuration
+  new            Clear saved session (start fresh next time)
+  resume         Show saved session info
   version        Show version
   help           Show this help
 
@@ -651,6 +688,8 @@ ${BOLD}In-shell commands${NC} (available when Lacy is active):
   mode           Show/switch mode (shell/agent/auto)
   tool           Show/switch AI tool
   ask "query"    Direct query to AI
+  new            Start fresh context (aliases: reset, clear, /new)
+  resume         Resume previous session (/resume)
   Ctrl+Space     Toggle between modes
 
 ${BOLD}Environment:${NC}
@@ -693,6 +732,8 @@ main() {
         info)       cmd_info ;;
         doctor)     cmd_doctor "$@" ;;
         config|c)   cmd_config "$@" ;;
+        new|/new|reset|/reset|clear|/clear) cmd_new "$@" ;;
+        resume|/resume)                     cmd_resume "$@" ;;
         version|-v|--version) cmd_version ;;
         help|-h|--help)       cmd_help ;;
         "")                   cmd_enter ;;
