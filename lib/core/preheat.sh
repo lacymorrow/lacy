@@ -272,16 +272,13 @@ _lacy_session_build_cmd() {
         fi
     fi
 
-    local format_flag=""
+    local parts="${tool}"
+    [[ -n "$session_id" ]] && parts+=" --resume ${session_id}"
     if [[ "$tool" == "claude" ]]; then
-        format_flag="--output-format json"
+        parts+=" --output-format json"
     fi
-
-    if [[ -n "$session_id" ]]; then
-        echo "${tool} --resume ${session_id} ${format_flag} -p"
-    else
-        echo "${tool} ${format_flag} -p"
-    fi
+    parts+=" -p"
+    echo "$parts"
 }
 
 # Internal helper to capture a session ID from JSON response and persist it
@@ -435,6 +432,14 @@ lacy_session_resume() {
 
     # Swap: save current session before overwriting (so it's resumable in turn)
     _lacy_save_last_session
+
+    # Switch active tool to match the saved session
+    local current_tool
+    current_tool=$(_lacy_get_current_tool)
+    if [[ -n "$current_tool" && "$current_tool" != "$saved_tool" ]]; then
+        LACY_ACTIVE_TOOL="$saved_tool"
+        export LACY_ACTIVE_TOOL
+    fi
 
     # Load saved session into current shell state
     case "$saved_tool" in

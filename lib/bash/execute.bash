@@ -349,7 +349,7 @@ lacy_shell_quit() {
     lacy_preheat_cleanup
 
     # Unset functions used as commands
-    unset -f ask mode tool spinner quit stop new resume lacy 2>/dev/null
+    unset -f ask mode tool spinner quit stop lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
