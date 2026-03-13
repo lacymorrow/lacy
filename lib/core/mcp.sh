@@ -107,19 +107,15 @@ _lacy_render_markdown_basic() {
     local bold=$'\e[1m' nobold=$'\e[22m'
     local cyan=$'\e[36m' reset=$'\e[0m'
     local dim=$'\e[38;5;238m'
-    local hr="${dim}────────────────────────────────────────${reset}"
+    local cols; cols=$(tput cols 2>/dev/null || echo 80)
+    local hr="${dim}$(printf '%*s' "$cols" | tr ' ' '─')${reset}"
 
-    printf '%s\n' "$1" | sed \
-        -e "s/^######[[:space:]]\(.*\)/${bold}\1${nobold}/" \
-        -e "s/^#####[[:space:]]\(.*\)/${bold}\1${nobold}/" \
-        -e "s/^####[[:space:]]\(.*\)/${bold}\1${nobold}/" \
-        -e "s/^###[[:space:]]\(.*\)/${bold}\1${nobold}/" \
-        -e "s/^##[[:space:]]\(.*\)/${bold}\1${nobold}/" \
-        -e "s/^#[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+    printf '%s\n' "$1" | sed -E \
+        -e "s/^#{1,6}[[:space:]]+(.*)/${bold}\1${nobold}/" \
         -e "s/^---*$/${hr}/" \
         -e "s/^\*\*\*.*$/${hr}/" \
-        -e "s/\*\*\([^*]*\)\*\*/${bold}\1${nobold}/g" \
-        -e "s/\`\([^\`]*\)\`/${cyan}\1${reset}/g"
+        -e "s/\*\*([^*]*)\*\*/${bold}\1${nobold}/g" \
+        -e "s/\`([^\`]*)\`/${cyan}\1${reset}/g"
 }
 
 # ============================================================================
