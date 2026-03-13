@@ -242,7 +242,9 @@ _lacy_session_restore() {
     local file="$1"
     local var_name="$2"
     if [[ -f "$file" ]]; then
-        eval "$var_name=\"\$(cat \"\$file\" 2>/dev/null)\""
+        local _val
+        _val=$(cat "$file" 2>/dev/null)
+        printf -v "$var_name" '%s' "$_val"
     fi
 }
 
@@ -256,7 +258,11 @@ _lacy_session_build_cmd() {
     # Ensure we have the latest session ID from the file (subshell workaround)
     if [[ -z "$session_id" ]]; then
         _lacy_session_restore "$file" "$var_name"
-        eval "session_id=\"\$$var_name\""
+        if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+            session_id="${(P)var_name}"
+        else
+            session_id="${!var_name}"
+        fi
     fi
 
     if [[ -n "$session_id" ]]; then
@@ -276,7 +282,7 @@ _lacy_session_capture() {
     session_id=$(_lacy_json_get "$json" "$key_name")
 
     if [[ -n "$session_id" ]]; then
-        eval "$var_name=\"\$session_id\""
+        printf -v "$var_name" '%s' "$session_id"
         echo "$session_id" > "$file"
     fi
 }
@@ -285,7 +291,7 @@ _lacy_session_capture() {
 _lacy_session_reset() {
     local file="$1"
     local var_name="$2"
-    eval "$var_name=\"\""
+    printf -v "$var_name" '%s' ""
     rm -f "$file"
 }
 
@@ -393,13 +399,12 @@ lacy_session_new() {
         if lacy_preheat_server_is_healthy; then
             local _session_dir session_json
             _session_dir=$(pwd 2>/dev/null)
-            session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
+            if session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
                 -X POST \
                 -H "Content-Type: application/json" \
                 -H "x-opencode-directory: ${_session_dir}" \
                 -d '{}' \
-                "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
-            if [[ $? -eq 0 ]]; then
+                "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null); then
                 LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
                 [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
                     echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
@@ -474,4 +479,6 @@ lacy_preheat_init() {
 
 lacy_preheat_cleanup() {
     lacy_preheat_server_stop
+    rm -f "$LACY_PREHEAT_SESSION_FILE" \
+          "$LACY_GEMINI_SESSION_ID_FILE"
 }

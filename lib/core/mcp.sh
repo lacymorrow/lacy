@@ -101,7 +101,7 @@ _lacy_gemini_query_exec() {
     local gemini_query
     if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
         local _gemini_ctx
-        _gemini_ctx=$(echo "$LACY_GEMINI_CONTEXT" | sed "s|{cwd}|$(pwd 2>/dev/null)|")
+        _gemini_ctx="${LACY_GEMINI_CONTEXT//\{cwd\}/$(pwd 2>/dev/null)}"
         gemini_query="$_gemini_ctx $query"
     else
         gemini_query="$query"
