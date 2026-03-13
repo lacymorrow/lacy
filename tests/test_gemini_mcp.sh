@@ -102,20 +102,6 @@ _lacy_run_tool_cmd() {
 
 # Run query agent
 out=$(lacy_shell_query_agent "retry-test" 2>/dev/null)
-# Note: lacy_shell_query_agent prints the extracted result, not the raw JSON.
-# "success" is the response in MOCK_RESPONSE.
-# It also prints a newline at the end.
-expected_out=$'success\ngemini --resume new-id\n'
-
-# Wait, lacy_shell_query_agent also prints resume hint.
-# Let's check exactly what it prints.
-
-# We need to capture the output carefully.
-# In our mock, _lacy_gemini_query_exec is called.
-# It returns the JSON.
-# Then lacy_shell_query_agent processes it.
-
-# I'll just check if it contains "success"
 if [[ "$out" == *"success"* ]]; then
     PASS=$(( PASS + 1 ))
     printf '  \e[32m✓\e[0m %s\n' "Retry logic should eventually return success"
