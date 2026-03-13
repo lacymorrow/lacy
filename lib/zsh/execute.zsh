@@ -627,5 +627,8 @@ alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
 alias stop="lacy_shell_quit"
 
+alias new="lacy_session_new"
+alias resume="lacy_session_resume"
+
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"
