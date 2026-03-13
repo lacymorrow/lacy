@@ -73,6 +73,56 @@ except: pass" 2>/dev/null
 }
 
 # ============================================================================
+# Markdown Rendering
+# ============================================================================
+
+# Cached renderer (set on first call)
+_LACY_MD_RENDERER=""
+
+# Render markdown for terminal display.
+# Uses glow if available, otherwise a basic sed fallback for bold/headers/code.
+# Usage: _lacy_render_markdown "$text"
+_lacy_render_markdown() {
+    local text="$1"
+    [[ -z "$text" ]] && return
+
+    # Auto-detect on first call
+    if [[ -z "$_LACY_MD_RENDERER" ]]; then
+        if command -v glow >/dev/null 2>&1; then
+            _LACY_MD_RENDERER="glow"
+        else
+            _LACY_MD_RENDERER="basic"
+        fi
+    fi
+
+    case "$_LACY_MD_RENDERER" in
+        glow)  printf '%s\n' "$text" | glow -s dark ;;
+        basic) _lacy_render_markdown_basic "$text" ;;
+    esac
+}
+
+# Minimal markdown rendering via sed — bold, headers, inline code, rules.
+# Uses literal escape chars (via $'') for BSD/GNU sed portability.
+_lacy_render_markdown_basic() {
+    local bold=$'\e[1m' nobold=$'\e[22m'
+    local cyan=$'\e[36m' reset=$'\e[0m'
+    local dim=$'\e[38;5;238m'
+    local hr="${dim}────────────────────────────────────────${reset}"
+
+    printf '%s\n' "$1" | sed \
+        -e "s/^######[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+        -e "s/^#####[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+        -e "s/^####[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+        -e "s/^###[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+        -e "s/^##[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+        -e "s/^#[[:space:]]\(.*\)/${bold}\1${nobold}/" \
+        -e "s/^---*$/${hr}/" \
+        -e "s/^\*\*\*.*$/${hr}/" \
+        -e "s/\*\*\([^*]*\)\*\*/${bold}\1${nobold}/g" \
+        -e "s/\`\([^\`]*\)\`/${cyan}\1${reset}/g"
+}
+
+# ============================================================================
 # Tool Command Execution
 # ============================================================================
 
@@ -395,7 +445,7 @@ EOF
             lacy_preheat_server_restore_session
             if [[ $exit_code -eq 0 && -n "$server_result" ]]; then
                 while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
-                printf '%s\n' "$server_result"
+                _lacy_render_markdown "$server_result"
                 _lacy_print_resume_hint "$tool"
                 echo ""
                 return 0
@@ -427,7 +477,7 @@ EOF
             result_text=$(lacy_preheat_claude_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
             if [[ -n "$result_text" ]]; then
-                printf '%s\n' "$result_text"
+                _lacy_render_markdown "$result_text"
             else
                 printf '%s\n' "$json_output"
             fi
@@ -456,7 +506,7 @@ EOF
                 result_text=$(lacy_preheat_claude_extract_result "$json_output")
                 while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
                 if [[ -n "$result_text" ]]; then
-                    printf '%s\n' "$result_text"
+                    _lacy_render_markdown "$result_text"
                 else
                     printf '%s\n' "$json_output"
                 fi
@@ -489,15 +539,21 @@ EOF
         local gemini_cmd="gemini -p"
         [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && gemini_cmd="gemini --resume -p"
         echo ""
-        _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+        lacy_start_spinner
+        local gemini_output
+        gemini_output=$(_lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null)
         local exit_code=$?
+        lacy_stop_spinner
         if [[ $exit_code -ne 0 && -f "$LACY_GEMINI_SESSION_FILE" ]]; then
             # --resume failed (session expired/missing) — retry without it
             rm -f "$LACY_GEMINI_SESSION_FILE"
-            _lacy_run_tool_cmd "gemini -p" "$gemini_query" </dev/tty 2>/dev/null
+            lacy_start_spinner
+            gemini_output=$(_lacy_run_tool_cmd "gemini -p" "$gemini_query" </dev/tty 2>/dev/null)
             exit_code=$?
+            lacy_stop_spinner
         fi
         if [[ $exit_code -eq 0 ]]; then
+            _lacy_render_markdown "$gemini_output"
             touch "$LACY_GEMINI_SESSION_FILE"
             _lacy_print_resume_hint "$tool"
         fi
