@@ -2,6 +2,9 @@
 
 # Command execution logic for Lacy Shell
 
+# Pending internal command (set by slash-command handler, dispatched by precmd)
+LACY_SHELL_PENDING_CMD=""
+
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
     # If Lacy Shell is disabled, use normal accept-line
@@ -18,18 +21,24 @@ lacy_shell_smart_accept_line() {
         return
     fi
 
-    # Handle / commands (optional slash handled via classification or explicitly here)
-    case "$input" in
-        "/new"|"/reset"|"/clear")
-            lacy_shell_new
+    # Intercept slash-prefixed session commands (/new, /reset, /clear, /resume)
+    local _slashcmd="$input"
+    _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
+    case "$_slashcmd" in
+        /new|/reset|/clear)
+            print -s -- "$input"
+            fc -AI 2>/dev/null
+            LACY_SHELL_PENDING_CMD="session_new"
             BUFFER=""
-            zle reset-prompt
+            zle .accept-line
             return
             ;;
-        "/resume")
-            lacy_shell_resume
+        /resume)
+            print -s -- "$input"
+            fc -AI 2>/dev/null
+            LACY_SHELL_PENDING_CMD="session_resume"
             BUFFER=""
-            zle reset-prompt
+            zle .accept-line
             return
             ;;
     esac
@@ -179,6 +188,16 @@ lacy_shell_precmd() {
         lacy_shell_quit
         return
     fi
+    # Handle pending internal commands (from slash-prefixed session commands)
+    if [[ -n "$LACY_SHELL_PENDING_CMD" ]]; then
+        local _cmd="$LACY_SHELL_PENDING_CMD"
+        LACY_SHELL_PENDING_CMD=""
+        case "$_cmd" in
+            session_new)    lacy_session_new ;;
+            session_resume) lacy_session_resume ;;
+        esac
+    fi
+
     # Handle pending agent query (deferred from ZLE widget for clean cursor tracking)
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
@@ -313,6 +332,20 @@ Please provide:
     lacy_shell_query_agent "$query"
 }
 
+# Conversation management
+lacy_shell_clear_conversation() {
+    rm -f "$LACY_SHELL_CONVERSATION_FILE"
+    echo "Conversation history cleared"
+}
+
+lacy_shell_show_conversation() {
+    if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
+        cat "$LACY_SHELL_CONVERSATION_FILE"
+    else
+        echo "No conversation history found"
+    fi
+}
+
 # Quit lacy shell function
 lacy_shell_quit() {
     # Disable Lacy Shell immediately
@@ -355,8 +388,9 @@ lacy_shell_quit() {
         print -r -- ""
     fi
 
-    # Unset aliases
-    unalias ask mode tool spinner quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
+    # Unset aliases and function overrides
+    unalias ask mode tool spinner quit_lacy quit stop new resume disable_lacy enable_lacy 2>/dev/null
+    unfunction lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
@@ -494,7 +528,6 @@ lacy_shell_tool() {
                 lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL=""
                 export LACY_ACTIVE_TOOL
-                lacy_shell_write_config_value "active" ""
                 echo "Tool set to: auto-detect"
             elif [[ "$2" == "custom" ]]; then
                 if [[ -z "$3" ]]; then
@@ -506,14 +539,11 @@ lacy_shell_tool() {
                 LACY_ACTIVE_TOOL="custom"
                 LACY_CUSTOM_TOOL_CMD="$3"
                 export LACY_ACTIVE_TOOL LACY_CUSTOM_TOOL_CMD
-                lacy_shell_write_config_value "active" "custom"
-                lacy_shell_write_config_value "custom_command" "\"$3\""
                 echo "Tool set to: custom ($LACY_CUSTOM_TOOL_CMD)"
             else
                 lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL="$2"
                 export LACY_ACTIVE_TOOL
-                lacy_shell_write_config_value "active" "$2"
                 echo "Tool set to: $2"
             fi
             ;;
@@ -581,15 +611,26 @@ lacy_shell_spinner() {
     esac
 }
 
+# Override lacy command to handle session subcommands without subprocess
+lacy() {
+    local cmd="${1:-}"
+    cmd="${cmd#/}"  # strip optional leading slash (/new → new)
+    case "$cmd" in
+        new|reset|clear) lacy_session_new ;;
+        resume)          lacy_session_resume ;;
+        *)               command lacy "$@" ;;
+    esac
+}
+
 # Aliases
 alias ask="lacy_shell_query_agent"
 alias mode="lacy_shell_mode"
 alias tool="lacy_shell_tool"
 alias spinner="lacy_shell_spinner"
-alias new="lacy_shell_new"
-alias resume="lacy_shell_resume"
 alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
 alias stop="lacy_shell_quit"
+alias new="lacy_session_new"
+alias resume="lacy_session_resume"
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"

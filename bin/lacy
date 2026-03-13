@@ -597,15 +597,7 @@ setup_mode() {
 
 cmd_enter() {
     # Already inside a lacy shell session — show info instead of nesting
-    # Unless we specifically want a new or resume session
     if [[ "${LACY_SHELL_ACTIVE:-}" == "1" ]]; then
-        if [[ -n "$LACY_RESUME_SESSION" ]]; then
-            # Inside the shell, if they type 'lacy resume', just call the internal resume
-            if declare -f lacy_shell_resume >/dev/null; then
-                lacy_shell_resume
-                return
-            fi
-        fi
         cmd_info
         return
     fi
@@ -621,24 +613,37 @@ cmd_enter() {
 }
 
 cmd_new() {
-    # From outside, starting a new lacy shell is the same as cmd_enter
-    # because it will have a new PID and fresh session files.
-    # If inside, lacy_shell_new is available via alias/function.
-    if [[ "${LACY_SHELL_ACTIVE:-}" == "1" ]]; then
-        if declare -f lacy_shell_new >/dev/null; then
-            lacy_shell_new
-            return
-        fi
+    local last_session_file="${INSTALL_DIR}/.last_session"
+    if [[ -f "$last_session_file" ]]; then
+        rm -f "$last_session_file"
+        success "Last session cleared"
+    else
+        info "No saved session to clear"
     fi
-
-    cmd_enter
+    printf '\n%b\n' "Next query will start a fresh context."
 }
 
 cmd_resume() {
-    # We want to start a new shell but resume the latest session.
-    # We can pass an env var to the new shell to tell it to resume.
-    export LACY_RESUME_SESSION=1
-    cmd_enter
+    local last_session_file="${INSTALL_DIR}/.last_session"
+    if [[ ! -f "$last_session_file" ]]; then
+        warn "No previous session found"
+        printf '\n%b\n' "Start chatting to create a session, then use ${CYAN}resume${NC} to pick it up in another shell."
+        return 1
+    fi
+
+    local saved_tool saved_id
+    saved_tool=$(sed -n '1p' "$last_session_file" 2>/dev/null)
+    saved_id=$(sed -n '2p' "$last_session_file" 2>/dev/null)
+
+    if [[ -z "$saved_tool" || -z "$saved_id" ]]; then
+        warn "Saved session file is empty"
+        return 1
+    fi
+
+    printf '\n%b\n' "${BOLD}Last session${NC}"
+    printf '  Tool:    %s\n' "$saved_tool"
+    printf '  Session: %s\n' "$saved_id"
+    printf '\n%b\n' "Type ${CYAN}resume${NC} inside Lacy Shell to load this session."
 }
 
 cmd_version() {
@@ -664,8 +669,6 @@ ${BOLD}Usage:${NC}
   lacy [command]      Run a command
 
 ${BOLD}Commands:${NC}
-  new|reset|clear Start a new session with fresh context
-  resume         Resume the latest previous session
   setup          Interactive settings (tool, mode, config)
   install        Install Lacy Shell (interactive)
   uninstall      Remove Lacy Shell completely
@@ -675,15 +678,17 @@ ${BOLD}Commands:${NC}
   info           Show basic information and help
   doctor         Diagnose common issues
   config         Show/edit configuration
+  new            Clear saved session (start fresh next time)
+  resume         Show saved session info
   version        Show version
   help           Show this help
 
 ${BOLD}In-shell commands${NC} (available when Lacy is active):
-  /new, /reset   Start fresh session (also 'new')
-  /resume        Resume latest session (also 'resume')
   mode           Show/switch mode (shell/agent/auto)
   tool           Show/switch AI tool
   ask "query"    Direct query to AI
+  new            Start fresh context (aliases: reset, clear, /new)
+  resume         Resume previous session (/resume)
   Ctrl+Space     Toggle between modes
 
 ${BOLD}Environment:${NC}
@@ -717,8 +722,6 @@ main() {
     shift 2>/dev/null || true
 
     case "$cmd" in
-        new|/new|reset|/reset|clear|/clear) cmd_new "$@" ;;
-        resume|/resume)         cmd_resume "$@" ;;
         setup)      cmd_setup "$@" ;;
         install)    cmd_install "$@" ;;
         uninstall)  cmd_uninstall "$@" ;;
@@ -728,6 +731,8 @@ main() {
         info)       cmd_info ;;
         doctor)     cmd_doctor "$@" ;;
         config|c)   cmd_config "$@" ;;
+        new|/new|reset|/reset|clear|/clear) cmd_new "$@" ;;
+        resume|/resume)                     cmd_resume "$@" ;;
         version|-v|--version) cmd_version ;;
         help|-h|--help)       cmd_help ;;
         "")                   cmd_enter ;;
