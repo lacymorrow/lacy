@@ -25,18 +25,14 @@ lacy_shell_smart_accept_line() {
     local _slashcmd="$input"
     _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
     case "$_slashcmd" in
-        /new|/reset|/clear)
+        /new|/reset|/clear|/resume)
             print -s -- "$input"
             fc -AI 2>/dev/null
-            LACY_SHELL_PENDING_CMD="session_new"
-            BUFFER=""
-            zle .accept-line
-            return
-            ;;
-        /resume)
-            print -s -- "$input"
-            fc -AI 2>/dev/null
-            LACY_SHELL_PENDING_CMD="session_resume"
+            if [[ "$_slashcmd" == "/resume" ]]; then
+                LACY_SHELL_PENDING_CMD="session_resume"
+            else
+                LACY_SHELL_PENDING_CMD="session_new"
+            fi
             BUFFER=""
             zle .accept-line
             return

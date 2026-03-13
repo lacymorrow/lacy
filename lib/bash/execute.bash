@@ -27,18 +27,14 @@ lacy_shell_smart_accept_line_bash() {
     local _slashcmd="$input"
     _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
     case "$_slashcmd" in
-        /new|/reset|/clear)
+        /new|/reset|/clear|/resume)
             history -s -- "$input"
             history -a 2>/dev/null
-            LACY_SHELL_PENDING_CMD="session_new"
-            READLINE_LINE=""
-            READLINE_POINT=0
-            return
-            ;;
-        /resume)
-            history -s -- "$input"
-            history -a 2>/dev/null
-            LACY_SHELL_PENDING_CMD="session_resume"
+            if [[ "$_slashcmd" == "/resume" ]]; then
+                LACY_SHELL_PENDING_CMD="session_resume"
+            else
+                LACY_SHELL_PENDING_CMD="session_new"
+            fi
             READLINE_LINE=""
             READLINE_POINT=0
             return
