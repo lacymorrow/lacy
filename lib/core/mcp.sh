@@ -107,7 +107,11 @@ _lacy_gemini_query_exec() {
         gemini_query="$query"
     fi
 
-    _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" < /dev/null 2>/dev/null
+    lacy_start_spinner
+    _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+    local exit_code=$?
+    lacy_stop_spinner
+    return $exit_code
 }
 
 # Tool registry — function-based for maximum portability
@@ -163,6 +167,8 @@ _lacy_print_resume_hint() {
     if [[ -n "$resume_cmd" ]]; then
         LACY_LAST_RESUME_CMD="$resume_cmd"
         lacy_print_color 238 "$resume_cmd"
+        # Persist for cross-shell resume (lacy /resume in a new shell)
+        _lacy_save_last_session
     fi
 }
 
@@ -265,8 +271,7 @@ except: pass" 2>/dev/null)
 # Send query to AI agent (configurable tool or fallback)
 lacy_shell_query_agent() {
     local query="$1"
-    local tool
-    tool=$(_lacy_detect_active_tool)
+    local tool="${LACY_ACTIVE_TOOL}"
 
     # Prepend current working directory so the agent always knows where it is.
     # Critical when using preheat (background server / claude session reuse) since
@@ -274,6 +279,19 @@ lacy_shell_query_agent() {
     local _cwd
     _cwd=$(pwd 2>/dev/null)
     # [[ -n "$_cwd" ]] && query="[cwd: $_cwd] $query"
+
+    # Auto-detect if not set
+    local _auto_detected=false
+    if [[ -z "$tool" ]]; then
+        local t
+        for t in lash claude opencode gemini codex; do
+            if command -v "$t" >/dev/null 2>&1; then
+                tool="$t"
+                _auto_detected=true
+                break
+            fi
+        done
+    fi
 
     # If still no tool, try API fallback
     if [[ -z "$tool" ]]; then
@@ -486,32 +504,18 @@ EOF
     # === Gemini session reuse ===
     if [[ "$tool" == "gemini" ]]; then
         echo ""
-        lacy_start_spinner
-        
-        local json_out_file
-        json_out_file=$(mktemp)
-        
-        _lacy_gemini_query_exec "$query" > "$json_out_file"
-        local exit_code=$?
-        lacy_stop_spinner
-
         local json_output
-        json_output=$(cat "$json_out_file" 2>/dev/null)
-        rm -f "$json_out_file"
+        json_output=$(_lacy_gemini_query_exec "$query")
+        local exit_code=$?
 
         if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
             lacy_preheat_gemini_reset_session
-            lacy_start_spinner
-            json_out_file=$(mktemp)
-            _lacy_gemini_query_exec "$query" > "$json_out_file"
+            json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
-            lacy_stop_spinner
-            json_output=$(cat "$json_out_file" 2>/dev/null)
-            rm -f "$json_out_file"
         fi
 
-        if [[ $exit_code -eq 0 && -n "$json_output" ]]; then
+        if [[ $exit_code -eq 0 ]]; then
             local result_text
             result_text=$(lacy_preheat_gemini_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done

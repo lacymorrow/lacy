@@ -308,30 +308,3 @@ lacy_shell_get_api_provider() {
         echo "none"
     fi
 }
-
-# Write a value back to the config file (in-place)
-# Usage: lacy_shell_write_config_value <key> <value>
-lacy_shell_write_config_value() {
-    local key="$1"
-    local value="$2"
-
-    [[ ! -f "$LACY_SHELL_CONFIG_FILE" ]] && return 1
-
-    # Escape sed special chars in value
-    local escaped_value="${value//\\/\\\\}"
-    escaped_value="${escaped_value//|/\\|}"
-    escaped_value="${escaped_value//&/\\&}"
-
-    if grep -q "^[[:space:]]*${key}:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null; then
-        # Use a temporary file for sed -i compatibility across macOS/Linux
-        local tmp_file
-        tmp_file=$(mktemp)
-        sed "s|^\\([[:space:]]*${key}:\\).*|\\1 ${escaped_value}|" "$LACY_SHELL_CONFIG_FILE" > "$tmp_file"
-        mv "$tmp_file" "$LACY_SHELL_CONFIG_FILE"
-        
-        # Invalidate cache
-        rm -f "$LACY_SHELL_CONFIG_CACHE_FILE"
-        return 0
-    fi
-    return 1
-}

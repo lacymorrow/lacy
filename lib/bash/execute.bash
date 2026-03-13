@@ -6,6 +6,7 @@
 # Pending query (set by Enter handler, dispatched by PROMPT_COMMAND)
 LACY_SHELL_PENDING_QUERY=""
 LACY_SHELL_REROUTE_CANDIDATE=""
+LACY_SHELL_PENDING_CMD=""
 _lacy_last_exit=0
 
 # Smart accept-line for Bash — called by bind -x on Enter
@@ -22,16 +23,22 @@ lacy_shell_smart_accept_line_bash() {
         return
     fi
 
-    # Handle / commands
-    case "$input" in
-        "/new"|"/reset"|"/clear")
-            lacy_shell_new
+    # Intercept slash-prefixed session commands (/new, /reset, /clear, /resume)
+    local _slashcmd="$input"
+    _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
+    case "$_slashcmd" in
+        /new|/reset|/clear)
+            history -s -- "$input"
+            history -a 2>/dev/null
+            LACY_SHELL_PENDING_CMD="session_new"
             READLINE_LINE=""
             READLINE_POINT=0
             return
             ;;
-        "/resume")
-            lacy_shell_resume
+        /resume)
+            history -s -- "$input"
+            history -a 2>/dev/null
+            LACY_SHELL_PENDING_CMD="session_resume"
             READLINE_LINE=""
             READLINE_POINT=0
             return
@@ -160,6 +167,16 @@ lacy_shell_precmd_bash() {
         return
     fi
 
+    # Handle pending internal commands (from slash-prefixed session commands)
+    if [[ -n "$LACY_SHELL_PENDING_CMD" ]]; then
+        local _cmd="$LACY_SHELL_PENDING_CMD"
+        LACY_SHELL_PENDING_CMD=""
+        case "$_cmd" in
+            session_new)    lacy_session_new ;;
+            session_resume) lacy_session_resume ;;
+        esac
+    fi
+
     # Handle pending agent query
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
@@ -282,7 +299,6 @@ lacy_shell_tool() {
                 lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL=""
                 export LACY_ACTIVE_TOOL
-                lacy_shell_write_config_value "active" ""
                 echo "Tool set to: auto-detect"
             elif [[ "$2" == "custom" ]]; then
                 if [[ -z "$3" ]]; then
@@ -293,14 +309,11 @@ lacy_shell_tool() {
                 LACY_ACTIVE_TOOL="custom"
                 LACY_CUSTOM_TOOL_CMD="$3"
                 export LACY_ACTIVE_TOOL LACY_CUSTOM_TOOL_CMD
-                lacy_shell_write_config_value "active" "custom"
-                lacy_shell_write_config_value "custom_command" "\"$3\""
                 echo "Tool set to: custom ($LACY_CUSTOM_TOOL_CMD)"
             else
                 lacy_preheat_cleanup
                 LACY_ACTIVE_TOOL="$2"
                 export LACY_ACTIVE_TOOL
-                lacy_shell_write_config_value "active" "$2"
                 echo "Tool set to: $2"
             fi
             ;;
@@ -340,7 +353,7 @@ lacy_shell_quit() {
     lacy_preheat_cleanup
 
     # Unset functions used as commands
-    unset -f ask mode tool spinner quit stop 2>/dev/null
+    unset -f ask mode tool spinner quit stop new resume lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
@@ -361,6 +374,20 @@ lacy_shell_quit() {
 
     LACY_SHELL_QUITTING=false
     LACY_SHELL_LOADED=false
+}
+
+# Conversation management
+lacy_shell_clear_conversation() {
+    rm -f "$LACY_SHELL_CONVERSATION_FILE"
+    echo "Conversation history cleared"
+}
+
+lacy_shell_show_conversation() {
+    if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
+        cat "$LACY_SHELL_CONVERSATION_FILE"
+    else
+        echo "No conversation history found"
+    fi
 }
 
 # Spinner animation command
@@ -419,12 +446,23 @@ lacy_shell_spinner() {
     esac
 }
 
+# Override lacy command to handle session subcommands without subprocess
+lacy() {
+    local cmd="${1:-}"
+    cmd="${cmd#/}"  # strip optional leading slash (/new → new)
+    case "$cmd" in
+        new|reset|clear) lacy_session_new ;;
+        resume)          lacy_session_resume ;;
+        *)               command lacy "$@" ;;
+    esac
+}
+
 # Define command functions (Bash uses functions, not aliases, for reliability)
 ask() { lacy_shell_query_agent "$*"; }
 mode() { lacy_shell_mode "$@"; }
 tool() { lacy_shell_tool "$@"; }
 spinner() { lacy_shell_spinner "$@"; }
-new() { lacy_shell_new; }
-resume() { lacy_shell_resume; }
 quit() { lacy_shell_quit; }
 stop() { lacy_shell_quit; }
+new() { lacy_session_new; }
+resume() { lacy_session_resume; }

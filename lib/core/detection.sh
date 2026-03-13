@@ -104,12 +104,6 @@ lacy_shell_classify_input() {
         return
     fi
 
-    # Slash commands (/) always go to agent
-    if [[ "$input" == /* ]]; then
-        echo "agent"
-        return
-    fi
-
     # In shell mode, everything goes to shell
     if [[ "$LACY_SHELL_CURRENT_MODE" == "shell" ]]; then
         echo "shell"
