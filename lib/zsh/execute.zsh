@@ -2,6 +2,9 @@
 
 # Command execution logic for Lacy Shell
 
+# Pending internal command (set by slash-command handler, dispatched by precmd)
+LACY_SHELL_PENDING_CMD=""
+
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
     # If Lacy Shell is disabled, use normal accept-line
@@ -17,6 +20,24 @@ lacy_shell_smart_accept_line() {
         zle .accept-line
         return
     fi
+
+    # Intercept slash-prefixed session commands (/new, /reset, /clear, /resume)
+    local _slashcmd="$input"
+    _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
+    case "$_slashcmd" in
+        /new|/reset|/clear|/resume)
+            print -s -- "$input"
+            fc -AI 2>/dev/null
+            if [[ "$_slashcmd" == "/resume" ]]; then
+                LACY_SHELL_PENDING_CMD="session_resume"
+            else
+                LACY_SHELL_PENDING_CMD="session_new"
+            fi
+            BUFFER=""
+            zle .accept-line
+            return
+            ;;
+    esac
 
     # Classify using centralized detection (handles whitespace trimming internally)
     local classification
@@ -163,6 +184,16 @@ lacy_shell_precmd() {
         lacy_shell_quit
         return
     fi
+    # Handle pending internal commands (from slash-prefixed session commands)
+    if [[ -n "$LACY_SHELL_PENDING_CMD" ]]; then
+        local _cmd="$LACY_SHELL_PENDING_CMD"
+        LACY_SHELL_PENDING_CMD=""
+        case "$_cmd" in
+            session_new)    lacy_session_new ;;
+            session_resume) lacy_session_resume ;;
+        esac
+    fi
+
     # Handle pending agent query (deferred from ZLE widget for clean cursor tracking)
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
@@ -353,8 +384,9 @@ lacy_shell_quit() {
         print -r -- ""
     fi
 
-    # Unset aliases
+    # Unset aliases and function overrides
     unalias ask mode tool spinner quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
+    unfunction lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
@@ -575,6 +607,17 @@ lacy_shell_spinner() {
     esac
 }
 
+# Override lacy command to handle session subcommands without subprocess
+lacy() {
+    local cmd="${1:-}"
+    cmd="${cmd#/}"  # strip optional leading slash (/new → new)
+    case "$cmd" in
+        new|reset|clear) lacy_session_new ;;
+        resume)          lacy_session_resume ;;
+        *)               command lacy "$@" ;;
+    esac
+}
+
 # Aliases
 alias ask="lacy_shell_query_agent"
 alias mode="lacy_shell_mode"
@@ -583,5 +626,6 @@ alias spinner="lacy_shell_spinner"
 alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
 alias stop="lacy_shell_quit"
+
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"
