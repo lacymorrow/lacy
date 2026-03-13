@@ -385,7 +385,7 @@ lacy_shell_quit() {
     fi
 
     # Unset aliases and function overrides
-    unalias ask mode tool spinner quit_lacy quit stop new resume disable_lacy enable_lacy 2>/dev/null
+    unalias ask mode tool spinner quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
     unfunction lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
@@ -626,9 +626,6 @@ alias spinner="lacy_shell_spinner"
 alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
 alias stop="lacy_shell_quit"
-
-alias new="lacy_session_new"
-alias resume="lacy_session_resume"
 
 alias disable_lacy="lacy_shell_disable_interception"
 alias enable_lacy="lacy_shell_enable_interception"
