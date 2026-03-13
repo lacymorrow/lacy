@@ -10,9 +10,12 @@ LACY_PREHEAT_SERVER_PID=""
 LACY_PREHEAT_SERVER_PASSWORD=""
 LACY_PREHEAT_SERVER_PID_FILE="$LACY_SHELL_HOME/.server.pid"
 LACY_PREHEAT_SERVER_SESSION_ID=""
-LACY_PREHEAT_SERVER_SESSION_FILE="$LACY_SHELL_HOME/.server_session_id"
+# Per-shell session files (using PID to ensure fresh session per window/tab)
+LACY_PREHEAT_SERVER_SESSION_FILE="$LACY_SHELL_HOME/.server_session_id_$$"
 LACY_PREHEAT_CLAUDE_SESSION_ID=""
-LACY_PREHEAT_SESSION_FILE="$LACY_SHELL_HOME/.claude_session_id"
+LACY_PREHEAT_SESSION_FILE="$LACY_SHELL_HOME/.claude_session_id_$$"
+# Global last-session file (not PID-specific) — enables cross-shell resume
+LACY_LAST_SESSION_FILE="$LACY_SHELL_HOME/.last_session"
 
 # ============================================================================
 # Background Server (lash + opencode)
@@ -82,7 +85,7 @@ lacy_preheat_server_check_async() {
 
         kill -0 "$pid" 2>/dev/null || { echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE" && return; }
 
-        if curl -sf --max-time 0.5 "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1; then
+        if curl -sf --max-time "$LACY_HEALTH_CHECK_TIMEOUT_ASYNC" "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1; then
             echo "0" > "$LACY_SHELL_HEALTH_CACHE_FILE"
         else
             echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE"
@@ -111,7 +114,30 @@ lacy_preheat_server_is_healthy() {
 
     kill -0 "$LACY_PREHEAT_SERVER_PID" 2>/dev/null || return 1
 
-    curl -sf --max-time 0.3 "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1
+    curl -sf --max-time "$LACY_HEALTH_CHECK_TIMEOUT_SYNC" "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1
+}
+
+# Internal helper to create a new server session (lash/opencode)
+_lacy_preheat_server_create_session() {
+    if ! lacy_preheat_server_is_healthy; then
+        return 1
+    fi
+
+    local _session_dir session_json
+    _session_dir=$(pwd 2>/dev/null)
+    if session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -H "x-opencode-directory: ${_session_dir}" \
+        -d '{}' \
+        "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null); then
+        LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
+        if [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
+            echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # Send query to background server via REST API
@@ -119,23 +145,7 @@ lacy_preheat_server_query() {
     local query="$1"
 
     if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
-        # Pass the current working directory via the x-opencode-directory header.
-        # The lash/opencode server stores this on the session and uses it for all
-        # file operations — the server's own process.cwd() is irrelevant.
-        local _session_dir session_json
-        _session_dir=$(pwd 2>/dev/null)
-        session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "x-opencode-directory: ${_session_dir}" \
-            -d '{}' \
-            "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
-        [[ $? -ne 0 ]] && return 1
-
-        LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
-        [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
-        # Persist to file so parent shell can read it (subshell workaround)
-        echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+        _lacy_preheat_server_create_session || return 1
     fi
 
     local escaped_query
@@ -231,43 +241,226 @@ lacy_preheat_server_restore_session() {
 }
 
 # ============================================================================
+# Generic Session Reuse
+# ============================================================================
+
+# Internal helper to restore a session ID from a file
+_lacy_session_restore() {
+    local file="$1"
+    local var_name="$2"
+    if [[ -f "$file" ]]; then
+        local _val
+        _val=$(cat "$file" 2>/dev/null)
+        printf -v "$var_name" '%s' "$_val"
+    fi
+}
+
+# Internal helper to build a tool command with optional session resume
+_lacy_session_build_cmd() {
+    local tool="$1"
+    local session_id="$2"
+    local file="$3"
+    local var_name="$4"
+
+    # Ensure we have the latest session ID from the file (subshell workaround)
+    if [[ -z "$session_id" ]]; then
+        _lacy_session_restore "$file" "$var_name"
+        if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+            session_id="${(P)var_name}"
+        else
+            session_id="${!var_name}"
+        fi
+    fi
+
+    local parts="${tool}"
+    [[ -n "$session_id" ]] && parts+=" --resume ${session_id}"
+    if [[ "$tool" == "claude" ]]; then
+        parts+=" --output-format json"
+    fi
+    parts+=" -p"
+    echo "$parts"
+}
+
+# Internal helper to capture a session ID from JSON response and persist it
+_lacy_session_capture() {
+    local json="$1"
+    local file="$2"
+    local var_name="$3"
+    local key_name="${4:-session_id}"
+    local session_id
+    session_id=$(_lacy_json_get "$json" "$key_name")
+
+    if [[ -n "$session_id" ]]; then
+        printf -v "$var_name" '%s' "$session_id"
+        echo "$session_id" > "$file"
+    fi
+}
+
+# Internal helper to reset a session
+_lacy_session_reset() {
+    local file="$1"
+    local var_name="$2"
+    printf -v "$var_name" '%s' ""
+    rm -f "$file"
+}
+
+# ============================================================================
 # Claude Session Reuse
 # ============================================================================
 
 lacy_preheat_claude_restore_session() {
-    if [[ -f "$LACY_PREHEAT_SESSION_FILE" ]]; then
-        LACY_PREHEAT_CLAUDE_SESSION_ID=$(cat "$LACY_PREHEAT_SESSION_FILE" 2>/dev/null)
-    fi
+    _lacy_session_restore "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID"
 }
 
 lacy_preheat_claude_build_cmd() {
-    if [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]]; then
-        echo "claude --resume ${LACY_PREHEAT_CLAUDE_SESSION_ID} --output-format json -p"
-    else
-        echo "claude --output-format json -p"
-    fi
+    _lacy_session_build_cmd "claude" "$LACY_PREHEAT_CLAUDE_SESSION_ID" "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID"
 }
 
 lacy_preheat_claude_capture_session() {
-    local json="$1"
-    local session_id=""
-
-    session_id=$(_lacy_json_get "$json" "session_id")
-
-    if [[ -n "$session_id" ]]; then
-        LACY_PREHEAT_CLAUDE_SESSION_ID="$session_id"
-        echo "$session_id" > "$LACY_PREHEAT_SESSION_FILE"
-    fi
+    _lacy_session_capture "$1" "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID" "session_id"
 }
 
 lacy_preheat_claude_extract_result() {
-    local json="$1"
-    _lacy_json_get "$json" "result"
+    _lacy_json_get "$1" "result"
 }
 
 lacy_preheat_claude_reset_session() {
-    LACY_PREHEAT_CLAUDE_SESSION_ID=""
-    rm -f "$LACY_PREHEAT_SESSION_FILE"
+    _lacy_session_reset "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID"
+}
+
+# ============================================================================
+# Gemini Session Reuse
+# ============================================================================
+
+LACY_GEMINI_SESSION_ID=""
+LACY_GEMINI_SESSION_ID_FILE="$LACY_SHELL_HOME/.gemini_session_id_$$"
+
+lacy_preheat_gemini_restore_session() {
+    _lacy_session_restore "$LACY_GEMINI_SESSION_ID_FILE" "LACY_GEMINI_SESSION_ID"
+}
+
+lacy_preheat_gemini_build_cmd() {
+    _lacy_session_build_cmd "gemini" "$LACY_GEMINI_SESSION_ID" "$LACY_GEMINI_SESSION_ID_FILE" "LACY_GEMINI_SESSION_ID"
+}
+
+lacy_preheat_gemini_capture_session() {
+    _lacy_session_capture "$1" "$LACY_GEMINI_SESSION_ID_FILE" "LACY_GEMINI_SESSION_ID" "session_id"
+}
+
+lacy_preheat_gemini_extract_result() {
+    _lacy_json_get "$1" "response"
+}
+
+lacy_preheat_gemini_reset_session() {
+    _lacy_session_reset "$LACY_GEMINI_SESSION_ID_FILE" "LACY_GEMINI_SESSION_ID"
+}
+
+# ============================================================================
+# Session Commands (new / resume)
+# ============================================================================
+
+# Return the active tool name: LACY_ACTIVE_TOOL if set, else first installed tool found.
+_lacy_get_current_tool() {
+    if [[ -n "${LACY_ACTIVE_TOOL:-}" ]]; then
+        echo "$LACY_ACTIVE_TOOL"
+        return
+    fi
+    local t
+    for t in lash opencode claude gemini codex; do
+        command -v "$t" >/dev/null 2>&1 && { echo "$t"; return; }
+    done
+}
+
+# Persist current session state to global file for cross-shell resume.
+# Called after each successful agent query via _lacy_print_resume_hint.
+_lacy_save_last_session() {
+    local tool
+    tool=$(_lacy_get_current_tool)
+
+    local session_id=""
+    case "$tool" in
+        lash|opencode) session_id="$LACY_PREHEAT_SERVER_SESSION_ID" ;;
+        claude)        session_id="$LACY_PREHEAT_CLAUDE_SESSION_ID" ;;
+        gemini)        session_id="$LACY_GEMINI_SESSION_ID" ;;
+    esac
+
+    [[ -n "$session_id" && -n "$tool" ]] || return 0
+    printf '%s\n%s\n' "$tool" "$session_id" > "$LACY_LAST_SESSION_FILE"
+}
+
+# Clear all session state and start a fresh context.
+# For server-based tools (lash/opencode), eagerly creates a new session (blocking).
+lacy_session_new() {
+    # Persist current session before clearing (enables cross-shell resume)
+    _lacy_save_last_session
+
+    # Reset all per-session state
+    lacy_preheat_claude_reset_session
+    lacy_preheat_gemini_reset_session
+    LACY_PREHEAT_SERVER_SESSION_ID=""
+    rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+
+    # For server-based tools, pre-create a new session now (blocking)
+    local tool
+    tool=$(_lacy_get_current_tool)
+
+    if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
+        lacy_start_spinner
+        _lacy_preheat_server_create_session
+        lacy_stop_spinner
+    fi
+
+    echo ""
+    lacy_print_color 34 "  New session started"
+    echo ""
+}
+
+# Resume the last saved session in the current shell.
+# Reads from LACY_LAST_SESSION_FILE — written after every successful query.
+lacy_session_resume() {
+    local saved_tool="" saved_id=""
+    if [[ -f "$LACY_LAST_SESSION_FILE" ]]; then
+        { read -r saved_tool; read -r saved_id; } < "$LACY_LAST_SESSION_FILE"
+    fi
+
+    if [[ -z "$saved_tool" || -z "$saved_id" ]]; then
+        echo ""
+        lacy_print_color 238 "  No previous session to resume"
+        echo ""
+        return 1
+    fi
+
+    # Swap: save current session before overwriting (so it's resumable in turn)
+    _lacy_save_last_session
+
+    # Switch active tool to match the saved session
+    local current_tool
+    current_tool=$(_lacy_get_current_tool)
+    if [[ -n "$current_tool" && "$current_tool" != "$saved_tool" ]]; then
+        LACY_ACTIVE_TOOL="$saved_tool"
+        export LACY_ACTIVE_TOOL
+    fi
+
+    # Load saved session into current shell state
+    case "$saved_tool" in
+        lash|opencode)
+            LACY_PREHEAT_SERVER_SESSION_ID="$saved_id"
+            echo "$saved_id" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+            ;;
+        claude)
+            LACY_PREHEAT_CLAUDE_SESSION_ID="$saved_id"
+            echo "$saved_id" > "$LACY_PREHEAT_SESSION_FILE"
+            ;;
+        gemini)
+            LACY_GEMINI_SESSION_ID="$saved_id"
+            echo "$saved_id" > "$LACY_GEMINI_SESSION_ID_FILE"
+            ;;
+    esac
+
+    echo ""
+    lacy_print_color 34 "  Resumed $saved_tool session"
+    lacy_print_color 238 "  $saved_id"
+    echo ""
 }
 
 # ============================================================================
@@ -275,7 +468,8 @@ lacy_preheat_claude_reset_session() {
 # ============================================================================
 
 lacy_preheat_init() {
-    lacy_preheat_claude_restore_session
+    # Per-shell session files ensure a fresh session on every new shell start.
+    # We no longer need to restore here because the PID-specific file won't exist yet.
 
     if [[ "$LACY_PREHEAT_EAGER" == "true" ]]; then
         local tool="${LACY_ACTIVE_TOOL}"
@@ -291,4 +485,6 @@ lacy_preheat_init() {
 
 lacy_preheat_cleanup() {
     lacy_preheat_server_stop
+    rm -f "$LACY_PREHEAT_SESSION_FILE" \
+          "$LACY_GEMINI_SESSION_ID_FILE"
 }

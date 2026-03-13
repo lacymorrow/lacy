@@ -140,6 +140,28 @@ _lacy_run_tool_cmd() {
     "${cmd_parts[@]}" "$query"
 }
 
+# Internal helper to build and run a Gemini query with session context and spinner.
+# Returns 0 on success, non-zero on error. Outputs tool response to stdout.
+# NOTE: Uses LACY_GEMINI_SESSION_ID which is managed in lib/core/preheat.sh.
+_lacy_gemini_query_exec() {
+    local query="$1"
+    local gemini_cmd
+    gemini_cmd=$(lacy_preheat_gemini_build_cmd)
+
+    # Only include context on the first message of a session (when ID is empty)
+    local gemini_query
+    if [[ -z "$LACY_GEMINI_SESSION_ID" ]]; then
+        local _gemini_ctx
+        _gemini_ctx="${LACY_GEMINI_CONTEXT//\{cwd\}/$(pwd 2>/dev/null)}"
+        gemini_query="$_gemini_ctx $query"
+    else
+        gemini_query="$query"
+    fi
+
+    _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null
+    return $?
+}
+
 # Tool registry — function-based for maximum portability
 # Usage: cmd=$(lacy_tool_cmd <tool_name>)
 lacy_tool_cmd() {
@@ -159,9 +181,6 @@ lacy_tool_cmd() {
 # Last resume command (set after each successful agent query)
 LACY_LAST_RESUME_CMD=""
 
-# Gemini session flag — exists when a previous session is available to resume
-LACY_GEMINI_SESSION_FILE="${LACY_SHELL_HOME:-$HOME/.lacy}/.gemini_session"
-
 # Resume command registry — returns the command to resume a conversation
 # Usage: cmd=$(lacy_resume_cmd <tool_name>)
 lacy_resume_cmd() {
@@ -178,7 +197,10 @@ lacy_resume_cmd() {
             [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
                 echo "opencode --session $LACY_PREHEAT_SERVER_SESSION_ID"
             ;;
-        gemini)   [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && echo "gemini --resume" ;;
+        gemini)
+            [[ -n "$LACY_GEMINI_SESSION_ID" ]] && \
+                echo "gemini --resume $LACY_GEMINI_SESSION_ID"
+            ;;
         codex)    echo "codex exec resume --last" ;;
     esac
 }
@@ -193,6 +215,8 @@ _lacy_print_resume_hint() {
     if [[ -n "$resume_cmd" ]]; then
         LACY_LAST_RESUME_CMD="$resume_cmd"
         lacy_print_color 238 "$resume_cmd"
+        # Persist for cross-shell resume (lacy /resume in a new shell)
+        _lacy_save_last_session
     fi
 }
 
@@ -526,35 +550,35 @@ EOF
     fi
 
     # === Gemini session reuse ===
-    # Use --resume only when a previous session is known to exist.
-    # On first use or after session expiry, run without --resume to avoid
-    # "No previous sessions found" errors.
-    # Gemini emits startup noise (skill conflicts, credential messages) on stderr —
-    # redirect to /dev/null so only the actual response reaches the terminal.
-    # Prepend context so gemini knows what tools are available in -p (headless) mode
-    # and doesn't attempt run_shell_command which only exists in interactive mode.
     if [[ "$tool" == "gemini" ]]; then
-        local _gemini_ctx="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: $(pwd 2>/dev/null)]"
-        local gemini_query="$_gemini_ctx $query"
-        local gemini_cmd="gemini -p"
-        [[ -f "$LACY_GEMINI_SESSION_FILE" ]] && gemini_cmd="gemini --resume -p"
         echo ""
+        local json_output
         lacy_start_spinner
-        local gemini_output
-        gemini_output=$(_lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" </dev/tty 2>/dev/null)
+        json_output=$(_lacy_gemini_query_exec "$query")
         local exit_code=$?
         lacy_stop_spinner
-        if [[ $exit_code -ne 0 && -f "$LACY_GEMINI_SESSION_FILE" ]]; then
+        # Restore session ID lost in subshell
+        lacy_preheat_gemini_restore_session
+
+        if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
             # --resume failed (session expired/missing) — retry without it
-            rm -f "$LACY_GEMINI_SESSION_FILE"
+            lacy_preheat_gemini_reset_session
             lacy_start_spinner
-            gemini_output=$(_lacy_run_tool_cmd "gemini -p" "$gemini_query" </dev/tty 2>/dev/null)
+            json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
             lacy_stop_spinner
         fi
+
         if [[ $exit_code -eq 0 ]]; then
-            _lacy_render_markdown "$gemini_output"
-            touch "$LACY_GEMINI_SESSION_FILE"
+            local result_text
+            result_text=$(lacy_preheat_gemini_extract_result "$json_output")
+            while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
+            if [[ -n "$result_text" ]]; then
+                _lacy_render_markdown "$result_text"
+            else
+                printf '%s\n' "$json_output"
+            fi
+            lacy_preheat_gemini_capture_session "$json_output"
             _lacy_print_resume_hint "$tool"
         fi
         echo ""
@@ -654,7 +678,7 @@ lacy_shell_query_openai() {
     response=$(curl -s -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
         -d "{\"model\":\"${LACY_API_MODEL_OPENAI}\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_tokens\":1500}" \
-        "https://api.openai.com/v1/chat/completions")
+        "$LACY_API_URL_OPENAI")
 
     _lacy_json_query "$response" '.choices[0].message.content'
 }
@@ -670,7 +694,7 @@ lacy_shell_query_anthropic() {
         -H "x-api-key: $api_key" \
         -H "anthropic-version: 2023-06-01" \
         -d "{\"model\":\"${LACY_API_MODEL_ANTHROPIC}\",\"max_tokens\":1500,\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}]}" \
-        "https://api.anthropic.com/v1/messages")
+        "$LACY_API_URL_ANTHROPIC")
 
     _lacy_json_query "$response" '.content[0].text'
 }

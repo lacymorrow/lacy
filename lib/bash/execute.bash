@@ -6,6 +6,7 @@
 # Pending query (set by Enter handler, dispatched by PROMPT_COMMAND)
 LACY_SHELL_PENDING_QUERY=""
 LACY_SHELL_REROUTE_CANDIDATE=""
+LACY_SHELL_PENDING_CMD=""
 _lacy_last_exit=0
 
 # Smart accept-line for Bash — called by bind -x on Enter
@@ -21,6 +22,24 @@ lacy_shell_smart_accept_line_bash() {
     if [[ -z "$input" ]]; then
         return
     fi
+
+    # Intercept slash-prefixed session commands (/new, /reset, /clear, /resume)
+    local _slashcmd="$input"
+    _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
+    case "$_slashcmd" in
+        /new|/reset|/clear|/resume)
+            history -s -- "$input"
+            history -a 2>/dev/null
+            if [[ "$_slashcmd" == "/resume" ]]; then
+                LACY_SHELL_PENDING_CMD="session_resume"
+            else
+                LACY_SHELL_PENDING_CMD="session_new"
+            fi
+            READLINE_LINE=""
+            READLINE_POINT=0
+            return
+            ;;
+    esac
 
     # Classify using centralized detection
     local classification
@@ -142,6 +161,16 @@ lacy_shell_precmd_bash() {
         LACY_SHELL_REROUTE_CANDIDATE=""
         lacy_shell_quit
         return
+    fi
+
+    # Handle pending internal commands (from slash-prefixed session commands)
+    if [[ -n "$LACY_SHELL_PENDING_CMD" ]]; then
+        local _cmd="$LACY_SHELL_PENDING_CMD"
+        LACY_SHELL_PENDING_CMD=""
+        case "$_cmd" in
+            session_new)    lacy_session_new ;;
+            session_resume) lacy_session_resume ;;
+        esac
     fi
 
     # Handle pending agent query
@@ -320,7 +349,7 @@ lacy_shell_quit() {
     lacy_preheat_cleanup
 
     # Unset functions used as commands
-    unset -f ask mode tool spinner quit stop 2>/dev/null
+    unset -f ask mode tool spinner quit stop lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
@@ -410,6 +439,17 @@ lacy_shell_spinner() {
         *)
             echo "Usage: spinner [set <name> | preview [name|all]]"
             ;;
+    esac
+}
+
+# Override lacy command to handle session subcommands without subprocess
+lacy() {
+    local cmd="${1:-}"
+    cmd="${cmd#/}"  # strip optional leading slash (/new → new)
+    case "$cmd" in
+        new|reset|clear) lacy_session_new ;;
+        resume)          lacy_session_resume ;;
+        *)               command lacy "$@" ;;
     esac
 }
 
