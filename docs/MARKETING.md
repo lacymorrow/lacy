@@ -1,6 +1,11 @@
 # Lacy Shell — Marketing Launch Kit
 
-All launch copy is ready to submit. Replace `[DEMO_GIF_URL]` with the hosted demo GIF once recorded.
+All launch copy is ready to submit. Demo GIFs are recorded and hosted.
+
+**GIF URLs (raw GitHub):**
+- Full demo: `https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-full.gif`
+- Indicator: `https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-indicator.gif`
+- Color transition: `https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-color-transition.gif`
 
 ---
 
@@ -61,7 +66,7 @@ No prefix. No hotkey. No new app. Just type.
 
 It's called Lacy Shell and it's free + open source.
 
-[DEMO_GIF_URL]
+https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-full.gif
 ```
 
 **Tweet 2 (Problem):**
@@ -371,11 +376,12 @@ Record with [vhs](https://github.com/charmbracelet/vhs), [asciinema](https://asc
 ## 8. Launch Day Checklist
 
 ### Pre-launch (day before)
-- [ ] Demo GIF recorded and hosted
-- [ ] README updated with GIF at top
-- [ ] Analytics on lacy.sh (Plausible/Umami)
-- [ ] All copy reviewed and links tested
-- [ ] GitHub topics set (already done: 14 topics)
+- [x] Demo GIF recorded and hosted (3 variants in docs/)
+- [x] README updated with GIF at top + badges + "Why Lacy?" section
+- [x] Analytics on lacy.sh (Plausible/Umami) — LAC-43 done
+- [x] All copy reviewed and links tested
+- [x] GitHub topics set (14 topics)
+- [x] Demo videos recorded (docs/videos/)
 
 ### Launch Day (Tuesday/Wednesday)
 - [ ] 9:00am ET — Post Show HN
