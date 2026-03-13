@@ -113,7 +113,7 @@ else
     FAIL=$(( FAIL + 1 ))
 fi
 
-# Cleanup via trap (preserves temp dir on assertion failure for debugging)
+# Cleanup via trap (ensures cleanup even on script errors)
 trap 'rm -rf "$TEST_TMPDIR"' EXIT
 
 summary
