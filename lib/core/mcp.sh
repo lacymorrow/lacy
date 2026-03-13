@@ -73,6 +73,52 @@ except: pass" 2>/dev/null
 }
 
 # ============================================================================
+# Markdown Rendering
+# ============================================================================
+
+# Cached renderer (set on first call)
+_LACY_MD_RENDERER=""
+
+# Render markdown for terminal display.
+# Uses glow if available, otherwise a basic sed fallback for bold/headers/code.
+# Usage: _lacy_render_markdown "$text"
+_lacy_render_markdown() {
+    local text="$1"
+    [[ -z "$text" ]] && return
+
+    # Auto-detect on first call
+    if [[ -z "$_LACY_MD_RENDERER" ]]; then
+        if command -v glow >/dev/null 2>&1; then
+            _LACY_MD_RENDERER="glow"
+        else
+            _LACY_MD_RENDERER="basic"
+        fi
+    fi
+
+    case "$_LACY_MD_RENDERER" in
+        glow)  printf '%s\n' "$text" | glow -s dark ;;
+        basic) _lacy_render_markdown_basic "$text" ;;
+    esac
+}
+
+# Minimal markdown rendering via sed — bold, headers, inline code, rules.
+# Uses literal escape chars (via $'') for BSD/GNU sed portability.
+_lacy_render_markdown_basic() {
+    local bold=$'\e[1m' nobold=$'\e[22m'
+    local cyan=$'\e[36m' reset=$'\e[0m'
+    local dim=$'\e[38;5;238m'
+    local cols; cols=$(tput cols 2>/dev/null || echo 80)
+    local hr="${dim}$(printf '%*s' "$cols" | tr ' ' '─')${reset}"
+
+    printf '%s\n' "$1" | sed -E \
+        -e "s/^#{1,6}[[:space:]]+(.*)/${bold}\1${nobold}/" \
+        -e "s/^---*$/${hr}/" \
+        -e "s/^\*\*\*.*$/${hr}/" \
+        -e "s/\*\*([^*]*)\*\*/${bold}\1${nobold}/g" \
+        -e "s/\`([^\`]*)\`/${cyan}\1${reset}/g"
+}
+
+# ============================================================================
 # Tool Command Execution
 # ============================================================================
 
@@ -419,7 +465,7 @@ EOF
             lacy_preheat_server_restore_session
             if [[ $exit_code -eq 0 && -n "$server_result" ]]; then
                 while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
-                printf '%s\n' "$server_result"
+                _lacy_render_markdown "$server_result"
                 _lacy_print_resume_hint "$tool"
                 echo ""
                 return 0
@@ -451,7 +497,7 @@ EOF
             result_text=$(lacy_preheat_claude_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
             if [[ -n "$result_text" ]]; then
-                printf '%s\n' "$result_text"
+                _lacy_render_markdown "$result_text"
             else
                 printf '%s\n' "$json_output"
             fi
@@ -480,7 +526,7 @@ EOF
                 result_text=$(lacy_preheat_claude_extract_result "$json_output")
                 while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
                 if [[ -n "$result_text" ]]; then
-                    printf '%s\n' "$result_text"
+                    _lacy_render_markdown "$result_text"
                 else
                     printf '%s\n' "$json_output"
                 fi
@@ -524,7 +570,7 @@ EOF
             result_text=$(lacy_preheat_gemini_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
             if [[ -n "$result_text" ]]; then
-                printf '%s\n' "$result_text"
+                _lacy_render_markdown "$result_text"
             else
                 printf '%s\n' "$json_output"
             fi
