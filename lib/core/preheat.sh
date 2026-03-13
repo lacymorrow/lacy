@@ -344,16 +344,23 @@ lacy_preheat_gemini_reset_session() {
 # Session Commands (new / resume)
 # ============================================================================
 
+# Return the active tool name: LACY_ACTIVE_TOOL if set, else first installed tool found.
+_lacy_get_current_tool() {
+    if [[ -n "${LACY_ACTIVE_TOOL:-}" ]]; then
+        echo "$LACY_ACTIVE_TOOL"
+        return
+    fi
+    local t
+    for t in lash opencode claude gemini codex; do
+        command -v "$t" >/dev/null 2>&1 && { echo "$t"; return; }
+    done
+}
+
 # Persist current session state to global file for cross-shell resume.
 # Called after each successful agent query via _lacy_print_resume_hint.
 _lacy_save_last_session() {
-    local tool="${LACY_ACTIVE_TOOL:-}"
-    if [[ -z "$tool" ]]; then
-        local t
-        for t in lash opencode claude gemini codex; do
-            command -v "$t" >/dev/null 2>&1 && { tool="$t"; break; }
-        done
-    fi
+    local tool
+    tool=$(_lacy_get_current_tool)
 
     local session_id=""
     case "$tool" in
@@ -379,11 +386,8 @@ lacy_session_new() {
     rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
 
     # For server-based tools, pre-create a new session now (blocking)
-    local tool="${LACY_ACTIVE_TOOL:-}"
-    if [[ -z "$tool" ]]; then
-        command -v lash    >/dev/null 2>&1 && tool="lash"
-        [[ -z "$tool" ]] && command -v opencode >/dev/null 2>&1 && tool="opencode"
-    fi
+    local tool
+    tool=$(_lacy_get_current_tool)
 
     if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
         if lacy_preheat_server_is_healthy; then
@@ -411,16 +415,10 @@ lacy_session_new() {
 # Resume the last saved session in the current shell.
 # Reads from LACY_LAST_SESSION_FILE — written after every successful query.
 lacy_session_resume() {
-    if [[ ! -f "$LACY_LAST_SESSION_FILE" ]]; then
-        echo ""
-        lacy_print_color 238 "  No previous session to resume"
-        echo ""
-        return 1
+    local saved_tool="" saved_id=""
+    if [[ -f "$LACY_LAST_SESSION_FILE" ]]; then
+        { read -r saved_tool; read -r saved_id; } < "$LACY_LAST_SESSION_FILE"
     fi
-
-    local saved_tool saved_id
-    saved_tool=$(sed -n '1p' "$LACY_LAST_SESSION_FILE" 2>/dev/null)
-    saved_id=$(sed -n '2p' "$LACY_LAST_SESSION_FILE" 2>/dev/null)
 
     if [[ -z "$saved_tool" || -z "$saved_id" ]]; then
         echo ""
