@@ -117,28 +117,35 @@ lacy_preheat_server_is_healthy() {
     curl -sf --max-time "$LACY_HEALTH_CHECK_TIMEOUT_SYNC" "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1
 }
 
+# Internal helper to create a new server session (lash/opencode)
+_lacy_preheat_server_create_session() {
+    if ! lacy_preheat_server_is_healthy; then
+        return 1
+    fi
+
+    local _session_dir session_json
+    _session_dir=$(pwd 2>/dev/null)
+    if session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -H "x-opencode-directory: ${_session_dir}" \
+        -d '{}' \
+        "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null); then
+        LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
+        if [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
+            echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Send query to background server via REST API
 lacy_preheat_server_query() {
     local query="$1"
 
     if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
-        # Pass the current working directory via the x-opencode-directory header.
-        # The lash/opencode server stores this on the session and uses it for all
-        # file operations — the server's own process.cwd() is irrelevant.
-        local _session_dir session_json
-        _session_dir=$(pwd 2>/dev/null)
-        session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "x-opencode-directory: ${_session_dir}" \
-            -d '{}' \
-            "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null)
-        [[ $? -ne 0 ]] && return 1
-
-        LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
-        [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && return 1
-        # Persist to file so parent shell can read it (subshell workaround)
-        echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+        _lacy_preheat_server_create_session || return 1
     fi
 
     local escaped_query
@@ -265,10 +272,15 @@ _lacy_session_build_cmd() {
         fi
     fi
 
+    local format_flag=""
+    if [[ "$tool" == "claude" ]]; then
+        format_flag="--output-format json"
+    fi
+
     if [[ -n "$session_id" ]]; then
-        echo "${tool} --resume ${session_id} --output-format json -p"
+        echo "${tool} --resume ${session_id} ${format_flag} -p"
     else
-        echo "${tool} --output-format json -p"
+        echo "${tool} ${format_flag} -p"
     fi
 }
 
@@ -396,20 +408,9 @@ lacy_session_new() {
     tool=$(_lacy_get_current_tool)
 
     if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
-        if lacy_preheat_server_is_healthy; then
-            local _session_dir session_json
-            _session_dir=$(pwd 2>/dev/null)
-            if session_json=$(curl -sf --max-time "$LACY_SESSION_CREATE_TIMEOUT" \
-                -X POST \
-                -H "Content-Type: application/json" \
-                -H "x-opencode-directory: ${_session_dir}" \
-                -d '{}' \
-                "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session" 2>/dev/null); then
-                LACY_PREHEAT_SERVER_SESSION_ID=$(_lacy_json_get "$session_json" "id")
-                [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
-                    echo "$LACY_PREHEAT_SERVER_SESSION_ID" > "$LACY_PREHEAT_SERVER_SESSION_FILE"
-            fi
-        fi
+        lacy_start_spinner
+        _lacy_preheat_server_create_session
+        lacy_stop_spinner
     fi
 
     echo ""
@@ -455,6 +456,9 @@ lacy_session_resume() {
     lacy_print_color 34 "  Resumed $saved_tool session"
     lacy_print_color 238 "  $saved_id"
     echo ""
+
+    # Persist the newly resumed session as the 'last' session
+    _lacy_save_last_session
 }
 
 # ============================================================================

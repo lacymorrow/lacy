@@ -460,5 +460,3 @@ tool() { lacy_shell_tool "$@"; }
 spinner() { lacy_shell_spinner "$@"; }
 quit() { lacy_shell_quit; }
 stop() { lacy_shell_quit; }
-type -P new >/dev/null 2>&1 || new() { lacy_session_new; }
-type -P resume >/dev/null 2>&1 || resume() { lacy_session_resume; }
