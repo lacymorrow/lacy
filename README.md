@@ -1,10 +1,23 @@
 # Lacy
 
-Talk to your shell. Type commands or natural language — it figures out which is which.
+**Talk to your shell.** Commands run. Questions go to AI. No prefixes. No context switching. You just type.
+
+[![npm version](https://img.shields.io/npm/v/lacy)](https://www.npmjs.com/package/lacy)
+[![npm downloads](https://img.shields.io/npm/dm/lacy)](https://www.npmjs.com/package/lacy)
+[![GitHub stars](https://img.shields.io/github/stars/lacymorrow/lacy)](https://github.com/lacymorrow/lacy/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <p align="center">
   <img src="assets/hero.jpeg" alt="Lacy demo showing shell commands and AI queries side by side" width="680" />
 </p>
+
+## Why Lacy?
+
+- **No new tools to learn** — Lacy works with your existing AI CLI (Claude Code, Gemini, OpenCode, Codex, Lash). It's a complement, not a replacement.
+- **Zero friction** — No slash commands, no hotkeys, no separate terminal. Type naturally and Lacy routes it. A real-time color indicator shows you what will happen before you press enter.
+- **Smart detection** — Lacy classifies input using word analysis, not AI. It's instant. Commands like `ls -la` stay green (shell). Questions like `what files are here` turn magenta (AI). If a command fails with natural language patterns, it silently reroutes to AI.
+
+> *Works with ZSH and Bash 4+ on macOS, Linux, and WSL.*
 
 ## Install
 
@@ -167,6 +180,10 @@ The script handles the full release flow:
 2. Commits with `release: v<version>` and tags
 3. Pushes to GitHub and creates a GitHub release
 4. Publishes the npm package (prompts for OTP if required)
+
+## Contributing
+
+Contributions welcome! Check out the [issues](https://github.com/lacymorrow/lacy/issues) for good first issues, or open a new one.
 
 ## License
 
