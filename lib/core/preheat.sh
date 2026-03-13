@@ -461,9 +461,6 @@ lacy_session_resume() {
     lacy_print_color 34 "  Resumed $saved_tool session"
     lacy_print_color 238 "  $saved_id"
     echo ""
-
-    # Persist the newly resumed session as the 'last' session
-    _lacy_save_last_session
 }
 
 # ============================================================================
