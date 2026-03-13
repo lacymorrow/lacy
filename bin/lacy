@@ -634,8 +634,7 @@ cmd_resume() {
     fi
 
     local saved_tool saved_id
-    saved_tool=$(sed -n '1p' "$last_session_file" 2>/dev/null)
-    saved_id=$(sed -n '2p' "$last_session_file" 2>/dev/null)
+    { read -r saved_tool; read -r saved_id; } < "$last_session_file"
 
     if [[ -z "$saved_tool" || -z "$saved_id" ]]; then
         warn "Saved session file is empty"

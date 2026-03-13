@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <p align="center">
-  <img src="assets/hero.jpeg" alt="Lacy demo showing shell commands and AI queries side by side" width="680" />
+  <img src="docs/demo-full.gif" alt="Lacy Shell demo — commands run in shell, questions go to AI" width="680" />
 </p>
 
 ## Why Lacy?
@@ -48,7 +48,7 @@ echo 'source ~/.lacy/lacy.plugin.zsh' >> ~/.zshrc
 Real-time visual feedback shows what will happen before you hit enter:
 
 <p align="center">
-  <img src="assets/real-time-indicator.jpeg" alt="Green indicator for shell commands, magenta for AI" width="680" />
+  <img src="docs/demo-indicator.gif" alt="Green indicator for shell commands, magenta for AI" width="680" />
 </p>
 
 Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no context switching — you just type.
