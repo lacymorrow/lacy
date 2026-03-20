@@ -15,8 +15,9 @@ lacy_shell_smart_accept_line() {
 
     local input="$BUFFER"
 
-    # Skip empty commands
+    # Skip empty commands — also dismiss any ghost text suggestion
     if [[ -z "$input" ]]; then
+        LACY_SHELL_SUGGESTION=""
         zle .accept-line
         return
     fi
@@ -79,6 +80,14 @@ lacy_shell_smart_accept_line() {
             return
             ;;
         "agent")
+            # Strip @ agent bypass prefix if present
+            local agent_input="$input"
+            local _at_trimmed="${agent_input#"${agent_input%%[^[:space:]]*}"}"
+            if [[ "$_at_trimmed" == @* ]]; then
+                agent_input="${_at_trimmed#@}"
+                agent_input="${agent_input#"${agent_input%%[^[:space:]]*}"}"
+            fi
+
             # Add to history before clearing buffer
             print -s -- "$input"
             # Flush to HISTFILE immediately — needed for INC_APPEND_HISTORY / SHARE_HISTORY users,
@@ -88,7 +97,7 @@ lacy_shell_smart_accept_line() {
             # Defer agent execution to precmd — output produced inside a ZLE
             # widget (after zle .accept-line) confuses ZLE's cursor tracking,
             # causing the prompt to overwrite short (one-line) results.
-            LACY_SHELL_PENDING_QUERY="$input"
+            LACY_SHELL_PENDING_QUERY="$agent_input"
             BUFFER=""
             zle .accept-line
             ;;
@@ -166,15 +175,16 @@ lacy_shell_precmd() {
         return
     fi
 
+    # Clear any previous ghost text suggestion
+    LACY_SHELL_SUGGESTION=""
+
     # Check reroute candidate: if the command failed with a non-signal exit
-    # code (< 128), re-route to agent. Exit codes >= 128 are signal-based
-    # (e.g. 130=Ctrl+C, 137=SIGKILL) and should not trigger re-routing.
+    # code (< 128), set ghost text suggestion to re-try via agent with @ prefix.
     if [[ -n "$LACY_SHELL_REROUTE_CANDIDATE" ]]; then
         local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
         LACY_SHELL_REROUTE_CANDIDATE=""
         if (( last_exit != 0 && last_exit < LACY_SIGNAL_EXIT_THRESHOLD )); then
-            lacy_shell_execute_agent "$candidate"
-            return
+            LACY_SHELL_SUGGESTION="@ ${candidate}"
         fi
     fi
     # Handle deferred quit triggered by Ctrl-D without letting EOF propagate

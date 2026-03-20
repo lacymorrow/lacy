@@ -81,6 +81,14 @@ lacy_shell_smart_accept_line_bash() {
             return
             ;;
         "agent")
+            # Strip @ agent bypass prefix if present
+            local agent_input="$input"
+            local _at_trimmed="${agent_input#"${agent_input%%[^[:space:]]*}"}"
+            if [[ "$_at_trimmed" == @* ]]; then
+                agent_input="${_at_trimmed#@}"
+                agent_input="${agent_input#"${agent_input%%[^[:space:]]*}"}"
+            fi
+
             # Add to Bash history
             history -s -- "$input"
             # Flush to HISTFILE immediately — needed when HISTFILE/PROMPT_COMMAND
@@ -88,7 +96,7 @@ lacy_shell_smart_accept_line_bash() {
             history -a 2>/dev/null
 
             # Defer agent execution to PROMPT_COMMAND
-            LACY_SHELL_PENDING_QUERY="$input"
+            LACY_SHELL_PENDING_QUERY="$agent_input"
             READLINE_LINE=""
             READLINE_POINT=0
             return
@@ -145,13 +153,14 @@ lacy_shell_precmd_bash() {
         return
     fi
 
-    # Check reroute candidate
+    # Check reroute candidate: show hint to re-try via agent with @ prefix
     if [[ -n "$LACY_SHELL_REROUTE_CANDIDATE" ]]; then
         local candidate="$LACY_SHELL_REROUTE_CANDIDATE"
         LACY_SHELL_REROUTE_CANDIDATE=""
         if (( _lacy_last_exit != 0 && _lacy_last_exit < LACY_SIGNAL_EXIT_THRESHOLD )); then
-            lacy_shell_execute_agent "$candidate"
-            return
+            printf '  \e[38;5;%dm%s\e[0m \e[38;5;%dm@ %s\e[0m\n' \
+                "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR" \
+                "$LACY_COLOR_NEUTRAL" "$candidate"
         fi
     fi
 
