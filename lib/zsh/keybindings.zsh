@@ -10,6 +10,10 @@ LACY_SHELL_QUITTING=false
 # Track current input type for real-time indicator
 LACY_SHELL_INPUT_TYPE=""  # "shell" or "agent"
 
+# Ghost text suggestion (shown as POSTDISPLAY after a reroute candidate fails)
+LACY_SHELL_SUGGESTION=""
+LACY_SHELL_OWN_POSTDISPLAY=false
+
 # ============================================================================
 # Real-time Shell/Agent Indicator
 # ============================================================================
@@ -27,13 +31,12 @@ lacy_shell_update_input_indicator() {
     [[ -z "$LACY_SHELL_BASE_PS1" ]] && return
 
     local input_type=$(lacy_shell_detect_input_type "$BUFFER")
+    local need_reset=false
 
-    # Only update prompt if type changed (avoids flickering)
+    # Check if prompt indicator needs updating
     if [[ "$input_type" != "$LACY_SHELL_INPUT_TYPE" ]]; then
         LACY_SHELL_INPUT_TYPE="$input_type"
 
-        # Build new PS1 with colored indicator
-        # Colors chosen for maximum distinction (see constants.zsh)
         local indicator
         case "$input_type" in
             "shell")
@@ -47,11 +50,8 @@ lacy_shell_update_input_indicator() {
                 ;;
         esac
 
-        # Update prompt with indicator (appended after prompt, before cursor)
         PS1="${LACY_SHELL_BASE_PS1}${indicator} "
-
-        # Request prompt redraw
-        zle && zle reset-prompt
+        need_reset=true
     fi
 
     # Highlight the first word in the buffer based on classification.
@@ -80,6 +80,36 @@ lacy_shell_update_input_indicator() {
             esac
         fi
     fi
+
+    # Ghost text suggestion — show inline placeholder when buffer is empty
+    if [[ -n "$LACY_SHELL_SUGGESTION" ]]; then
+        if [[ -z "$BUFFER" ]]; then
+            POSTDISPLAY="$LACY_SHELL_SUGGESTION"
+            LACY_SHELL_OWN_POSTDISPLAY=true
+        else
+            # User started typing — clear suggestion
+            LACY_SHELL_SUGGESTION=""
+            POSTDISPLAY=""
+            LACY_SHELL_OWN_POSTDISPLAY=false
+        fi
+    elif [[ "$LACY_SHELL_OWN_POSTDISPLAY" == true ]]; then
+        # Suggestion was cleared externally (precmd) — clean up POSTDISPLAY
+        POSTDISPLAY=""
+        LACY_SHELL_OWN_POSTDISPLAY=false
+    fi
+
+    # Apply ghost text highlight — uses fg=8 (bright black / dark gray) for
+    # maximum compatibility. Offset accounts for PREDISPLAY if set by other plugins.
+    if [[ "$LACY_SHELL_OWN_POSTDISPLAY" == true && -n "$POSTDISPLAY" ]]; then
+        local _off=$(( ${#PREDISPLAY} + ${#BUFFER} ))
+        region_highlight+=("$_off $(( _off + ${#POSTDISPLAY} )) fg=8")
+    fi
+
+    # Defer reset-prompt to AFTER all highlights and POSTDISPLAY are set,
+    # since reset-prompt triggers an immediate render.
+    if [[ "$need_reset" == true ]]; then
+        zle && zle reset-prompt
+    fi
 }
 
 # ZLE widget that runs before each redraw
@@ -87,8 +117,20 @@ lacy_shell_line_pre_redraw() {
     lacy_shell_update_input_indicator
 }
 
-# Register the pre-redraw hook
+# ZLE widget that runs when a new line of input starts — set up ghost text
+# before the first redraw so it's visible immediately
+lacy_shell_line_init() {
+    if [[ -n "$LACY_SHELL_SUGGESTION" && -z "$BUFFER" ]]; then
+        POSTDISPLAY="$LACY_SHELL_SUGGESTION"
+        LACY_SHELL_OWN_POSTDISPLAY=true
+        local _off=$(( ${#PREDISPLAY} + ${#BUFFER} ))
+        region_highlight=("$_off $(( _off + ${#POSTDISPLAY} )) fg=8")
+    fi
+}
+
+# Register hooks
 zle -N zle-line-pre-redraw lacy_shell_line_pre_redraw
+zle -N zle-line-init lacy_shell_line_init
 
 # Set up all keybindings
 lacy_shell_setup_keybindings() {
@@ -118,6 +160,11 @@ lacy_shell_setup_keybindings() {
     # Fix Command+Delete on macOS: send ^U, which ZSH defaults to kill-whole-line.
     # Rebind to backward-kill-line so only text before the cursor is deleted.
     bindkey '^U' backward-kill-line
+
+    # Ghost text suggestion accept (right arrow, tab)
+    bindkey '^[[C' _lacy_forward_char_or_accept   # Right arrow
+    bindkey '^[OC' _lacy_forward_char_or_accept   # Right arrow (alt sequence)
+    bindkey '^I' _lacy_expand_or_accept           # Tab
 }
 
 # Widget to toggle mode
@@ -373,17 +420,48 @@ lacy_shell_cleanup_keybindings() {
     bindkey '^T' transpose-chars
     bindkey '^U' kill-whole-line
 
-    # Remove real-time indicator hook
+    # Restore suggestion accept bindings
+    bindkey '^[[C' forward-char
+    bindkey '^[OC' forward-char
+    bindkey '^I' expand-or-complete
+
+    # Remove hooks
     zle -D zle-line-pre-redraw 2>/dev/null
+    zle -D zle-line-init 2>/dev/null
 
     # Remove custom widgets
     zle -D lacy_shell_toggle_mode_widget 2>/dev/null
     zle -D lacy_shell_delete_char_or_quit_widget 2>/dev/null
+    zle -D _lacy_forward_char_or_accept 2>/dev/null
+    zle -D _lacy_expand_or_accept 2>/dev/null
+}
+
+# Accept ghost text suggestion into buffer
+_lacy_try_accept_suggestion() {
+    if [[ -n "$LACY_SHELL_SUGGESTION" && -z "$BUFFER" ]]; then
+        BUFFER="$LACY_SHELL_SUGGESTION"
+        CURSOR=${#BUFFER}
+        LACY_SHELL_SUGGESTION=""
+        POSTDISPLAY=""
+        LACY_SHELL_OWN_POSTDISPLAY=false
+        return 0
+    fi
+    return 1
+}
+
+_lacy_forward_char_or_accept() {
+    _lacy_try_accept_suggestion || zle .forward-char
+}
+
+_lacy_expand_or_accept() {
+    _lacy_try_accept_suggestion || zle .expand-or-complete
 }
 
 # Register widgets
 zle -N lacy_shell_toggle_mode_widget
 zle -N lacy_shell_delete_char_or_quit_widget
+zle -N _lacy_forward_char_or_accept
+zle -N _lacy_expand_or_accept
 
 # Alternative keybindings that don't conflict with system shortcuts
 lacy_shell_setup_safe_keybindings() {
