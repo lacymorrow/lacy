@@ -110,9 +110,7 @@ lacy_shell_update_input_indicator() {
 
         # Update prompt with indicator (appended after prompt, before cursor)
         PS1="${LACY_SHELL_BASE_PS1}${indicator} "
-
-        # Request prompt redraw
-        zle && zle reset-prompt
+        local _lacy_need_reset=true
     fi
 
     # Highlight the first word in the buffer based on classification.
@@ -153,7 +151,6 @@ lacy_shell_update_input_indicator() {
             # add-zle-hook-widget) runs after ours and overwrites POSTDISPLAY
             # with "" (no history match for empty input), making ghost text
             # invisible. _zsh_autosuggest_clear tells it to stop for this cycle.
-            unset POSTDISPLAY
             (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
             POSTDISPLAY="$LACY_SHELL_SUGGESTION"
             LACY_SHELL_OWN_POSTDISPLAY=true
@@ -168,6 +165,12 @@ lacy_shell_update_input_indicator() {
         # Suggestion was cleared externally (precmd) — clean up POSTDISPLAY
         POSTDISPLAY=""
         LACY_SHELL_OWN_POSTDISPLAY=false
+    fi
+
+    # Defer reset-prompt to AFTER all highlights and POSTDISPLAY are set,
+    # since reset-prompt triggers an immediate render.
+    if [[ "$_lacy_need_reset" == true ]]; then
+        zle && zle reset-prompt
     fi
 }
 
@@ -185,7 +188,7 @@ lacy_shell_line_init() {
         (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
         POSTDISPLAY="$LACY_SHELL_SUGGESTION"
         LACY_SHELL_OWN_POSTDISPLAY=true
-        region_highlight+=("0 ${#POSTDISPLAY} fg=${LACY_COLOR_NEUTRAL} memo=lacy")
+        region_highlight+=("${#BUFFER} $((${#BUFFER} + ${#POSTDISPLAY})) fg=${LACY_COLOR_NEUTRAL} memo=lacy")
     fi
 }
 
