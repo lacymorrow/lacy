@@ -328,7 +328,7 @@ lacy_shell_query_agent() {
     local _auto_detected=false
     if [[ -z "$tool" ]]; then
         local t
-        for t in lash claude opencode gemini codex; do
+        for t in "${LACY_TOOL_LIST[@]}"; do
             if command -v "$t" >/dev/null 2>&1; then
                 tool="$t"
                 _auto_detected=true

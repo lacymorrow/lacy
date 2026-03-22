@@ -15,6 +15,7 @@ source "$LACY_SHELL_DIR/lib/core/spinner.sh"
 source "$LACY_SHELL_DIR/lib/core/mcp.sh"
 source "$LACY_SHELL_DIR/lib/core/preheat.sh"
 source "$LACY_SHELL_DIR/lib/core/detection.sh"
+source "$LACY_SHELL_DIR/lib/core/commands.sh"
 
 # Source ZSH-specific adapter modules
 source "$LACY_SHELL_DIR/lib/zsh/keybindings.zsh"
