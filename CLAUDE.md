@@ -111,6 +111,24 @@ Analyzes a failed shell command's output to detect natural language. Returns 0 i
 
 Minimum 2 words required. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full algorithm.
 
+## Plugin Coexistence (zsh-autosuggestions)
+
+Lacy shares two ZLE resources with `zsh-autosuggestions` (and potentially `zsh-syntax-highlighting`). Mishandling either causes visible bugs. Full design rationale is documented in the header of `lib/zsh/keybindings.zsh`.
+
+### `region_highlight` — tagged entries with `memo=lacy`
+
+Multiple plugins write highlight specs to the `region_highlight` array. Lacy adds first-word coloring (green/magenta) and ghost text styling. These entries are tagged with `memo=lacy` (ZSH 5.8+ feature) so they can be selectively removed on each redraw without destroying highlights from other plugins.
+
+**Rule:** Never use `region_highlight=()`. Always filter: `region_highlight=("${(@)region_highlight:#*memo=lacy*}")`. Always append `memo=lacy` to any highlight entry Lacy creates.
+
+### `POSTDISPLAY` — suppressing autosuggestions during ghost text
+
+Both Lacy (reroute ghost text) and autosuggestions (history suggestions) write to `POSTDISPLAY`. When Lacy's ghost text is active (BUFFER empty), call `_zsh_autosuggest_clear` before setting `POSTDISPLAY` to prevent autosuggestions from overwriting it. When the user starts typing, Lacy clears its ghost text and autosuggestions resumes normally.
+
+### Right arrow / Tab — no dot prefix on fallback widgets
+
+Lacy's `_lacy_forward_char_or_accept` and `_lacy_expand_or_accept` widgets check for Lacy ghost text first. On fallback, they call `zle forward-char` (not `zle .forward-char`). The dot prefix bypasses widget wrapping, which would skip autosuggestions' accept-suggestion behavior. Without the dot, autosuggestions' wrapper fires and right arrow / tab accept its suggestions normally.
+
 ## Supported AI CLI Tools
 
 | Tool     | Command                | Prompt Flag  |
