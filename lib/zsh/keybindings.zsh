@@ -65,13 +65,7 @@
 #
 # ============================================================================
 
-# Variables for double Ctrl-C detection
-LACY_SHELL_LAST_INTERRUPT_TIME=0
-LACY_SHELL_QUITTING=false
-# Exit timeout configuration is defined in constants.zsh
-
-# Track current input type for real-time indicator
-LACY_SHELL_INPUT_TYPE=""  # "shell" or "agent"
+# Interrupt state and input type are initialized in constants.sh
 
 # Ghost text suggestion (shown as POSTDISPLAY after a reroute candidate fails)
 LACY_SHELL_SUGGESTION=""
@@ -411,7 +405,7 @@ lacy_shell_interrupt_handler() {
         # Single Ctrl+C - show hint
         LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
         echo ""
-        echo "Press Ctrl-C again to quit"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_CTRL_C_HINT"
         return 130
     fi
 }
@@ -461,7 +455,7 @@ lacy_shell_setup_interrupt_handler() {
             # Single Ctrl+C
             LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
             echo ""
-            echo "Press Ctrl-C again to quit"
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_CTRL_C_HINT"
             return 130
         fi
     }

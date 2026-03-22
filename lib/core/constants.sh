@@ -178,11 +178,41 @@ LACY_SHELL_ERROR_PATTERNS=(
 
 LACY_SHELL_OPERATORS=('|' '&&' '||' ';' '>')
 
+# === Interrupt State (shared by ZSH + Bash keybindings) ===
+LACY_SHELL_LAST_INTERRUPT_TIME=0
+LACY_SHELL_QUITTING=false
+LACY_SHELL_INPUT_TYPE=""
+
 # === UI ===
 LACY_INDICATOR_CHAR="▌"
 LACY_SPINNER_FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 : "${LACY_SPINNER_STYLE:="random"}"
 LACY_SPINNER_TEXT='Thinking'
+
+# === Tool List (canonical order for detection and display) ===
+LACY_TOOL_LIST=(lash claude opencode gemini codex)
+
+# === User-Facing Messages ===
+LACY_MSG_QUIT="Exiting Lacy Shell..."
+LACY_MSG_CTRL_C_HINT="Press Ctrl-C again to quit"
+LACY_MSG_NO_TOOL="  No AI tool configured"
+LACY_MSG_INSTALL_HINT="  Install one:  npm install -g lashcode"
+LACY_MSG_CONFIGURE_HINT="  Or configure: lacy setup"
+LACY_MSG_RECOVERY_TOOL="  Try: tool set <name>    Switch to a different tool"
+LACY_MSG_RECOVERY_ASK='       ask "your query"   Send directly to agent'
+LACY_MSG_RECOVERY_DOCTOR="       lacy doctor        Diagnose issues"
+LACY_MSG_CONVERSATION_CLEARED="Conversation history cleared"
+LACY_MSG_NO_CONVERSATION="No conversation history found"
+
+# Mode descriptions
+LACY_MSG_MODE_SHELL="SHELL mode - all commands execute directly"
+LACY_MSG_MODE_AGENT="AGENT mode - all input goes to AI"
+LACY_MSG_MODE_AUTO="AUTO mode - smart detection"
+LACY_MSG_MODE_SHELL_SHORT="SHELL mode"
+LACY_MSG_MODE_AGENT_SHORT="AGENT mode"
+LACY_MSG_MODE_AUTO_SHORT="AUTO mode"
+LACY_MSG_COLOR_SHELL="Green  = shell command"
+LACY_MSG_COLOR_AGENT="Magenta = agent query"
 
 # === Gemini ===
 LACY_GEMINI_CONTEXT="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: {cwd}]"
