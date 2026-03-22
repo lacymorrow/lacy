@@ -150,17 +150,22 @@ lacy_shell_update_input_indicator() {
         fi
     fi
 
-    # Ghost text suggestion — show inline placeholder when buffer is empty
+    # Ghost text suggestion — show inline placeholder when buffer is empty.
+    # See file header for POSTDISPLAY coexistence design with zsh-autosuggestions.
     if [[ -n "$LACY_SHELL_SUGGESTION" ]]; then
         if [[ -z "$BUFFER" ]]; then
-            # Suppress zsh-autosuggestions so it doesn't overwrite POSTDISPLAY
+            # Clear autosuggestions' POSTDISPLAY before writing ours.
+            # Without this, autosuggestions' pre-redraw hook (registered via
+            # add-zle-hook-widget) runs after ours and overwrites POSTDISPLAY
+            # with "" (no history match for empty input), making ghost text
+            # invisible. _zsh_autosuggest_clear tells it to stop for this cycle.
             unset POSTDISPLAY
             (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
             POSTDISPLAY="$LACY_SHELL_SUGGESTION"
             LACY_SHELL_OWN_POSTDISPLAY=true
             region_highlight+=("${#BUFFER} $((${#BUFFER} + ${#POSTDISPLAY})) fg=${LACY_COLOR_NEUTRAL} memo=lacy")
         else
-            # User started typing — clear suggestion
+            # User started typing — clear ghost text, autosuggestions resumes
             LACY_SHELL_SUGGESTION=""
             POSTDISPLAY=""
             LACY_SHELL_OWN_POSTDISPLAY=false
@@ -178,10 +183,11 @@ lacy_shell_line_pre_redraw() {
 }
 
 # ZLE widget that runs when a new line of input starts — set up ghost text
-# before the first redraw so it's visible immediately
+# before the first pre-redraw so it's visible on the very first render.
+# Same POSTDISPLAY coexistence pattern as in lacy_shell_update_input_indicator.
 lacy_shell_line_init() {
     if [[ -n "$LACY_SHELL_SUGGESTION" && -z "$BUFFER" ]]; then
-        # Suppress zsh-autosuggestions so it doesn't overwrite POSTDISPLAY
+        # Suppress autosuggestions before claiming POSTDISPLAY (see file header)
         (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
         POSTDISPLAY="$LACY_SHELL_SUGGESTION"
         LACY_SHELL_OWN_POSTDISPLAY=true
@@ -497,7 +503,8 @@ lacy_shell_cleanup_keybindings() {
     zle -D _lacy_expand_or_accept 2>/dev/null
 }
 
-# Accept ghost text suggestion into buffer
+# Accept ghost text suggestion into buffer.
+# Called by right arrow and tab widgets below.
 _lacy_try_accept_suggestion() {
     if [[ -n "$LACY_SHELL_SUGGESTION" && -z "$BUFFER" ]]; then
         BUFFER="$LACY_SHELL_SUGGESTION"
@@ -505,15 +512,20 @@ _lacy_try_accept_suggestion() {
         LACY_SHELL_SUGGESTION=""
         POSTDISPLAY=""
         LACY_SHELL_OWN_POSTDISPLAY=false
-        return 0
+        return 0  # consumed — caller should NOT fall through
     fi
-    return 1
+    return 1  # no ghost text — caller should fall through to default widget
 }
 
+# Right arrow: accept Lacy ghost text if present, otherwise delegate to
+# forward-char (no dot prefix — lets autosuggestions' wrapper accept its
+# own suggestion). See file header for why the dot prefix matters.
 _lacy_forward_char_or_accept() {
     _lacy_try_accept_suggestion || zle forward-char
 }
 
+# Tab: accept Lacy ghost text if present, otherwise delegate to
+# expand-or-complete (no dot prefix — same reason as above).
 _lacy_expand_or_accept() {
     _lacy_try_accept_suggestion || zle expand-or-complete
 }
