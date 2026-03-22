@@ -218,9 +218,6 @@ lacy_shell_quit() {
     LACY_SHELL_LOADED=false
 }
 
-# lacy_shell_spinner, lacy_shell_clear_conversation, lacy_shell_show_conversation,
-# and lacy() are in lib/core/commands.sh
-
 # Define command functions (Bash uses functions, not aliases, for reliability)
 ask() { lacy_shell_query_agent "$*"; }
 mode() { lacy_shell_mode "$@"; }
