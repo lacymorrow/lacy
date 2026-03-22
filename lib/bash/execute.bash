@@ -104,39 +104,7 @@ lacy_shell_smart_accept_line_bash() {
     esac
 }
 
-# Execute command via AI agent
-lacy_shell_execute_agent() {
-    local query="$1"
-
-    if ! lacy_shell_query_agent "$query"; then
-        if [[ -z "$LACY_ACTIVE_TOOL" ]] && ! command -v lash >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; then
-            # No tool found at all
-            echo ""
-            lacy_print_color 196 "  No AI tool configured"
-            echo ""
-            lacy_print_color 238 "  Install one:  npm install -g lashcode"
-            lacy_print_color 238 "  Or configure: lacy setup"
-            echo ""
-        else
-            # Tool was found but failed — show recovery hints
-            local _tool="${LACY_ACTIVE_TOOL}"
-            if [[ -z "$_tool" ]]; then
-                local _t
-                for _t in lash claude opencode gemini codex; do
-                    if command -v "$_t" >/dev/null 2>&1; then
-                        _tool="$_t"
-                        break
-                    fi
-                done
-            fi
-            echo ""
-            lacy_print_color 238 "  Try: tool set <name>    Switch to a different tool"
-            lacy_print_color 238 "       ask \"your query\"   Send directly to agent"
-            lacy_print_color 238 "       lacy doctor        Diagnose issues"
-            echo ""
-        fi
-    fi
-}
+# lacy_shell_execute_agent is in lib/core/commands.sh
 
 # Precmd equivalent for Bash — called via PROMPT_COMMAND
 lacy_shell_precmd_bash() {
@@ -195,139 +163,8 @@ lacy_shell_precmd_bash() {
     lacy_shell_update_prompt
 }
 
-# Mode switching command (Bash version — uses printf instead of print -P)
-lacy_shell_mode() {
-    case "$1" in
-        "shell"|"s")
-            lacy_shell_set_mode "shell"
-            echo ""
-            printf '  \e[38;5;%dm%s\e[0m SHELL mode - all commands execute directly\n' "$LACY_COLOR_SHELL" "$LACY_INDICATOR_CHAR"
-            echo ""
-            ;;
-        "agent"|"a")
-            lacy_shell_set_mode "agent"
-            echo ""
-            printf '  \e[38;5;%dm%s\e[0m AGENT mode - all input goes to AI\n' "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR"
-            echo ""
-            ;;
-        "auto"|"u")
-            lacy_shell_set_mode "auto"
-            echo ""
-            printf '  \e[38;5;%dm%s\e[0m AUTO mode - smart detection\n' "$LACY_COLOR_AUTO" "$LACY_INDICATOR_CHAR"
-            echo ""
-            ;;
-        "toggle"|"t")
-            lacy_shell_toggle_mode
-            local new_mode="$LACY_SHELL_CURRENT_MODE"
-            echo ""
-            case "$new_mode" in
-                "shell") printf '  \e[38;5;%dm%s\e[0m SHELL mode\n' "$LACY_COLOR_SHELL" "$LACY_INDICATOR_CHAR" ;;
-                "agent") printf '  \e[38;5;%dm%s\e[0m AGENT mode\n' "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR" ;;
-                "auto")  printf '  \e[38;5;%dm%s\e[0m AUTO mode\n' "$LACY_COLOR_AUTO" "$LACY_INDICATOR_CHAR" ;;
-            esac
-            echo ""
-            ;;
-        "status")
-            lacy_shell_mode_status
-            ;;
-        *)
-            echo ""
-            echo "Usage: mode [shell|agent|auto|toggle|status]"
-            echo ""
-            echo -n "Current: "
-            case "$LACY_SHELL_CURRENT_MODE" in
-                "shell") printf '\e[38;5;%dmSHELL\e[0m\n' "$LACY_COLOR_SHELL" ;;
-                "agent") printf '\e[38;5;%dmAGENT\e[0m\n' "$LACY_COLOR_AGENT" ;;
-                "auto")  printf '\e[38;5;%dmAUTO\e[0m\n' "$LACY_COLOR_AUTO" ;;
-            esac
-            echo ""
-            echo "Colors:"
-            printf '  \e[38;5;%dm%s\e[0m Green  = shell command\n' "$LACY_COLOR_SHELL" "$LACY_INDICATOR_CHAR"
-            printf '  \e[38;5;%dm%s\e[0m Magenta = agent query\n' "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR"
-            echo ""
-            ;;
-    esac
-}
-
-# Tool management command (Bash version)
-lacy_shell_tool() {
-    case "$1" in
-        "")
-            echo ""
-            if [[ "$LACY_ACTIVE_TOOL" == "custom" ]]; then
-                echo "Active tool: custom (${LACY_CUSTOM_TOOL_CMD:-not configured})"
-            elif [[ -z "$LACY_ACTIVE_TOOL" ]]; then
-                local _detected=""
-                local _t
-                for _t in lash claude opencode gemini codex; do
-                    if command -v "$_t" >/dev/null 2>&1; then
-                        _detected="$_t"
-                        break
-                    fi
-                done
-                if [[ -n "$_detected" ]]; then
-                    echo "Active tool: auto-detect (using $_detected)"
-                else
-                    echo "Active tool: auto-detect (no tools found)"
-                fi
-            else
-                echo "Active tool: ${LACY_ACTIVE_TOOL}"
-            fi
-            echo ""
-            echo "Available tools:"
-            local t
-            for t in lash claude opencode gemini codex; do
-                if command -v "$t" >/dev/null 2>&1; then
-                    printf '  \e[38;5;34m✓\e[0m %s\n' "$t"
-                else
-                    printf '  \e[38;5;238m○\e[0m %s (not installed)\n' "$t"
-                fi
-            done
-            if [[ -n "$LACY_CUSTOM_TOOL_CMD" ]]; then
-                printf '  \e[38;5;34m✓\e[0m custom (%s)\n' "$LACY_CUSTOM_TOOL_CMD"
-            else
-                printf '  \e[38;5;238m○\e[0m custom (not configured)\n'
-            fi
-            echo ""
-            echo "Usage: tool set <name>"
-            echo "       tool set custom \"command -flags\""
-            echo ""
-            ;;
-        set)
-            if [[ -z "$2" ]]; then
-                echo "Usage: tool set <name>"
-                echo "Options: lash, claude, opencode, gemini, codex, custom, auto"
-                echo "  tool set custom \"command -flags\""
-                return 1
-            fi
-            if [[ "$2" == "auto" ]]; then
-                lacy_preheat_cleanup
-                LACY_ACTIVE_TOOL=""
-                export LACY_ACTIVE_TOOL
-                echo "Tool set to: auto-detect"
-            elif [[ "$2" == "custom" ]]; then
-                if [[ -z "$3" ]]; then
-                    echo "Usage: tool set custom \"command -flags\""
-                    return 1
-                fi
-                lacy_preheat_cleanup
-                LACY_ACTIVE_TOOL="custom"
-                LACY_CUSTOM_TOOL_CMD="$3"
-                export LACY_ACTIVE_TOOL LACY_CUSTOM_TOOL_CMD
-                echo "Tool set to: custom ($LACY_CUSTOM_TOOL_CMD)"
-            else
-                lacy_preheat_cleanup
-                LACY_ACTIVE_TOOL="$2"
-                export LACY_ACTIVE_TOOL
-                echo "Tool set to: $2"
-            fi
-            ;;
-        *)
-            echo "Usage: tool [set <name>]"
-            echo "Options: lash, claude, opencode, gemini, codex, custom, auto"
-            ;;
-    esac
-}
+# lacy_shell_mode, lacy_shell_tool, lacy_shell_spinner, lacy_shell_clear_conversation,
+# lacy_shell_show_conversation, and lacy() are in lib/core/commands.sh
 
 # Quit lacy shell
 lacy_shell_quit() {
@@ -336,7 +173,7 @@ lacy_shell_quit() {
     unset LACY_SHELL_ACTIVE
 
     echo ""
-    echo "Exiting Lacy Shell..."
+    lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_QUIT"
     echo ""
 
     # Remove our PROMPT_COMMAND entry
@@ -381,86 +218,8 @@ lacy_shell_quit() {
     LACY_SHELL_LOADED=false
 }
 
-# Conversation management
-lacy_shell_clear_conversation() {
-    rm -f "$LACY_SHELL_CONVERSATION_FILE"
-    echo "Conversation history cleared"
-}
-
-lacy_shell_show_conversation() {
-    if [[ -f "$LACY_SHELL_CONVERSATION_FILE" ]]; then
-        cat "$LACY_SHELL_CONVERSATION_FILE"
-    else
-        echo "No conversation history found"
-    fi
-}
-
-# Spinner animation command
-lacy_shell_spinner() {
-    case "$1" in
-        "")
-            echo ""
-            echo "Active spinner: ${LACY_SPINNER_STYLE:-braille}"
-            echo ""
-            echo "Available animations:"
-            lacy_list_spinner_animations
-            echo ""
-            echo "Usage: spinner set <name>"
-            echo "       spinner preview [name|all]"
-            echo ""
-            ;;
-        set)
-            if [[ -z "$2" ]]; then
-                echo "Usage: spinner set <name>"
-                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]} random"
-                return 1
-            fi
-            if [[ "$2" == "random" ]] || _lacy_in_list "$2" "${LACY_SPINNER_ANIMATIONS[@]}"; then
-                LACY_SPINNER_STYLE="$2"
-                export LACY_SPINNER_STYLE
-                echo "Spinner set to: $2"
-            else
-                echo "Unknown animation: $2"
-                echo "Available: ${LACY_SPINNER_ANIMATIONS[*]} random"
-                return 1
-            fi
-            ;;
-        preview)
-            if [[ "$2" == "all" ]]; then
-                echo "Previewing all animations (Ctrl+C to stop)"
-                echo ""
-                lacy_preview_all_spinners 5
-            else
-                local style="${2:-${LACY_SPINNER_STYLE:-braille}}"
-                if [[ "$style" != "random" ]] && ! _lacy_in_list "$style" "${LACY_SPINNER_ANIMATIONS[@]}"; then
-                    echo "Unknown animation: $style"
-                    return 1
-                fi
-                local _saved="$LACY_SPINNER_STYLE"
-                LACY_SPINNER_STYLE="$style"
-                echo "Previewing: $style (Ctrl+C to stop)"
-                lacy_start_spinner
-                sleep 3
-                lacy_stop_spinner
-                LACY_SPINNER_STYLE="$_saved"
-            fi
-            ;;
-        *)
-            echo "Usage: spinner [set <name> | preview [name|all]]"
-            ;;
-    esac
-}
-
-# Override lacy command to handle session subcommands without subprocess
-lacy() {
-    local cmd="${1:-}"
-    cmd="${cmd#/}"  # strip optional leading slash (/new → new)
-    case "$cmd" in
-        new|reset|clear) lacy_session_new ;;
-        resume)          lacy_session_resume ;;
-        *)               command lacy "$@" ;;
-    esac
-}
+# lacy_shell_spinner, lacy_shell_clear_conversation, lacy_shell_show_conversation,
+# and lacy() are in lib/core/commands.sh
 
 # Define command functions (Bash uses functions, not aliases, for reliability)
 ask() { lacy_shell_query_agent "$*"; }

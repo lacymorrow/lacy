@@ -3,10 +3,7 @@
 # Keybinding setup for Lacy Shell — Bash adapter
 # Uses bind -x for Enter override and Ctrl+Space toggle
 
-# Variables for double Ctrl-C detection
-LACY_SHELL_LAST_INTERRUPT_TIME=0
-LACY_SHELL_QUITTING=false
-LACY_SHELL_INPUT_TYPE=""
+# Interrupt state and input type are initialized in constants.sh
 
 # Track agent execution state for interrupt handling
 LACY_SHELL_AGENT_RUNNING=false
@@ -50,9 +47,9 @@ _lacy_ctrl_space_toggle() {
     local new_mode="$LACY_SHELL_CURRENT_MODE"
     # Print mode feedback above the prompt
     case "$new_mode" in
-        "shell") printf '\n  \e[38;5;%dm%s\e[0m SHELL mode' "$LACY_COLOR_SHELL" "$LACY_INDICATOR_CHAR" ;;
-        "agent") printf '\n  \e[38;5;%dm%s\e[0m AGENT mode' "$LACY_COLOR_AGENT" "$LACY_INDICATOR_CHAR" ;;
-        "auto")  printf '\n  \e[38;5;%dm%s\e[0m AUTO mode' "$LACY_COLOR_AUTO" "$LACY_INDICATOR_CHAR" ;;
+        "shell") printf '\n'; _lacy_print_indicator_msg "$LACY_COLOR_SHELL" "$LACY_MSG_MODE_SHELL_SHORT" ;;
+        "agent") printf '\n'; _lacy_print_indicator_msg "$LACY_COLOR_AGENT" "$LACY_MSG_MODE_AGENT_SHORT" ;;
+        "auto")  printf '\n'; _lacy_print_indicator_msg "$LACY_COLOR_AUTO" "$LACY_MSG_MODE_AUTO_SHORT" ;;
     esac
 
     # Restore the user's in-progress input
@@ -98,7 +95,7 @@ lacy_shell_interrupt_handler_bash() {
     else
         LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
         echo ""
-        echo "Press Ctrl-C again to quit"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_CTRL_C_HINT"
     fi
 }
 
