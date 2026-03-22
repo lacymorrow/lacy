@@ -38,6 +38,12 @@ Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and
 - ZSH: right prompt (`RPS1`) — `SHELL` (green) / `AGENT` (magenta) / `AUTO` (blue)
 - Bash: PS1 badge — `SHELL` / `AGENT` / `AUTO` with matching colors
 
+**Ghost text suggestions** (ZSH only, via `POSTDISPLAY`):
+
+- After a reroute candidate fails and the agent responds, a suggestion appears as gray ghost text on the next empty prompt
+- Right arrow or Tab accepts the suggestion into BUFFER
+- Typing any character clears it; autosuggestions resumes normally
+
 ## Auto Mode Logic
 
 In AUTO mode, routing is determined by:
@@ -163,7 +169,8 @@ All tools handle their own authentication - no API keys needed from lacy.
     │   ├── spinner.sh           # Loading spinner with shimmer text effect
     │   ├── mcp.sh               # Multi-tool routing (LACY_TOOL_CMD registry)
     │   ├── preheat.sh           # Agent preheating (background server, session reuse)
-    │   └── detection.sh         # classify_input(), has_nl_markers(), detect_natural_language()
+    │   ├── detection.sh         # classify_input(), has_nl_markers(), detect_natural_language()
+    │   └── commands.sh          # Shared command implementations (mode, tool, session, quit)
     ├── zsh/
     │   ├── keybindings.zsh      # Ctrl+Space toggle, indicator, first-word region_highlight
     │   ├── prompt.zsh           # Prompt with indicator, mode in right prompt
@@ -222,12 +229,16 @@ LACY_NO_NODE=1 bin/lacy setup
 - `mode [shell|agent|auto]` - Switch modes
 - `mode` - Show current mode and color legend
 - `tool` - Show active AI tool and available tools
-- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, custom, auto)
+- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, custom, auto) — persists to config.yaml
 - `tool set custom "cmd"` - Set a custom command as the AI tool
+- `/new` / `/reset` / `/clear` - Start a new conversation session
+- `/resume` - Resume the last saved session
 - `ask "question"` - Direct query to agent
 - `quit` / `stop` / `exit` - Exit lacy shell
 - `Ctrl+Space` - Toggle between modes
 - `Ctrl+C` (2x) - Quit
+
+Leading-slash commands (e.g. `/new`) are intercepted before shell execution and routed to the session handler. The slash is stripped and matched against known session commands.
 
 ## Key Files
 
@@ -236,8 +247,9 @@ LACY_NO_NODE=1 bin/lacy setup
 - `lib/core/mcp.sh` - `_lacy_run_tool_cmd()` safe executor, `lacy_tool_cmd()` registry, `lacy_shell_query_agent()` routing
 - `lib/core/config.sh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
 - `lib/core/spinner.sh` - Braille spinner + shimmer "Thinking" animation during AI queries
-- `lib/core/preheat.sh` - Background server (lash/opencode) + session reuse (claude)
-- `lib/zsh/execute.zsh` - `lacy_shell_tool()` command, routing logic, reroute candidates
+- `lib/core/preheat.sh` - Background server (lash/opencode) + session reuse (claude), `lacy_session_new()`, `lacy_session_resume()`
+- `lib/core/commands.sh` - Shared command implementations: mode, tool, session, quit (portable Bash 4+/ZSH)
+- `lib/zsh/execute.zsh` - `lacy_shell_tool()` command, routing logic, reroute candidates, slash-command interception
 - `lib/zsh/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
 - `install.sh` - Bash installer with npx fallback, interactive menu
 - `packages/lacy/index.mjs` - Node installer with @clack/prompts

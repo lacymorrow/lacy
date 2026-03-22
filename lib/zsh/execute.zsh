@@ -176,12 +176,22 @@ lacy_shell_precmd() {
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
         LACY_SHELL_PENDING_QUERY=""
-        # Restore query text on the prompt line above.
-        # accept-line cleared it (BUFFER was emptied to prevent shell execution),
-        # so we move up, rewrite the last prompt line + query, then move back down.
-        local prompt_last="${LACY_SHELL_BASE_PS1##*$'\n'}%F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f "
-        printf '\e[A\e[2K\r'
-        print -Pn "$prompt_last"
+        # Restore query text on the prompt block above.
+        # accept-line cleared the buffer (to prevent shell execution), so the
+        # prompt was displayed with no input text. Move up over the entire prompt
+        # (which may span multiple lines), clear it, and reprint with the query.
+        local _expanded_ps1
+        _expanded_ps1=$(print -Pn "$LACY_SHELL_BASE_PS1")
+        local _prompt_lines=1
+        local _tmp="$_expanded_ps1"
+        while [[ "$_tmp" == *$'\n'* ]]; do
+            _tmp="${_tmp#*$'\n'}"
+            (( _prompt_lines++ ))
+        done
+        # Move up to start of prompt block, clear to end of screen
+        printf "\e[${_prompt_lines}A\e[J"
+        # Reprint full prompt with agent-colored indicator + query text
+        print -Pn "${LACY_SHELL_BASE_PS1}%F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f "
         printf '%s\n' "$pending"
         lacy_shell_execute_agent "$pending"
     fi
