@@ -14,6 +14,15 @@ _lacy_print_indicator_msg() {
     echo " $msg"
 }
 
+# Check if any tool from LACY_TOOL_LIST is installed
+_lacy_is_any_tool_installed() {
+    local _t
+    for _t in "${LACY_TOOL_LIST[@]}"; do
+        command -v "$_t" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+
 # === Agent Execution ===
 
 # Execute command via AI agent — shows error hints on failure
@@ -21,7 +30,7 @@ lacy_shell_execute_agent() {
     local query="$1"
 
     if ! lacy_shell_query_agent "$query"; then
-        if [[ -z "$LACY_ACTIVE_TOOL" ]] && ! command -v lash >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; then
+        if [[ -z "$LACY_ACTIVE_TOOL" ]] && ! _lacy_is_any_tool_installed; then
             echo ""
             lacy_print_color 196 "$LACY_MSG_NO_TOOL"
             echo ""
