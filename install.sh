@@ -633,8 +633,8 @@ do_uninstall() {
     printf "${BLUE}Uninstalling Lacy Shell...${NC}\n"
     printf "\n"
 
-    # Check if installed
-    if [[ ! -d "$INSTALL_DIR" ]] && [[ ! -d "${HOME}/.lacy-shell" ]]; then
+    # Check if installed (directory, symlink, or old install path)
+    if [[ ! -d "$INSTALL_DIR" ]] && [[ ! -L "$INSTALL_DIR" ]] && [[ ! -d "${HOME}/.lacy-shell" ]]; then
         printf "${YELLOW}Lacy Shell is not installed${NC}\n"
         exit 0
     fi
@@ -645,8 +645,22 @@ do_uninstall() {
     _remove_from_rc "${HOME}/.bash_profile"
     _remove_from_rc "${HOME}/.config/fish/conf.d/lacy.fish"
 
+    # Detect Homebrew-managed install (symlink to Homebrew prefix)
+    local is_brew=false
+    if [[ -L "$INSTALL_DIR" ]]; then
+        local link_target
+        link_target=$(readlink "$INSTALL_DIR" 2>/dev/null || true)
+        if [[ "$link_target" == *"/Cellar/"* || "$link_target" == *"/homebrew/"* ]]; then
+            is_brew=true
+        fi
+    fi
+
     # Remove installation directories
-    if [[ -d "$INSTALL_DIR" ]]; then
+    if [[ -L "$INSTALL_DIR" ]]; then
+        printf "${BLUE}Removing $INSTALL_DIR symlink...${NC}\n"
+        rm -f "$INSTALL_DIR"
+        printf "  ${GREEN}✓${NC} Removed\n"
+    elif [[ -d "$INSTALL_DIR" ]]; then
         printf "${BLUE}Removing $INSTALL_DIR...${NC}\n"
         rm -rf "$INSTALL_DIR"
         printf "  ${GREEN}✓${NC} Removed\n"
@@ -655,6 +669,12 @@ do_uninstall() {
         printf "${BLUE}Removing ${HOME}/.lacy-shell...${NC}\n"
         rm -rf "${HOME}/.lacy-shell"
         printf "  ${GREEN}✓${NC} Removed\n"
+    fi
+
+    # If installed via Homebrew, uninstall the formula too
+    if [[ "$is_brew" == true ]] && command -v brew >/dev/null 2>&1; then
+        printf "${BLUE}Removing Homebrew formula...${NC}\n"
+        brew uninstall lacymorrow/tap/lacy 2>/dev/null && printf "  ${GREEN}✓${NC} Homebrew formula removed\n" || true
     fi
 
     printf "\n"
