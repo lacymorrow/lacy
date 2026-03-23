@@ -54,7 +54,7 @@ success() { printf "${GREEN}✓${NC} %s\n" "$1"; }
 warn() { printf "${YELLOW}%s${NC}\n" "$1"; }
 
 is_installed() {
-    [[ -d "$INSTALL_DIR" ]] || [[ -d "$INSTALL_DIR_OLD" ]]
+    [[ -d "$INSTALL_DIR" ]] || [[ -L "$INSTALL_DIR" ]] || [[ -d "$INSTALL_DIR_OLD" ]]
 }
 
 command_exists() {
@@ -194,14 +194,33 @@ cmd_uninstall() {
         fi
     done
 
-    # Remove install directories
-    if [[ -d "$INSTALL_DIR" ]]; then
+    # Detect Homebrew-managed install (symlink to Homebrew prefix)
+    local is_brew=false
+    if [[ -L "$INSTALL_DIR" ]]; then
+        local link_target
+        link_target=$(readlink "$INSTALL_DIR" 2>/dev/null || true)
+        if [[ "$link_target" == *"/Cellar/"* || "$link_target" == *"/homebrew/"* ]]; then
+            is_brew=true
+        fi
+    fi
+
+    # Remove ~/.lacy symlink or directory
+    if [[ -L "$INSTALL_DIR" ]]; then
+        rm -f "$INSTALL_DIR"
+        success "Removed $INSTALL_DIR symlink"
+    elif [[ -d "$INSTALL_DIR" ]]; then
         rm -rf "$INSTALL_DIR"
         success "Removed $INSTALL_DIR"
     fi
     if [[ -d "$INSTALL_DIR_OLD" ]]; then
         rm -rf "$INSTALL_DIR_OLD"
         success "Removed $INSTALL_DIR_OLD"
+    fi
+
+    # If installed via Homebrew, uninstall the formula too
+    if [[ "$is_brew" == true ]] && command_exists brew; then
+        info "Removing Homebrew formula..."
+        brew uninstall lacymorrow/tap/lacy 2>/dev/null && success "Homebrew formula removed" || true
     fi
 
     printf "\n${GREEN}Lacy Shell uninstalled.${NC}\n"
