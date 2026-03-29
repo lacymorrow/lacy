@@ -34,5 +34,15 @@
   "bugs": {
     "url": "https://github.com/lacymorrow/lacy/issues"
   },
-  "homepage": "https://lacy.sh"
+  "homepage": "https://lacy.sh",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/lacymorrow"
+    },
+    {
+      "type": "individual",
+      "url": "https://www.buymeacoffee.com/lm"
+    }
+  ]
 }
