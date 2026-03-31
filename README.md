@@ -181,6 +181,14 @@ The script handles the full release flow:
 3. Pushes to GitHub and creates a GitHub release
 4. Publishes the npm package (prompts for OTP if required)
 
+## Support This Project
+
+Lacy Shell is free and open source. If it saves you time, consider sponsoring the project:
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-❤-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/lacymorrow)
+
+Your support keeps development active and helps cover infrastructure costs.
+
 ## Contributing
 
 Contributions welcome! Check out the [issues](https://github.com/lacymorrow/lacy/issues) for good first issues, or open a new one.
