@@ -149,7 +149,7 @@ lacy_preheat_server_query() {
     fi
 
     local escaped_query
-    escaped_query=$(printf '%s' "$query" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr '\n' ' ')
+    escaped_query=$(_lacy_json_escape_str "$query")
 
     # Pass the current working directory on every message request.
     # lash/opencode wraps each request in Instance.provide({ directory }) so

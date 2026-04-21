@@ -4,7 +4,7 @@
 # Only sends what changed since the last agent query.
 # Shared across Bash 4+ and ZSH.
 
-# === State ===
+# === State: Delta Tracking ===
 _LACY_CTX_LAST_CWD=""
 _LACY_CTX_LAST_GIT=""
 _LACY_CTX_CMDS_SINCE_QUERY=0
@@ -14,6 +14,78 @@ _LACY_CTX_REAL_CMD=false
 # Command ring buffer — explicit array avoids agent queries leaking from fc/history
 _LACY_CTX_CMD_BUFFER=()
 _LACY_CTX_CMD_BUFFER_MAX=10
+
+# === State: Terminal Output Capture ===
+_LACY_CTX_TERMINAL_CAPTURE_CMD=""   # Detected at load time; empty = unsupported
+_LACY_CTX_OUTPUT_ENABLED=true       # Toggled via config (context.output)
+_LACY_CTX_OUTPUT_MAX_LINES=50       # Configurable cap (context.output_lines)
+
+# ============================================================================
+# Terminal Detection (called once at source time)
+# ============================================================================
+
+# Detect terminal emulator API for screen capture.
+# Sets _LACY_CTX_TERMINAL_CAPTURE_CMD to a command string, or empty if unsupported.
+_lacy_ctx_detect_terminal() {
+    _LACY_CTX_TERMINAL_CAPTURE_CMD=""
+
+    # Skip inside tmux/screen — terminal APIs return wrong content
+    [[ -n "${TMUX:-}" ]] && return
+    [[ -n "${STY:-}" ]] && return
+
+    # Kitty: remote control API
+    if [[ -n "${KITTY_PID:-}" ]] || [[ "${TERM_PROGRAM:-}" == "kitty" ]]; then
+        if command -v kitty >/dev/null 2>&1; then
+            _LACY_CTX_TERMINAL_CAPTURE_CMD="kitty @ get-text --extent=screen"
+            return
+        fi
+    fi
+
+    # WezTerm: CLI API
+    if [[ -n "${WEZTERM_EXECUTABLE:-}" ]] || [[ "${TERM_PROGRAM:-}" == "WezTerm" ]]; then
+        if command -v wezterm >/dev/null 2>&1; then
+            _LACY_CTX_TERMINAL_CAPTURE_CMD="wezterm cli get-text"
+            return
+        fi
+    fi
+}
+
+# ============================================================================
+# Screen Capture (called lazily at query time)
+# ============================================================================
+
+# Capture visible terminal screen text, stripped of ANSI escapes.
+# Returns captured text on stdout, or empty if unavailable/disabled.
+_lacy_ctx_capture_screen() {
+    [[ "$_LACY_CTX_OUTPUT_ENABLED" != true ]] && return
+    [[ -z "$_LACY_CTX_TERMINAL_CAPTURE_CMD" ]] && return
+
+    local raw_output
+    raw_output=$(eval "$_LACY_CTX_TERMINAL_CAPTURE_CMD" 2>/dev/null) || return
+
+    # Strip ANSI escape sequences (SGR, cursor movement, etc.)
+    local cleaned
+    cleaned=$(printf '%s\n' "$raw_output" | sed $'s/\x1b\[[0-9;]*[a-zA-Z]//g')
+
+    # Remove trailing blank lines
+    while [[ "$cleaned" == *$'\n' ]]; do
+        cleaned="${cleaned%$'\n'}"
+    done
+
+    [[ -z "$cleaned" ]] && return
+
+    # Truncate from the top, keeping the last N lines (errors are at the bottom)
+    local max_lines="${_LACY_CTX_OUTPUT_MAX_LINES:-50}"
+    if (( max_lines > 0 )); then
+        local line_count
+        line_count=$(printf '%s\n' "$cleaned" | wc -l)
+        if (( line_count > max_lines )); then
+            cleaned=$(printf '%s\n' "$cleaned" | tail -n "$max_lines")
+        fi
+    fi
+
+    printf '%s' "$cleaned"
+}
 
 # ============================================================================
 # Hooks (called from accept-line and precmd)
@@ -53,6 +125,7 @@ _lacy_ctx_on_precmd() {
 # Sets _LACY_CTX_RESULT to the enriched query (avoids subshell so state resets
 # propagate to the parent). If nothing changed, result is the bare query.
 # Format: [cwd: /path] [git: branch] [exit: 1] [recent: cmd1 | cmd2] query
+# With output: ...context header...\n[terminal-output]\n...\n[/terminal-output]\nquery
 # Usage: _lacy_build_query_context "$query"; query="$_LACY_CTX_RESULT"
 _LACY_CTX_RESULT=""
 
@@ -106,13 +179,27 @@ _lacy_build_query_context() {
         ctx+="[recent: ${cmds}] "
     fi
 
+    # --- Terminal screen output (lazy capture, only if commands ran) ---
+    local screen_output=""
+    if (( _LACY_CTX_CMDS_SINCE_QUERY > 0 )); then
+        screen_output=$(_lacy_ctx_capture_screen)
+    fi
+
     # --- Reset counters ---
     _LACY_CTX_CMDS_SINCE_QUERY=0
     _LACY_CTX_LAST_EXIT_CODE=0
     _LACY_CTX_CMD_BUFFER=()
 
     # --- Set result ---
-    _LACY_CTX_RESULT="${ctx}${query}"
+    if [[ -n "$screen_output" ]]; then
+        _LACY_CTX_RESULT="${ctx}
+[terminal-output]
+${screen_output}
+[/terminal-output]
+${query}"
+    else
+        _LACY_CTX_RESULT="${ctx}${query}"
+    fi
 }
 
 # ============================================================================
@@ -120,6 +207,7 @@ _lacy_build_query_context() {
 # ============================================================================
 
 # Clear all context state so the next query sends full context.
+# Does NOT reset terminal detection or config — those are session-lifetime.
 _lacy_ctx_reset() {
     _LACY_CTX_LAST_CWD=""
     _LACY_CTX_LAST_GIT=""
@@ -128,3 +216,9 @@ _lacy_ctx_reset() {
     _LACY_CTX_REAL_CMD=false
     _LACY_CTX_CMD_BUFFER=()
 }
+
+# ============================================================================
+# Init (runs once when sourced)
+# ============================================================================
+
+_lacy_ctx_detect_terminal

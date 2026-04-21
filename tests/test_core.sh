@@ -417,6 +417,70 @@ if [[ "$_current_branch" != "HEAD" ]]; then
 fi
 
 # ============================================================================
+# Terminal Output Context Tests
+# ============================================================================
+
+echo ""
+echo "--- Context: terminal output capture ---"
+
+# Save original state
+_saved_capture_cmd="$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+_saved_output_enabled="$_LACY_CTX_OUTPUT_ENABLED"
+
+# In test environment, no terminal emulator API is available
+assert_eq "no capture cmd in test env" "" "$_saved_capture_cmd"
+
+# Without capture cmd, no output block in context
+_LACY_CTX_TERMINAL_CAPTURE_CMD=""
+_LACY_CTX_OUTPUT_ENABLED=true
+_lacy_ctx_reset
+_lacy_ctx_mark_command "npm test"
+_lacy_ctx_on_precmd 1
+_lacy_build_query_context "why fail"
+result="$_LACY_CTX_RESULT"
+assert_true "no output block without capture" _str_not_contains "$result" "[terminal-output]"
+
+# Simulate capture by setting the variable to echo
+_LACY_CTX_TERMINAL_CAPTURE_CMD="echo 'Error: test failed'"
+_LACY_CTX_OUTPUT_ENABLED=true
+_lacy_ctx_reset
+# Burn cwd delta
+_lacy_build_query_context "burn"
+_lacy_ctx_mark_command "npm test"
+_lacy_ctx_on_precmd 1
+_lacy_build_query_context "why fail"
+result="$_LACY_CTX_RESULT"
+assert_true "output block present with capture" _str_contains "$result" "[terminal-output]"
+assert_true "output content present" _str_contains "$result" "Error: test failed"
+assert_true "output block closed" _str_contains "$result" "[/terminal-output]"
+
+# Disabled via config
+_LACY_CTX_OUTPUT_ENABLED=false
+_lacy_ctx_mark_command "npm test"
+_lacy_ctx_on_precmd 1
+_lacy_build_query_context "why fail disabled"
+result="$_LACY_CTX_RESULT"
+assert_true "no output when disabled" _str_not_contains "$result" "[terminal-output]"
+
+# No capture when no commands ran
+_LACY_CTX_OUTPUT_ENABLED=true
+_LACY_CTX_TERMINAL_CAPTURE_CMD="echo 'should not appear'"
+_lacy_ctx_reset
+_lacy_build_query_context "burn"
+_lacy_build_query_context "no commands ran"
+result="$_LACY_CTX_RESULT"
+assert_true "no output when no commands ran" _str_not_contains "$result" "[terminal-output]"
+
+# JSON escape helper
+assert_eq "json escape newlines" 'hello\nworld' "$(_lacy_json_escape_str $'hello\nworld')"
+assert_eq "json escape quotes" 'say \"hi\"' "$(_lacy_json_escape_str 'say "hi"')"
+assert_eq "json escape backslash" 'path\\to' "$(_lacy_json_escape_str 'path\to')"
+
+# Restore original state
+_LACY_CTX_TERMINAL_CAPTURE_CMD="$_saved_capture_cmd"
+_LACY_CTX_OUTPUT_ENABLED="$_saved_output_enabled"
+
+# ============================================================================
 # Results
 # ============================================================================
 
