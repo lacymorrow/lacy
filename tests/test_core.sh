@@ -113,6 +113,14 @@ assert_eq "how → agent" "agent" "$(lacy_shell_classify_input 'how')"
 assert_eq "no → agent" "agent" "$(lacy_shell_classify_input 'no')"
 assert_eq "nope → agent" "agent" "$(lacy_shell_classify_input 'nope')"
 
+# Agent words — with trailing punctuation
+assert_eq "why? → agent" "agent" "$(lacy_shell_classify_input 'why?')"
+assert_eq "how? → agent" "agent" "$(lacy_shell_classify_input 'how?')"
+assert_eq "no! → agent" "agent" "$(lacy_shell_classify_input 'no!')"
+assert_eq "yes. → agent" "agent" "$(lacy_shell_classify_input 'yes.')"
+assert_eq "sure! → agent" "agent" "$(lacy_shell_classify_input 'sure!')"
+assert_eq "do? → agent" "agent" "$(lacy_shell_classify_input 'do?')"
+
 # Agent words — multi-word
 assert_eq "what is this → agent" "agent" "$(lacy_shell_classify_input 'what is this')"
 assert_eq "yes lets go → agent" "agent" "$(lacy_shell_classify_input 'yes lets go')"
