@@ -29,6 +29,46 @@ CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 # Release channel (set via --beta, --channel, or LACY_CHANNEL env var)
 LACY_CHANNEL="${LACY_CHANNEL:-latest}"
 
+# Analytics — lightweight, anonymous install tracking via Umami
+# No PII collected. Respects DO_NOT_TRACK. See: https://umami.is
+UMAMI_URL="${LACY_UMAMI_URL:-https://analytics.lacy.sh}"
+UMAMI_WEBSITE_ID="${LACY_UMAMI_WEBSITE_ID:-577521d7-3db7-4a77-a45c-3c97f21b5322}"
+
+track_event() {
+    [[ "${DO_NOT_TRACK:-}" == "1" ]] && return
+    [[ "${LACY_NO_TELEMETRY:-}" == "1" ]] && return
+
+    local event_name="${1:-install}"
+    local method="${2:-curl}"
+    local version
+    version=$(get_installed_version)
+
+    (curl -sf --connect-timeout 3 --max-time 5 -X POST "${UMAMI_URL}/api/send" \
+        -H "Content-Type: application/json" \
+        -H "User-Agent: lacy-install/${version:-unknown}" \
+        -d "{
+            \"type\": \"event\",
+            \"payload\": {
+                \"hostname\": \"lacy.sh\",
+                \"language\": \"\",
+                \"referrer\": \"\",
+                \"screen\": \"\",
+                \"title\": \"Install\",
+                \"url\": \"/install/${method}\",
+                \"website\": \"${UMAMI_WEBSITE_ID}\",
+                \"name\": \"${event_name}\",
+                \"data\": {
+                    \"method\": \"${method}\",
+                    \"os\": \"$(uname -s 2>/dev/null || echo unknown)\",
+                    \"arch\": \"$(uname -m 2>/dev/null || echo unknown)\",
+                    \"shell\": \"${DETECTED_SHELL:-unknown}\",
+                    \"version\": \"${version:-unknown}\",
+                    \"channel\": \"${LACY_CHANNEL}\"
+                }
+            }
+        }" >/dev/null 2>&1 &)
+}
+
 # Validate channel — alphanumeric, hyphens, dots only
 if [[ ! "$LACY_CHANNEL" =~ ^[a-zA-Z0-9._-]+$ ]]; then
     printf "${RED}Invalid channel: %s${NC}\n" "$LACY_CHANNEL" >&2
@@ -407,6 +447,8 @@ install_plugin() {
     printf "${GREEN}✓ Lacy installed to $INSTALL_DIR${NC}"
     [[ -n "$version" ]] && printf " ${DIM}(v${version})${NC}"
     printf "\n\n"
+
+    track_event "install" "curl"
 }
 
 # Configure shell integration (multi-shell aware)
@@ -680,6 +722,8 @@ do_uninstall() {
     printf "\n"
     printf "${GREEN}Lacy Shell uninstalled${NC}\n"
 
+    track_event "uninstall" "curl"
+
     # Restart shell (reuse the safe TTY-aware function)
     detect_user_shell
     restart_shell
@@ -716,6 +760,7 @@ check_existing_installation() {
                     printf "${GREEN}✓ Lacy updated${NC}"
                     [[ -n "$updated_version" ]] && printf " ${DIM}(v${updated_version})${NC}"
                     printf "\n"
+                    track_event "update" "curl"
                     restart_shell
                 else
                     printf "${RED}Update failed. Try reinstalling.${NC}\n"

@@ -299,6 +299,108 @@ assert_eq "tool cmd claude" "claude -p" "$(lacy_tool_cmd 'claude')"
 assert_eq "tool cmd unknown" "" "$(lacy_tool_cmd 'unknown')"
 
 # ============================================================================
+# Context Tests
+# ============================================================================
+
+echo ""
+echo "--- Context: delta-based query context ---"
+
+source "$REPO_DIR/lib/core/context.sh"
+
+# Helper: check if string contains substring
+_str_contains() { [[ "$1" == *"$2"* ]]; }
+_str_not_contains() { [[ "$1" != *"$2"* ]]; }
+
+# Reset to known state
+_lacy_ctx_reset
+
+# First query — should include cwd (differs from empty string)
+_lacy_build_query_context "hello"
+result="$_LACY_CTX_RESULT"
+assert_true "first query includes cwd" _str_contains "$result" "[cwd: "
+assert_true "first query includes query" _str_contains "$result" "hello"
+
+# Second query, nothing changed — bare query
+_lacy_build_query_context "hello again"
+result="$_LACY_CTX_RESULT"
+assert_eq "no-change → bare query" "hello again" "$result"
+
+# Mark a command and trigger precmd
+_lacy_ctx_mark_command "npm test"
+_lacy_ctx_on_precmd 1
+
+# Query should include exit code and recent command
+_lacy_build_query_context "why did that fail"
+result="$_LACY_CTX_RESULT"
+assert_true "exit code included" _str_contains "$result" "[exit: 1]"
+assert_true "recent cmd included" _str_contains "$result" "[recent: npm test]"
+assert_true "query at end" _str_contains "$result" "why did that fail"
+
+# After building context, counters reset — next query should be bare
+_lacy_build_query_context "explain more"
+result="$_LACY_CTX_RESULT"
+assert_eq "after reset → bare query" "explain more" "$result"
+
+# Multiple commands between queries
+_lacy_ctx_mark_command "ls -la"
+_lacy_ctx_on_precmd 0
+_lacy_ctx_mark_command "cd /tmp"
+_lacy_ctx_on_precmd 0
+_lacy_ctx_mark_command "git status"
+_lacy_ctx_on_precmd 0
+
+_lacy_build_query_context "what happened"
+result="$_LACY_CTX_RESULT"
+assert_true "multiple cmds use pipe separator" _str_contains "$result" "ls -la | cd /tmp | git status"
+# Exit code 0 should NOT be included
+assert_true "exit 0 not included" _str_not_contains "$result" "[exit:"
+
+# Reset clears state — forces full context on next query
+_lacy_ctx_reset
+_lacy_build_query_context "hello after reset"
+result="$_LACY_CTX_RESULT"
+assert_true "after reset includes cwd" _str_contains "$result" "[cwd: "
+
+# Exit code only included when commands ran
+_lacy_ctx_reset
+# Simulate: no commands ran, but _LACY_CTX_LAST_EXIT_CODE might be stale
+_LACY_CTX_LAST_EXIT_CODE=1
+_LACY_CTX_CMDS_SINCE_QUERY=0
+_lacy_build_query_context "test stale exit"
+result="$_LACY_CTX_RESULT"
+# Should NOT include exit code since no commands ran
+assert_true "stale exit code not included" _str_not_contains "$result" "[exit:"
+
+# Command buffer cap at max
+_lacy_ctx_reset
+# Burn through the first-query cwd delta
+_lacy_build_query_context "burn"
+for i in $(seq 1 15); do
+    _lacy_ctx_mark_command "cmd$i"
+    _lacy_ctx_on_precmd 0
+done
+_lacy_build_query_context "check buffer cap"
+result="$_LACY_CTX_RESULT"
+# Should contain cmd6 through cmd15 (last 10), not cmd1-cmd5
+assert_true "old cmds trimmed (cmd5)" _str_not_contains "$result" "cmd5 |"
+assert_true "recent cmds kept" _str_contains "$result" "cmd15"
+
+# Detached HEAD — should show short hash, not literal "HEAD"
+_lacy_ctx_reset
+# Burn first-query delta
+_lacy_build_query_context "burn"
+# Simulate detached HEAD by checking the function handles it
+# (Can't easily detach HEAD in test, but verify the branch name is never "HEAD")
+_current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [[ "$_current_branch" != "HEAD" ]]; then
+    # Normal branch — git context should contain branch name
+    _lacy_ctx_reset
+    _lacy_build_query_context "test git"
+    result="$_LACY_CTX_RESULT"
+    assert_true "git branch in context" _str_contains "$result" "[git: $_current_branch]"
+fi
+
+# ============================================================================
 # Results
 # ============================================================================
 

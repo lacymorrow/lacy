@@ -76,6 +76,9 @@ lacy_shell_smart_accept_line() {
                 LACY_SHELL_REROUTE_CANDIDATE=""
             fi
 
+            # Record command for terminal context (agent will see it on next query)
+            _lacy_ctx_mark_command "$BUFFER"
+
             zle .accept-line
             return
             ;;
@@ -125,6 +128,9 @@ lacy_shell_enable_interception() {
 lacy_shell_precmd() {
     # Capture exit code immediately — must be the first line
     local last_exit=$?
+
+    # Track exit code for terminal context (only for real shell commands)
+    _lacy_ctx_on_precmd $last_exit
 
     # Ensure terminal state is clean (safety net for interrupted spinners / agent tools)
     printf '\e[?25h'   # Cursor visible

@@ -58,5 +58,8 @@ precmd_functions+=(lacy_shell_precmd)
 # Initialize
 lacy_shell_init
 
+# One-time install tracking (background, fail-silent)
+_lacy_track_first_load
+
 # Cleanup on exit
 trap lacy_shell_cleanup EXIT

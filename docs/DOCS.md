@@ -25,15 +25,30 @@ Supplement to [CLAUDE.md](../CLAUDE.md) (canonical reference) and [README.md](..
 
 ### ZSH Hooks
 
-- `accept-line` — Routes input based on mode; flags NL reroute candidates
+- `accept-line` — Routes input based on mode; flags NL reroute candidates; records shell commands for terminal context
 - `zle-line-pre-redraw` — Updates indicator color and first-word syntax highlighting
-- `precmd` — Captures `$?`, checks reroute candidates, dispatches deferred agent queries, updates prompt
+- `precmd` — Captures `$?` for terminal context, checks reroute candidates, dispatches deferred agent queries, updates prompt
 
 ### Bash Hooks
 
 - `\C-m` macro — `\C-x\C-l` (classification via `bind -x`) then `\C-j` (accept-line)
-- `PROMPT_COMMAND` — Captures `$?`, checks reroute candidates, dispatches deferred agent queries, updates PS1
+- `PROMPT_COMMAND` — Captures `$?` for terminal context, checks reroute candidates, dispatches deferred agent queries, updates PS1
 - `trap INT` — Double Ctrl+C detection
+
+---
+
+## Terminal Context
+
+Agent queries include delta-based terminal context (cwd, git branch, exit code, recent commands). Only changed state is sent — zero overhead when nothing changed between queries.
+
+| Context | Included when |
+|---------|--------------|
+| `[cwd: /path]` | Directory changed since last query |
+| `[git: branch]` | Git branch changed since last query |
+| `[exit: N]` | Last command exited non-zero AND a command ran since last query |
+| `[recent: cmd1 \| cmd2]` | Shell commands were run between queries (max 10, truncated at 80 chars) |
+
+Recent commands use an explicit buffer — not shell history — to avoid agent queries appearing in the context. Counters reset after each agent query. `/new` resets all context state.
 
 ---
 

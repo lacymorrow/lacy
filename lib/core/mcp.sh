@@ -320,12 +320,11 @@ lacy_shell_query_agent() {
     local query="$1"
     local tool="${LACY_ACTIVE_TOOL}"
 
-    # Prepend current working directory so the agent always knows where it is.
-    # Critical when using preheat (background server / claude session reuse) since
-    # those processes retain the directory context from where they were started.
-    local _cwd
-    _cwd=$(pwd 2>/dev/null)
-    # [[ -n "$_cwd" ]] && query="[cwd: $_cwd] $query"
+    # Prepend delta-based terminal context (cwd, git, exit code, recent commands).
+    # Only includes what changed since the last query — zero overhead when idle.
+    # Uses result variable (not subshell) so state resets propagate.
+    _lacy_build_query_context "$query"
+    query="$_LACY_CTX_RESULT"
 
     # Auto-detect if not set
     local _auto_detected=false
@@ -346,7 +345,6 @@ lacy_shell_query_agent() {
             local temp_file
             temp_file=$(mktemp)
             cat > "$temp_file" << EOF
-Current Directory: $(pwd)
 Query: $query
 EOF
             echo ""

@@ -116,6 +116,48 @@ const ALL_RC_FILES = [
   join(homedir(), ".config", "fish", "conf.d", "lacy.fish"),
 ];
 
+// ============================================================================
+// Analytics — lightweight, anonymous install tracking via Umami
+// No PII collected. Respects DO_NOT_TRACK. See: https://umami.is
+// ============================================================================
+
+const UMAMI_URL = process.env.LACY_UMAMI_URL || "https://analytics.lacy.sh";
+const UMAMI_WEBSITE_ID = process.env.LACY_UMAMI_WEBSITE_ID || "577521d7-3db7-4a77-a45c-3c97f21b5322";
+
+function trackEvent(eventName, method = "npx") {
+  if (process.env.DO_NOT_TRACK === "1" || process.env.LACY_NO_TELEMETRY === "1") return;
+
+  const version = getVersion();
+  fetch(`${UMAMI_URL}/api/send`, {
+    method: "POST",
+    signal: AbortSignal.timeout(5000),
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": `lacy-install/${version}`,
+    },
+    body: JSON.stringify({
+      type: "event",
+      payload: {
+        hostname: "lacy.sh",
+        language: "",
+        referrer: "",
+        screen: "",
+        title: "Install",
+        url: `/install/${method}`,
+        website: UMAMI_WEBSITE_ID,
+        name: eventName,
+        data: {
+          method,
+          os: process.platform,
+          arch: process.arch,
+          shell: detectShell(),
+          version,
+        },
+      },
+    }),
+  }).catch(() => {});
+}
+
 const TOOLS = [
   { value: "lash", label: "lash", hint: "AI coding agent — lash.lacy.sh (recommended)" },
   { value: "claude", label: "claude", hint: "Claude Code CLI" },
@@ -288,6 +330,8 @@ async function doUninstall({ askConfirm = true } = {}) {
   }
 
   removeSpinner.stop("Installation removed");
+
+  trackEvent("uninstall", "npx");
 
   p.log.success("Lacy Shell uninstalled");
 
@@ -630,6 +674,8 @@ auto_detection:
   // Re-read version after install (repo was just cloned/updated)
   const installedVersion = getVersion();
 
+  trackEvent("install", "npx");
+
   // Success message
   p.log.success(pc.green(`Installation complete!`) + pc.dim(` v${installedVersion}`));
 
@@ -917,6 +963,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           execSync("git pull origin main", { cwd: updateDir, stdio: "pipe" });
           const updatedVersion = getVersion();
           updateSpinner.stop(`Lacy updated to v${updatedVersion}`);
+          trackEvent("update", "npx");
           p.log.success("Update complete!");
           await restartShell();
           p.outro("Restart your terminal to apply changes.");
