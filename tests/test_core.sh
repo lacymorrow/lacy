@@ -476,6 +476,84 @@ assert_eq "json escape newlines" 'hello\nworld' "$(_lacy_json_escape_str $'hello
 assert_eq "json escape quotes" 'say \"hi\"' "$(_lacy_json_escape_str 'say "hi"')"
 assert_eq "json escape backslash" 'path\\to' "$(_lacy_json_escape_str 'path\to')"
 
+# --- Terminal detection priority tests ---
+echo ""
+echo "--- Context: terminal detection ---"
+
+# Save env vars we'll be modifying
+_saved_TMUX="${TMUX:-}"
+_saved_STY="${STY:-}"
+_saved_KITTY_PID="${KITTY_PID:-}"
+_saved_TERM_PROGRAM="${TERM_PROGRAM:-}"
+_saved_WEZTERM_EXECUTABLE="${WEZTERM_EXECUTABLE:-}"
+
+# Clean slate for detection tests
+unset TMUX STY KITTY_PID TERM_PROGRAM WEZTERM_EXECUTABLE 2>/dev/null
+
+# tmux detection: set TMUX, verify capture command
+TMUX="/tmp/tmux-test/default,12345,0"
+_lacy_ctx_detect_terminal
+assert_eq "tmux detected" "tmux capture-pane -p" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+unset TMUX
+
+# screen detection: set STY, verify helper function
+STY="12345.pts-0.host"
+_lacy_ctx_detect_terminal
+assert_eq "screen detected" "_lacy_ctx_screen_capture" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+unset STY
+
+# tmux takes priority over Kitty
+TMUX="/tmp/tmux-test/default,12345,0"
+KITTY_PID="99999"
+_lacy_ctx_detect_terminal
+assert_eq "tmux beats kitty" "tmux capture-pane -p" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+unset TMUX KITTY_PID
+
+# tmux takes priority over screen
+TMUX="/tmp/tmux-test/default,12345,0"
+STY="12345.pts-0.host"
+_lacy_ctx_detect_terminal
+assert_eq "tmux beats screen" "tmux capture-pane -p" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+unset TMUX STY
+
+# No env vars set -> no capture (in test env without real terminals)
+_lacy_ctx_detect_terminal
+assert_eq "no terminal no capture" "" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+
+# macOS iTerm2 detection (only runs on Darwin)
+if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
+    TERM_PROGRAM="iTerm.app"
+    _lacy_ctx_detect_terminal
+    assert_eq "iterm2 detected" "_lacy_ctx_iterm2_capture" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+    unset TERM_PROGRAM
+
+    TERM_PROGRAM="Apple_Terminal"
+    _lacy_ctx_detect_terminal
+    assert_eq "terminal.app detected" "_lacy_ctx_terminal_app_capture" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
+    unset TERM_PROGRAM
+fi
+
+# Capture via helper function works (simulate with a test function)
+_lacy_test_capture_func() { echo "captured via function"; }
+_LACY_CTX_TERMINAL_CAPTURE_CMD="_lacy_test_capture_func"
+_LACY_CTX_OUTPUT_ENABLED=true
+_lacy_ctx_reset
+_lacy_build_query_context "burn"
+_lacy_ctx_mark_command "make build"
+_lacy_ctx_on_precmd 1
+_lacy_build_query_context "what happened"
+result="$_LACY_CTX_RESULT"
+assert_true "function-based capture works" _str_contains "$result" "captured via function"
+assert_true "function capture has block" _str_contains "$result" "[terminal-output]"
+unset -f _lacy_test_capture_func
+
+# Restore env vars
+TMUX="$_saved_TMUX"; [[ -z "$TMUX" ]] && unset TMUX 2>/dev/null
+STY="$_saved_STY"; [[ -z "$STY" ]] && unset STY 2>/dev/null
+KITTY_PID="$_saved_KITTY_PID"; [[ -z "$KITTY_PID" ]] && unset KITTY_PID 2>/dev/null
+TERM_PROGRAM="$_saved_TERM_PROGRAM"; [[ -z "$TERM_PROGRAM" ]] && unset TERM_PROGRAM 2>/dev/null
+WEZTERM_EXECUTABLE="$_saved_WEZTERM_EXECUTABLE"; [[ -z "$WEZTERM_EXECUTABLE" ]] && unset WEZTERM_EXECUTABLE 2>/dev/null
+
 # Restore original state
 _LACY_CTX_TERMINAL_CAPTURE_CMD="$_saved_capture_cmd"
 _LACY_CTX_OUTPUT_ENABLED="$_saved_output_enabled"

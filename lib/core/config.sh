@@ -284,7 +284,7 @@ agent_tools:
 #   eager: false          # Start background server on plugin load
 #   server_port: 4096     # Port for background server
 
-# Terminal context: output capture from supported terminals (Kitty, WezTerm)
+# Terminal context: output capture (tmux, screen, Kitty, WezTerm, iTerm2, Terminal.app)
 # context:
 #   output: true          # Capture terminal screen at query time
 #   output_lines: 50      # Max lines to include (truncates from top)
