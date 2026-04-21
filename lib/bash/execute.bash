@@ -77,6 +77,9 @@ lacy_shell_smart_accept_line_bash() {
                 LACY_SHELL_REROUTE_CANDIDATE=""
             fi
 
+            # Record command for terminal context (agent will see it on next query)
+            _lacy_ctx_mark_command "$READLINE_LINE"
+
             # Let readline execute the command normally
             return
             ;;
@@ -110,6 +113,9 @@ lacy_shell_smart_accept_line_bash() {
 lacy_shell_precmd_bash() {
     # Capture exit code immediately
     _lacy_last_exit=$?
+
+    # Track exit code for terminal context (only for real shell commands)
+    _lacy_ctx_on_precmd $_lacy_last_exit
 
     # Ensure terminal state is clean
     printf '\e[?25h'   # Cursor visible

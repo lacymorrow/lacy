@@ -117,6 +117,30 @@ Analyzes a failed shell command's output to detect natural language. Returns 0 i
 
 Minimum 2 words required. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full algorithm.
 
+### `_lacy_build_query_context(query)` — Terminal Context for Agent Queries
+
+**File:** `lib/core/context.sh`
+
+Prepends delta-based terminal context (cwd, git branch, exit code, recent commands) to agent queries. Only includes what changed since the last query — zero overhead when nothing changed.
+
+**Format:** `[cwd: /path] [git: branch] [exit: 1] [recent: cmd1 | cmd2] <query>`
+
+**Delta tracking:**
+
+- CWD and git branch: compared against last-sent values, skipped if unchanged
+- Exit code: only included when non-zero AND a shell command ran since the last query
+- Recent commands: explicit ring buffer (max 10), not `fc`/`history` (avoids agent queries leaking)
+- Counters reset after each agent query — next query starts fresh
+
+**Hook chain:**
+
+1. `accept-line` routes to "shell" → `_lacy_ctx_mark_command($BUFFER)` records the command
+2. `precmd` fires → `_lacy_ctx_on_precmd($?)` captures exit code (only if `_LACY_CTX_REAL_CMD` flag is set)
+3. User types agent query → `_lacy_build_query_context()` builds delta, sets `_LACY_CTX_RESULT`, resets counters
+4. `/new` session → `_lacy_ctx_reset()` clears all state so next query sends full context
+
+**Why result variable, not stdout:** The function modifies global state (resets counters). Using `$()` subshell would lose those resets. `_LACY_CTX_RESULT` avoids the fork entirely.
+
 ## Plugin Coexistence (zsh-autosuggestions)
 
 Lacy shares two ZLE resources with `zsh-autosuggestions` (and potentially `zsh-syntax-highlighting`). Mishandling either causes visible bugs. Full design rationale is documented in the header of `lib/zsh/keybindings.zsh`.
@@ -169,6 +193,7 @@ All tools handle their own authentication - no API keys needed from lacy.
     │   ├── spinner.sh           # Loading spinner with shimmer text effect
     │   ├── mcp.sh               # Multi-tool routing (LACY_TOOL_CMD registry)
     │   ├── preheat.sh           # Agent preheating (background server, session reuse)
+    │   ├── context.sh           # Delta-based terminal context for agent queries
     │   ├── detection.sh         # classify_input(), has_nl_markers(), detect_natural_language()
     │   └── commands.sh          # Shared command implementations (mode, tool, session, quit)
     ├── zsh/
@@ -245,6 +270,7 @@ Leading-slash commands (e.g. `/new`) are intercepted before shell execution and 
 - `lib/core/constants.sh` - Colors, paths, `LACY_AGENT_WORDS`, `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS`
 - `lib/core/detection.sh` - **`lacy_shell_classify_input()`** (canonical), `lacy_shell_has_nl_markers()`, `lacy_shell_detect_natural_language()`
 - `lib/core/mcp.sh` - `_lacy_run_tool_cmd()` safe executor, `lacy_tool_cmd()` registry, `lacy_shell_query_agent()` routing
+- `lib/core/context.sh` - `_lacy_build_query_context()` delta-based terminal context, `_lacy_ctx_mark_command()`, `_lacy_ctx_on_precmd()`
 - `lib/core/config.sh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
 - `lib/core/spinner.sh` - Braille spinner + shimmer "Thinking" animation during AI queries
 - `lib/core/preheat.sh` - Background server (lash/opencode) + session reuse (claude), `lacy_session_new()`, `lacy_session_resume()`
