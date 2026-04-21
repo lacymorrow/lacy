@@ -299,6 +299,22 @@ assert_eq "tool cmd claude" "claude -p" "$(lacy_tool_cmd 'claude')"
 assert_eq "tool cmd unknown" "" "$(lacy_tool_cmd 'unknown')"
 
 # ============================================================================
+# Telemetry JSON Escaping Tests
+# ============================================================================
+
+echo ""
+echo "--- Telemetry: JSON escape ---"
+
+source "$REPO_DIR/lib/core/telemetry.sh" 2>/dev/null || true
+
+assert_eq "escape plain" "hello" "$(_lacy_json_escape_str 'hello')"
+assert_eq "escape double quote" 'say \"hi\"' "$(_lacy_json_escape_str 'say "hi"')"
+assert_eq "escape backslash" 'a\\b' "$(_lacy_json_escape_str 'a\b')"
+assert_eq "escape newline" 'line1\nline2' "$(_lacy_json_escape_str $'line1\nline2')"
+assert_eq "escape tab" 'a\tb' "$(_lacy_json_escape_str $'a\tb')"
+assert_eq "escape combo" 'q\"\\n' "$(_lacy_json_escape_str 'q"\n')"
+
+# ============================================================================
 # Context Tests
 # ============================================================================
 
