@@ -47,8 +47,16 @@ Agent queries include delta-based terminal context (cwd, git branch, exit code, 
 | `[git: branch]` | Git branch changed since last query |
 | `[exit: N]` | Last command exited non-zero AND a command ran since last query |
 | `[recent: cmd1 \| cmd2]` | Shell commands were run between queries (max 10, truncated at 80 chars) |
+| `[terminal-output]...[/terminal-output]` | Terminal screen capture (Kitty, WezTerm only — max 50 lines, ANSI stripped) |
 
-Recent commands use an explicit buffer — not shell history — to avoid agent queries appearing in the context. Counters reset after each agent query. `/new` resets all context state.
+Recent commands use an explicit buffer — not shell history — to avoid agent queries appearing in the context. Terminal output is captured lazily at query time via terminal emulator APIs (no execution overhead). Counters reset after each agent query. `/new` resets all context state.
+
+Configure via `~/.lacy/config.yaml`:
+```yaml
+context:
+  output: true          # Enable terminal screen capture (default: true)
+  output_lines: 50      # Max lines to include (default: 50)
+```
 
 ---
 

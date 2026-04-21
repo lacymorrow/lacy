@@ -95,6 +95,7 @@ lacy_shell_load_config() {
         local agent_map="command:LACY_SHELL_AGENT_COMMAND,context_mode:LACY_SHELL_AGENT_CONTEXT_MODE,needs_api_keys:LACY_SHELL_AGENT_NEEDS_API_KEYS"
         local agent_tools_map="active:LACY_ACTIVE_TOOL,custom_command:LACY_CUSTOM_TOOL_CMD"
         local preheat_map="eager:LACY_PREHEAT_EAGER,server_port:LACY_PREHEAT_SERVER_PORT"
+        local context_map="output:_LACY_CTX_OUTPUT_ENABLED,output_lines:_LACY_CTX_OUTPUT_MAX_LINES"
 
         # Track current section
         local current_section=""
@@ -113,6 +114,9 @@ lacy_shell_load_config() {
                 continue
             elif [[ "$line" =~ ^preheat: ]]; then
                 current_section="preheat"
+                continue
+            elif [[ "$line" =~ ^context: ]]; then
+                current_section="context"
                 continue
             elif [[ "$line" =~ ^agent: ]]; then
                 current_section="agent"
@@ -149,6 +153,9 @@ lacy_shell_load_config() {
                     "preheat")
                         lacy_shell_export_config_value "$key" "$value" "$preheat_map"
                         ;;
+                    "context")
+                        lacy_shell_export_config_value "$key" "$value" "$context_map"
+                        ;;
                 esac
             fi
         done < "$LACY_SHELL_CONFIG_FILE"
@@ -178,6 +185,8 @@ lacy_shell_load_config() {
             printf 'LACY_CUSTOM_TOOL_CMD=%q\n' "$LACY_CUSTOM_TOOL_CMD"
             printf 'LACY_SHELL_MCP_SERVERS=%q\n' "$LACY_SHELL_MCP_SERVERS"
             printf 'LACY_SHELL_MCP_SERVERS_JSON=%q\n' "$LACY_SHELL_MCP_SERVERS_JSON"
+            printf '_LACY_CTX_OUTPUT_ENABLED=%q\n' "${_LACY_CTX_OUTPUT_ENABLED:-true}"
+            printf '_LACY_CTX_OUTPUT_MAX_LINES=%q\n' "${_LACY_CTX_OUTPUT_MAX_LINES:-50}"
         } > "$LACY_SHELL_CONFIG_CACHE_FILE"
 
         LACY_CONFIG_CACHE_VALID=true
@@ -274,6 +283,11 @@ agent_tools:
 # preheat:
 #   eager: false          # Start background server on plugin load
 #   server_port: 4096     # Port for background server
+
+# Terminal context: output capture from supported terminals (Kitty, WezTerm)
+# context:
+#   output: true          # Capture terminal screen at query time
+#   output_lines: 50      # Max lines to include (truncates from top)
 
 # Agent CLI configuration (legacy)
 # Configure which CLI tool to use for AI queries
