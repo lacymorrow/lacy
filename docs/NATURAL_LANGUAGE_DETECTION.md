@@ -113,6 +113,14 @@ One of:
 
 ---
 
+### Trailing punctuation
+
+Trailing punctuation (`?`, `!`, `.`, `,`, `;`, `:`) is stripped from the first word before matching against agent words and reserved words. This ensures that `why?` routes to the agent just like `why`, and `do?` is recognized as the reserved word `do`.
+
+Punctuation is only stripped for word-list lookups — the original token (with punctuation) is still used for `command -v` checks, so real commands are unaffected.
+
+---
+
 ### Minimum word count
 
 Inputs with fewer than 2 words are always treated as real commands, even if they fail. Single-word inputs are handled by the agent words list (Layer 1) or treated as typos.
@@ -161,6 +169,7 @@ When natural language is detected, silently reroute the input to the agent. No u
 | `cargo ahead with the release`           | `cargo`     | 2     | Runs — "no such command" + "ahead" is NL — reroute              |
 | `RUST_LOG=debug cargo run`               | `RUST_LOG=…`| —     | Env var prefix — `cargo` is valid command — shell               |
 | `FOO=bar BAZ=qux node index.js`         | `FOO=…`     | —     | Multiple env var prefixes — `node` is valid — shell             |
+| `why?`                                   | `why?`→`why`| 1     | Trailing `?` stripped — matches agent word — route to agent     |
 | `ls -la`                                 | `ls`        | —     | Succeeds — no detection                                         |
 | `grep -r foo`                            | `grep`      | —     | May fail but error doesn't match NL heuristic                   |
 
