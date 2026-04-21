@@ -400,6 +400,9 @@ lacy_session_new() {
     LACY_PREHEAT_SERVER_SESSION_ID=""
     rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
 
+    # Reset terminal context so the next query sends full context
+    _lacy_ctx_reset
+
     # For server-based tools, pre-create a new session now (blocking)
     local tool
     tool=$(_lacy_get_current_tool)
