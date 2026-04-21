@@ -30,6 +30,7 @@ source "$LACY_SHELL_DIR/lib/core/mcp.sh"
 source "$LACY_SHELL_DIR/lib/core/preheat.sh"
 source "$LACY_SHELL_DIR/lib/core/detection.sh"
 source "$LACY_SHELL_DIR/lib/core/commands.sh"
+source "$LACY_SHELL_DIR/lib/core/telemetry.sh"
 
 # Source Bash-specific adapter modules
 source "$LACY_SHELL_DIR/lib/bash/keybindings.bash"

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__obs__get_obs_status",
+      "mcp__obs__list_tool_groups",
+      "mcp__obs__list_scenes",
+      "WebSearch",
+      "WebFetch(domain:syntax.fm)",
+      "WebFetch(domain:www.mux.com)",
+      "Bash(lsof:*)",
+      "Bash(/opt/homebrew/bin/bash:*)",
+      "Bash(npx next build:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:opencode.ai)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:opencodeguide.com)",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:geminicli.com)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "obs",
+    "dns-analytics"
+  ],
+  "enableAllProjectMcpServers": true
+}

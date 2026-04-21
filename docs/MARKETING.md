@@ -22,20 +22,20 @@ Show HN: Lacy Shell – Talk to your terminal. Commands run, questions go to AI
 ```
 Hi HN,
 
-I built Lacy, a ZSH/Bash plugin that detects whether you're typing a command or natural language and routes accordingly. Commands execute in your shell. Questions go to your AI agent. No prefix, no hotkey, no new terminal.
+I built Lacy, a ZSH/Bash plugin that figures out whether you're typing a command or asking a question, then sends it to the right place. Commands run in your shell. Questions go to your AI agent. You don't type a prefix or hit a hotkey. You just type.
 
-A real-time color indicator shows the routing before you press enter — green means shell, magenta means AI. The first word gets syntax-highlighted too. It updates on every keystroke.
+There's a color indicator next to your prompt that changes as you type — green means it'll run in the shell, magenta means it's headed to AI. The first word gets syntax-highlighted too. Updates every keystroke.
 
 How it decides:
 
 - `ls -la` → Shell (valid command, green)
 - `what files are here` → AI (natural language, magenta)
 - `do we have auth?` → AI (shell reserved words like "do", "in", "then" are never standalone commands)
-- `kill the process on 3000` → Shell first, then AI (valid command fails with NL patterns → silent reroute)
+- `kill the process on 3000` → Shell first, then AI (valid command fails with NL patterns, silent reroute)
 
-The detection is purely lexical — no AI call to classify input. It checks command validity, word counts, article/pronoun markers, and known error patterns. Sub-millisecond.
+No AI call to classify your input. It's pure lexical analysis — checks command validity, word counts, article/pronoun markers, and known error patterns. Sub-millisecond.
 
-It works with whatever AI CLI you already use: Claude Code, Gemini CLI, OpenCode, Codex, or Lash (my OpenCode fork). Lacy doesn't replace any of them — it's a routing layer that makes them all accessible without context switching.
+Works with whatever AI CLI you already have: Claude Code, Gemini CLI, OpenCode, Codex, or Lash (my OpenCode fork). Lacy doesn't replace any of them. It just makes them easier to reach.
 
 Install:
 
@@ -43,7 +43,7 @@ Install:
 
 Or: `brew install lacymorrow/tap/lacy` | `npx lacy`
 
-Works on macOS, Linux, WSL. ZSH and Bash 4+.
+macOS, Linux, WSL. ZSH and Bash 4+.
 
 Site: https://lacy.sh
 Source: https://github.com/lacymorrow/lacy
@@ -62,9 +62,9 @@ I made my terminal understand English.
 Type a command → it runs in your shell.
 Type a question → it goes to your AI agent.
 
-No prefix. No hotkey. No new app. Just type.
+No prefix. No hotkey. Just type.
 
-It's called Lacy Shell and it's free + open source.
+It's called Lacy Shell. Free and open source.
 
 https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-full.gif
 ```
@@ -75,28 +75,27 @@ The problem: every time you need AI help, you leave your terminal.
 
 Copy output. Switch to Claude/ChatGPT. Paste. Wait. Copy answer. Switch back. Paste.
 
-That loop breaks your flow 20+ times a day. Lacy kills it.
+I was doing that 20+ times a day. So I fixed it.
 ```
 
 **Tweet 3 (How it works):**
 ```
 How it works:
 
-A real-time color indicator updates as you type:
+A color indicator next to your prompt updates as you type:
 
 🟢 Green = shell command (runs normally)
 🟣 Magenta = natural language (goes to AI)
 
-No AI call to classify — it's pure lexical analysis. Sub-millisecond.
+No AI call to classify. Pure lexical analysis. Sub-millisecond.
 
 If a command fails with NL patterns, it silently reroutes to AI.
 ```
 
 **Tweet 4 (Tool agnostic):**
 ```
-Lacy doesn't replace your AI tool — it makes it better.
+Lacy works with whatever AI tool you already have.
 
-Works with:
 - Claude Code
 - Gemini CLI
 - OpenCode
@@ -104,7 +103,7 @@ Works with:
 - Lash
 - Any custom command
 
-It auto-detects what you have installed. Zero config.
+It auto-detects what's installed. You don't configure anything.
 ```
 
 **Tweet 5 (CTA):**
@@ -117,8 +116,8 @@ Also: brew install lacymorrow/tap/lacy
 
 ZSH + Bash 4+. macOS, Linux, WSL.
 
-Star it: github.com/lacymorrow/lacy
-Site: lacy.sh
+github.com/lacymorrow/lacy
+lacy.sh
 ```
 
 **Tags:** @AnthropicAI @GoogleDeepMind
@@ -131,69 +130,73 @@ Site: lacy.sh
 
 **Title:**
 ```
-I built a ZSH/Bash plugin that auto-routes natural language to AI agents
+I built a ZSH/Bash plugin that figures out if you're typing a command or talking to AI
 ```
 
 **Body:**
 ```
-I got tired of context-switching between my terminal and AI chat, so I built Lacy — a shell plugin that detects whether you're typing a command or natural language and routes accordingly.
+I kept doing the same thing over and over: run a command, realize I need AI help, alt-tab to Claude, paste context, get answer, alt-tab back. So I built a plugin that just... does this for me.
 
-**How it works:**
-- `git status` → runs in your shell (green indicator)
-- `what changed in the last commit` → goes to AI agent (magenta indicator)
-- `do we have a way to deploy?` → AI (shell reserved words are never standalone commands)
-- `make sure tests pass` → shell first → fails → silently reroutes to AI
+Lacy is a shell plugin that watches what you type and routes it. There's a color indicator next to your prompt that updates as you type. Green means the shell will run it, magenta means it's headed to your AI agent. You see what's going to happen before you hit enter.
 
-The detection is lexical, not AI-powered. It checks command validity, word patterns, and known error signatures. Real-time indicator updates on every keystroke so you know what will happen before you press enter.
+Examples:
+- `git status` → runs in your shell (green)
+- `what changed in the last commit` → goes to AI (magenta)
+- `do we have a way to deploy?` → AI (reserved words like `do` and `in` never appear as standalone commands)
+- `make sure tests pass` → shell tries it first, it fails, then silently reroutes to AI
 
-Works with Claude Code, Gemini CLI, OpenCode, Codex, Lash, or any custom command. Lacy auto-detects whatever you have installed.
+If something fails and looks like it was natural language, Lacy shows ghost text on the next prompt suggesting you retry through the agent. Right arrow or tab accepts it. Coexists fine with zsh-autosuggestions.
 
-**Install:**
+No AI call to classify your input. It checks `command -v`, word patterns, and known error messages. All local, sub-millisecond.
+
+Works with Claude Code, Gemini CLI, OpenCode, Codex, Lash, or a custom command you set. It checks what's installed on first run.
 
     curl -fsSL https://lacy.sh/install | bash
 
-Also available via Homebrew (`brew install lacymorrow/tap/lacy`) and npx.
+Also `brew install lacymorrow/tap/lacy` or `npx lacy`.
 
-ZSH and Bash 4+ on macOS, Linux, WSL. MIT licensed.
+ZSH and Bash 4+ on macOS, Linux, WSL. MIT licensed. I've been using it daily for a while, currently on v1.8.9.
 
-GitHub: https://github.com/lacymorrow/lacy
-Site: https://lacy.sh
+https://github.com/lacymorrow/lacy
 ```
 
 ### r/zsh
 
 **Title:**
 ```
-New ZSH plugin: transparent AI routing with real-time indicator and first-word syntax highlighting
+ZSH plugin that routes input to shell or AI agent, with real-time indicator and ghost text
 ```
 
 **Body:**
 ```
-Built a ZSH plugin (also supports Bash 4+) that adds transparent AI agent routing to your shell.
+I wrote a ZSH plugin (works in Bash 4+ too) that classifies your input and routes it to either the shell or an AI agent. The ZSH-specific bits ended up being the most interesting part, so figured I'd share here.
 
-**ZSH-specific features:**
+What it does:
 
-- **Real-time indicator** (left of prompt) changes color as you type: green for shell commands, magenta for AI queries
-- **First-word syntax highlighting** via `region_highlight` — updates on every `zle-line-pre-redraw`
-- **Right prompt mode badge** (`RPS1`) — shows SHELL/AGENT/AUTO with matching colors
-- **Ctrl+Space** toggles between modes via `zle` widget
-- **Smart accept-line** via custom `zle` widget — routes based on `lacy_shell_classify_input()`
+- Color indicator left of your prompt updates as you type: green for shell commands, magenta for AI queries
+- First word gets highlighted via `region_highlight` with `memo=lacy` tags, updates on `zle-line-pre-redraw`
+- Mode badge in `RPS1` (SHELL / AGENT / AUTO)
+- Ctrl+Space toggles modes via a custom `zle` widget
+- Custom accept-line widget for routing
+- Ghost text via `POSTDISPLAY`. When a reroute candidate fails, the next empty prompt shows a suggestion to retry through the agent. Right arrow or tab accepts.
 
-The classification is purely lexical — no network call. Checks `command -v`, word counts, article markers, shell reserved words. Sub-millisecond.
+Classification is all local, no network calls. Checks `command -v`, word counts, article/pronoun markers, reserved words. Sub-millisecond.
 
-**Auto mode routing rules:**
-1. Agent words (~150 conversational words) → AI
-2. Shell reserved words (`do`, `then`, `in`, `fi`) → AI (pass `command -v` but never standalone)
-3. Valid first word → Shell
-4. Single non-command word → Shell (let it error)
-5. Multiple words, first not a command → AI
-6. Valid command + NL args that fails → Shell, then reroute to AI
+How auto mode works:
+1. ~150 conversational words ("explain", "why", "thanks") → always AI
+2. Shell reserved words (`do`, `then`, `in`, `fi`) → AI. They pass `command -v` but nobody types `do` as a standalone command.
+3. First word is a valid command → shell
+4. Single word, not a command → shell (probably a typo, let it error)
+5. Multiple words, first word isn't a command → AI
+6. Valid command + natural language args, command fails → shell first, reroute to AI on failure
+
+The `zsh-autosuggestions` coexistence was the trickiest part. Lacy uses `memo=lacy` tags on `region_highlight` entries so it only removes its own highlights on redraw. For `POSTDISPLAY`, Lacy calls `_zsh_autosuggest_clear` before writing ghost text, and autosuggestions picks back up once the user starts typing. Right arrow and tab fall back to `zle forward-char` (not `.forward-char`) so autosuggestions' widget wrappers still fire.
 
 Works with Claude Code, Gemini CLI, OpenCode, Codex, or Lash.
 
-Install: `curl -fsSL https://lacy.sh/install | bash`
+`curl -fsSL https://lacy.sh/install | bash`
 
-Source: https://github.com/lacymorrow/lacy
+https://github.com/lacymorrow/lacy
 ```
 
 ---
@@ -400,6 +403,9 @@ Record with [vhs](https://github.com/charmbracelet/vhs), [asciinema](https://asc
 - [ ] Submit first awesome-list PR
 
 ### Week 2
-- [ ] Build SEO comparison pages on lacy.sh
+- [x] Build SEO comparison pages on lacy.sh (5 pages: vs Warp, ShellGPT, GitHub Copilot CLI, AI Shell, Amazon Q)
 - [ ] Submit remaining awesome-list PRs
 - [ ] Begin Product Hunt prep
+
+### Ongoing
+- See `docs/GROWTH-STRATEGY.md` for the full sustained growth plan
