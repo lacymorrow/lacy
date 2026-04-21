@@ -71,6 +71,10 @@ _lacy_build_query_context() {
     local git_branch=""
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         git_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+        # Detached HEAD returns literal "HEAD" — fall back to short hash
+        if [[ "$git_branch" == "HEAD" ]]; then
+            git_branch=$(git rev-parse --short HEAD 2>/dev/null)
+        fi
     fi
     if [[ "$git_branch" != "$_LACY_CTX_LAST_GIT" ]]; then
         if [[ -n "$git_branch" ]]; then

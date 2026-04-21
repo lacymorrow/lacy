@@ -127,7 +127,7 @@ Prepends delta-based terminal context (cwd, git branch, exit code, recent comman
 
 **Delta tracking:**
 
-- CWD and git branch: compared against last-sent values, skipped if unchanged
+- CWD and git branch: compared against last-sent values, skipped if unchanged. Detached HEAD shows short commit hash instead of literal "HEAD"
 - Exit code: only included when non-zero AND a shell command ran since the last query
 - Recent commands: explicit ring buffer (max 10), not `fc`/`history` (avoids agent queries leaking)
 - Counters reset after each agent query — next query starts fresh

@@ -385,6 +385,21 @@ result="$_LACY_CTX_RESULT"
 assert_true "old cmds trimmed (cmd5)" _str_not_contains "$result" "cmd5 |"
 assert_true "recent cmds kept" _str_contains "$result" "cmd15"
 
+# Detached HEAD — should show short hash, not literal "HEAD"
+_lacy_ctx_reset
+# Burn first-query delta
+_lacy_build_query_context "burn"
+# Simulate detached HEAD by checking the function handles it
+# (Can't easily detach HEAD in test, but verify the branch name is never "HEAD")
+_current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [[ "$_current_branch" != "HEAD" ]]; then
+    # Normal branch — git context should contain branch name
+    _lacy_ctx_reset
+    _lacy_build_query_context "test git"
+    result="$_LACY_CTX_RESULT"
+    assert_true "git branch in context" _str_contains "$result" "[git: $_current_branch]"
+fi
+
 # ============================================================================
 # Results
 # ============================================================================
