@@ -8,17 +8,15 @@ readonly _LACY_UMAMI_URL="${LACY_UMAMI_URL:-https://analytics.lacy.sh}"
 readonly _LACY_UMAMI_WEBSITE_ID="${LACY_UMAMI_WEBSITE_ID:-577521d7-3db7-4a77-a45c-3c97f21b5322}"
 readonly _LACY_TELEMETRY_FLAG="${LACY_SHELL_HOME}/.telemetry_sent"
 
-# Escape a string for safe JSON embedding — handles \, ", and control chars.
-# Usage: escaped=$(_lacy_json_escape_str "$value")
-_lacy_json_escape_str() {
-    local s="$1"
-    s="${s//\\/\\\\}"   # \ → \\
-    s="${s//\"/\\\"}"   # " → \"
-    s="${s//$'\n'/\\n}" # newline → \n
-    s="${s//$'\r'/\\r}" # carriage return → \r
-    s="${s//$'\t'/\\t}" # tab → \t
-    printf '%s' "$s"
-}
+# _lacy_json_escape_str is defined in constants.sh (shared helper).
+# Guard: define here only if not already available (e.g., standalone sourcing).
+if ! command -v _lacy_json_escape_str >/dev/null 2>&1; then
+    _lacy_json_escape_str() {
+        local s="$1"
+        s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+        printf '%s' "$s"
+    }
+fi
 
 # Send a tracking event to Umami (background, fail-silent)
 _lacy_track_event() {

@@ -336,3 +336,15 @@ _lacy_jobctl_on() {
         LACY_JOBCTL_WAS_SET=""
     fi
 }
+
+# Escape a string for safe JSON embedding — handles \, ", and control chars.
+# Usage: escaped=$(_lacy_json_escape_str "$value")
+_lacy_json_escape_str() {
+    local s="$1"
+    s="${s//\\/\\\\}"   # \ → \\
+    s="${s//\"/\\\"}"   # " → \"
+    s="${s//$'\n'/\\n}" # newline → \n
+    s="${s//$'\r'/\\r}" # carriage return → \r
+    s="${s//$'\t'/\\t}" # tab → \t
+    printf '%s' "$s"
+}

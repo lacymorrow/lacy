@@ -68,7 +68,7 @@ The first word of your input is also syntax-highlighted in real-time: **green** 
 
 **Smart rerouting** (auto mode): When a valid command contains natural language patterns (3+ bare words with articles, pronouns, etc.) and fails, lacy shows a hint and automatically re-sends it to the AI agent. Shell reserved words like `do`, `then`, `in`, `else` are routed directly to the agent — they pass `command -v` but are never standalone commands.
 
-**Terminal context**: When you ask the AI a question, lacy automatically includes your current directory, git branch, recent commands, and exit codes — but only what changed since your last query. Ask "why did that fail?" and the agent already knows what you ran.
+**Terminal context**: When you ask the AI a question, lacy automatically includes your current directory, git branch, recent commands, and exit codes — but only what changed since your last query. In supported terminals (Kitty, WezTerm), it also captures the visible screen output. Ask "why did that fail?" and the agent sees the error message.
 
 ## Modes
 

@@ -669,7 +669,7 @@ lacy_shell_query_openai() {
     local input_file="$1"
     local api_key="$2"
     local content
-    content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+    content=$(_lacy_json_escape_str "$(cat "$input_file")")
 
     local response
     response=$(curl -s -H "Content-Type: application/json" \
@@ -684,7 +684,7 @@ lacy_shell_query_anthropic() {
     local input_file="$1"
     local api_key="$2"
     local content
-    content=$(cat "$input_file" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+    content=$(_lacy_json_escape_str "$(cat "$input_file")")
 
     local response
     response=$(curl -s -H "Content-Type: application/json" \
