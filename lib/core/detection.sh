@@ -123,12 +123,30 @@ lacy_shell_classify_input() {
     fi
 
     # Auto mode: check special cases and commands
-    # Extract first token respecting backslash-escaped spaces (e.g., /path/to/Google\ Chrome)
-    local _esc_input="${input//\\ /$'\x01'}"
-    local first_word="${_esc_input%% *}"
-    first_word="${first_word//$'\x01'/\\ }"
-    # Un-escaped version for command -v lookups (backslash-space → space)
-    local first_word_cmd="${first_word//\\ / }"
+    # Extract first token respecting:
+    #   - backslash-escaped spaces: /path/to/Google\ Chrome
+    #   - double-quoted paths: "/Applications/Google Chrome.app/..."
+    #   - single-quoted paths: '/Applications/Google Chrome.app/...'
+    local first_word first_word_cmd
+    if [[ "$input" == \"* ]]; then
+        # Double-quoted first token: extract up to closing quote
+        local _after="${input#\"}"
+        first_word="\"${_after%%\"*}\""
+        # Strip quotes for command -v lookup
+        first_word_cmd="${_after%%\"*}"
+    elif [[ "$input" == \'* ]]; then
+        # Single-quoted first token: extract up to closing quote
+        local _after="${input#\'}"
+        first_word="'${_after%%\'*}'"
+        first_word_cmd="${_after%%\'*}"
+    else
+        # Backslash-escaped spaces
+        local _esc_input="${input//\\ /$'\x01'}"
+        first_word="${_esc_input%% *}"
+        first_word="${first_word//$'\x01'/\\ }"
+        # Un-escaped version for command -v lookups (backslash-space → space)
+        first_word_cmd="${first_word//\\ / }"
+    fi
     local first_word_lower
     first_word_lower=$(_lacy_lowercase "$first_word_cmd")
 
@@ -222,7 +240,10 @@ lacy_shell_classify_input() {
 
     # Single word that's not a command = probably a typo -> shell
     # Multiple words with non-command first word = natural language -> agent
-    if [[ "$_esc_input" != *" "* ]]; then
+    # Check if there's anything after the first token
+    local _rest_after_first="${input#"$first_word"}"
+    _rest_after_first="${_rest_after_first#"${_rest_after_first%%[^[:space:]]*}"}"
+    if [[ -z "$_rest_after_first" ]]; then
         echo "shell"
     else
         echo "agent"
@@ -341,6 +362,10 @@ lacy_shell_test_detection() {
         # Backslash-escaped spaces in paths
         "/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222"
         "./my\\ script.sh --flag"
+        # Quoted paths with spaces
+        '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222'
+        "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --flag"
+        '"/usr/local/bin/my tool"'
         # @ agent bypass
         "@ make sure the tests pass"
         "@fix the bug in auth"
