@@ -150,9 +150,15 @@ lacy_shell_classify_input() {
     local first_word_lower
     first_word_lower=$(_lacy_lowercase "$first_word_cmd")
 
+    # Strip trailing punctuation for word-list lookups (e.g., "why?" → "why")
+    local first_word_stripped="$first_word_lower"
+    while [[ -n "$first_word_stripped" && "$first_word_stripped" == *[?.,\;:!] ]]; do
+        first_word_stripped="${first_word_stripped%?}"
+    done
+
     # Layer 1a: Shell reserved words pass `command -v` but are never valid
     # standalone commands. Route to agent. (see docs/NATURAL_LANGUAGE_DETECTION.md)
-    if _lacy_in_list "$first_word_lower" "${LACY_SHELL_RESERVED_WORDS[@]}"; then
+    if _lacy_in_list "$first_word_stripped" "${LACY_SHELL_RESERVED_WORDS[@]}"; then
         echo "agent"
         return
     fi
@@ -164,7 +170,7 @@ lacy_shell_classify_input() {
     # argument (after flags/paths/numbers) that is not an NL marker.
     # Examples: `which python` → shell, `yes | cmd` → shell
     #           `which version to use` → agent, `yes lets go` → agent
-    if _lacy_in_list "$first_word_lower" "${LACY_AGENT_WORDS[@]}"; then
+    if _lacy_in_list "$first_word_stripped" "${LACY_AGENT_WORDS[@]}"; then
         if lacy_shell_is_valid_command "$first_word_cmd"; then
             # Shell operators anywhere → shell
             local _op
