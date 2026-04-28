@@ -85,8 +85,9 @@ _lacy_ctx_detect_terminal() {
 
 # screen: hardcopy writes to a file, not stdout
 _lacy_ctx_screen_capture() {
-    local tmpfile="/tmp/lacy_screen_$$"
-    screen -X hardcopy "$tmpfile" 2>/dev/null || return
+    local tmpfile
+    tmpfile=$(mktemp) || return
+    screen -X hardcopy "$tmpfile" 2>/dev/null || { rm -f "$tmpfile"; return; }
     cat "$tmpfile" 2>/dev/null
     rm -f "$tmpfile" 2>/dev/null
 }
