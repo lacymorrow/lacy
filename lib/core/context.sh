@@ -24,16 +24,33 @@ _LACY_CTX_OUTPUT_MAX_LINES=50       # Configurable cap (context.output_lines)
 # Terminal Detection (called once at source time)
 # ============================================================================
 
-# Detect terminal emulator API for screen capture.
-# Sets _LACY_CTX_TERMINAL_CAPTURE_CMD to a command string, or empty if unsupported.
+# Detect terminal/multiplexer API for screen capture.
+# Sets _LACY_CTX_TERMINAL_CAPTURE_CMD to a command string (or function name),
+# or empty if unsupported. Checked once at source time.
+#
+# Priority: tmux > screen > Kitty > WezTerm > iTerm2 > Terminal.app
+# Multiplexers are checked first because terminal emulator APIs return wrong
+# content when running inside a multiplexer.
 _lacy_ctx_detect_terminal() {
     _LACY_CTX_TERMINAL_CAPTURE_CMD=""
 
-    # Skip inside tmux/screen — terminal APIs return wrong content
-    [[ -n "${TMUX:-}" ]] && return
-    [[ -n "${STY:-}" ]] && return
+    # 1. tmux: native pane capture (takes priority over terminal APIs)
+    if [[ -n "${TMUX:-}" ]]; then
+        if command -v tmux >/dev/null 2>&1; then
+            _LACY_CTX_TERMINAL_CAPTURE_CMD="tmux capture-pane -p"
+            return
+        fi
+    fi
 
-    # Kitty: remote control API
+    # 2. screen: hardcopy to temp file
+    if [[ -n "${STY:-}" ]]; then
+        if command -v screen >/dev/null 2>&1; then
+            _LACY_CTX_TERMINAL_CAPTURE_CMD="_lacy_ctx_screen_capture"
+            return
+        fi
+    fi
+
+    # 3. Kitty: remote control API
     if [[ -n "${KITTY_PID:-}" ]] || [[ "${TERM_PROGRAM:-}" == "kitty" ]]; then
         if command -v kitty >/dev/null 2>&1; then
             _LACY_CTX_TERMINAL_CAPTURE_CMD="kitty @ get-text --extent=screen"
@@ -41,13 +58,48 @@ _lacy_ctx_detect_terminal() {
         fi
     fi
 
-    # WezTerm: CLI API
+    # 4. WezTerm: CLI API
     if [[ -n "${WEZTERM_EXECUTABLE:-}" ]] || [[ "${TERM_PROGRAM:-}" == "WezTerm" ]]; then
         if command -v wezterm >/dev/null 2>&1; then
             _LACY_CTX_TERMINAL_CAPTURE_CMD="wezterm cli get-text"
             return
         fi
     fi
+
+    # 5-6. macOS: AppleScript for iTerm2 and Terminal.app
+    if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
+        if [[ "${TERM_PROGRAM:-}" == "iTerm.app" ]]; then
+            _LACY_CTX_TERMINAL_CAPTURE_CMD="_lacy_ctx_iterm2_capture"
+            return
+        fi
+        if [[ "${TERM_PROGRAM:-}" == "Apple_Terminal" ]]; then
+            _LACY_CTX_TERMINAL_CAPTURE_CMD="_lacy_ctx_terminal_app_capture"
+            return
+        fi
+    fi
+}
+
+# ============================================================================
+# Capture Helpers (multi-step captures that can't be a single command)
+# ============================================================================
+
+# screen: hardcopy writes to a file, not stdout
+_lacy_ctx_screen_capture() {
+    local tmpfile
+    tmpfile=$(mktemp) || return
+    screen -X hardcopy "$tmpfile" 2>/dev/null || { rm -f "$tmpfile"; return; }
+    cat "$tmpfile" 2>/dev/null
+    rm -f "$tmpfile" 2>/dev/null
+}
+
+# iTerm2: AppleScript to get current session contents
+_lacy_ctx_iterm2_capture() {
+    osascript -e 'tell application "iTerm2" to tell current session of current window to get contents' 2>/dev/null
+}
+
+# Terminal.app: AppleScript to get current tab contents
+_lacy_ctx_terminal_app_capture() {
+    osascript -e 'tell application "Terminal" to get contents of selected tab of front window' 2>/dev/null
 }
 
 # ============================================================================

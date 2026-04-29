@@ -125,7 +125,7 @@ Prepends delta-based terminal context (cwd, git branch, exit code, recent comman
 
 **Format:** `[cwd: /path] [git: branch] [exit: 1] [recent: cmd1 | cmd2] <query>`
 
-**With terminal output** (Kitty/WezTerm):
+**With terminal output** (tmux, screen, Kitty, WezTerm, iTerm2, Terminal.app):
 ```
 [cwd: /path] [exit: 1] [recent: npm test]
 [terminal-output]
@@ -139,7 +139,7 @@ why did that fail?
 - CWD and git branch: compared against last-sent values, skipped if unchanged. Detached HEAD shows short commit hash instead of literal "HEAD"
 - Exit code: only included when non-zero AND a shell command ran since the last query
 - Recent commands: explicit ring buffer (max 10), not `fc`/`history` (avoids agent queries leaking)
-- Terminal output: lazy screen capture via terminal API at query time (Kitty, WezTerm). Stripped of ANSI escapes, capped at 50 lines (configurable via `context.output_lines`). Skipped inside tmux/screen.
+- Terminal output: lazy screen capture via terminal/multiplexer API at query time (tmux, screen, Kitty, WezTerm, iTerm2, Terminal.app). Stripped of ANSI escapes, capped at 50 lines (configurable via `context.output_lines`). tmux/screen checked first since terminal emulator APIs return wrong content inside multiplexers.
 - Counters reset after each agent query — next query starts fresh
 
 **Hook chain:**
