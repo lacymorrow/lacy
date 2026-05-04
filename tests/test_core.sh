@@ -483,12 +483,10 @@ echo "--- Context: terminal detection ---"
 # Save env vars we'll be modifying
 _saved_TMUX="${TMUX:-}"
 _saved_STY="${STY:-}"
-_saved_KITTY_PID="${KITTY_PID:-}"
 _saved_TERM_PROGRAM="${TERM_PROGRAM:-}"
-_saved_WEZTERM_EXECUTABLE="${WEZTERM_EXECUTABLE:-}"
 
 # Clean slate for detection tests
-unset TMUX STY KITTY_PID TERM_PROGRAM WEZTERM_EXECUTABLE 2>/dev/null
+unset TMUX STY TERM_PROGRAM 2>/dev/null
 
 # tmux detection: set TMUX, verify capture command
 TMUX="/tmp/tmux-test/default,12345,0"
@@ -501,13 +499,6 @@ STY="12345.pts-0.host"
 _lacy_ctx_detect_terminal
 assert_eq "screen detected" "_lacy_ctx_screen_capture" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
 unset STY
-
-# tmux takes priority over Kitty
-TMUX="/tmp/tmux-test/default,12345,0"
-KITTY_PID="99999"
-_lacy_ctx_detect_terminal
-assert_eq "tmux beats kitty" "tmux capture-pane -p" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
-unset TMUX KITTY_PID
 
 # tmux takes priority over screen
 TMUX="/tmp/tmux-test/default,12345,0"
@@ -550,9 +541,7 @@ unset -f _lacy_test_capture_func
 # Restore env vars
 TMUX="$_saved_TMUX"; [[ -z "$TMUX" ]] && unset TMUX 2>/dev/null
 STY="$_saved_STY"; [[ -z "$STY" ]] && unset STY 2>/dev/null
-KITTY_PID="$_saved_KITTY_PID"; [[ -z "$KITTY_PID" ]] && unset KITTY_PID 2>/dev/null
 TERM_PROGRAM="$_saved_TERM_PROGRAM"; [[ -z "$TERM_PROGRAM" ]] && unset TERM_PROGRAM 2>/dev/null
-WEZTERM_EXECUTABLE="$_saved_WEZTERM_EXECUTABLE"; [[ -z "$WEZTERM_EXECUTABLE" ]] && unset WEZTERM_EXECUTABLE 2>/dev/null
 
 # Restore original state
 _LACY_CTX_TERMINAL_CAPTURE_CMD="$_saved_capture_cmd"

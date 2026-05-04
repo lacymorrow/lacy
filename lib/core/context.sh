@@ -28,7 +28,7 @@ _LACY_CTX_OUTPUT_MAX_LINES=50       # Configurable cap (context.output_lines)
 # Sets _LACY_CTX_TERMINAL_CAPTURE_CMD to a command string (or function name),
 # or empty if unsupported. Checked once at source time.
 #
-# Priority: tmux > screen > Kitty > WezTerm > iTerm2 > Terminal.app
+# Priority: tmux > screen > iTerm2 > Terminal.app
 # Multiplexers are checked first because terminal emulator APIs return wrong
 # content when running inside a multiplexer.
 _lacy_ctx_detect_terminal() {
@@ -50,23 +50,7 @@ _lacy_ctx_detect_terminal() {
         fi
     fi
 
-    # 3. Kitty: remote control API
-    if [[ -n "${KITTY_PID:-}" ]] || [[ "${TERM_PROGRAM:-}" == "kitty" ]]; then
-        if command -v kitty >/dev/null 2>&1; then
-            _LACY_CTX_TERMINAL_CAPTURE_CMD="kitty @ get-text --extent=screen"
-            return
-        fi
-    fi
-
-    # 4. WezTerm: CLI API
-    if [[ -n "${WEZTERM_EXECUTABLE:-}" ]] || [[ "${TERM_PROGRAM:-}" == "WezTerm" ]]; then
-        if command -v wezterm >/dev/null 2>&1; then
-            _LACY_CTX_TERMINAL_CAPTURE_CMD="wezterm cli get-text"
-            return
-        fi
-    fi
-
-    # 5-6. macOS: AppleScript for iTerm2 and Terminal.app
+    # 3-4. macOS: AppleScript for iTerm2 and Terminal.app
     if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
         if [[ "${TERM_PROGRAM:-}" == "iTerm.app" ]]; then
             _LACY_CTX_TERMINAL_CAPTURE_CMD="_lacy_ctx_iterm2_capture"
