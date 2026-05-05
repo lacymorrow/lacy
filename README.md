@@ -191,10 +191,24 @@ Lacy Shell is free and open source. If it saves you time, consider sponsoring th
 
 Your support keeps development active and helps cover infrastructure costs.
 
-## Contributing
+## Contributors Welcome
 
-Contributions welcome! Check out the [issues](https://github.com/lacymorrow/lacy/issues) for good first issues, or open a new one.
+Lacy is open source and contributions are welcome! Whether you're fixing a typo, adding a feature, or improving docs, we'd love your help.
+
+- **[Good First Issues](https://github.com/lacymorrow/lacy/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** -- great starting points for new contributors
+- **[Contributing Guide](CONTRIBUTING.md)** -- dev setup, code style, and PR process
+- **[Discussions](https://github.com/lacymorrow/lacy/discussions)** -- questions, ideas, and general chat
+
+## Star History
+
+<a href="https://star-history.com/#lacymorrow/lacy&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=lacymorrow/lacy&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=lacymorrow/lacy&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=lacymorrow/lacy&type=Date" />
+ </picture>
+</a>
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE).
