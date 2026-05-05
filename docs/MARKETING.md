@@ -155,7 +155,7 @@ Works with Claude Code, Gemini CLI, OpenCode, Codex, Lash, or a custom command y
 
 Also `brew install lacymorrow/tap/lacy` or `npx lacy`.
 
-ZSH and Bash 4+ on macOS, Linux, WSL. MIT licensed. I've been using it daily for a while, currently on v1.8.9.
+ZSH and Bash 4+ on macOS, Linux, WSL. MIT licensed. I've been using it daily for a while, currently on v1.8.11.
 
 https://github.com/lacymorrow/lacy
 ```
