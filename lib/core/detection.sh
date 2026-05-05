@@ -122,6 +122,15 @@ lacy_shell_classify_input() {
         return
     fi
 
+    # Auto mode: executable path prefixes (/..., ./..., ../..., ~/...) always
+    # route to shell. Handles paths with backslash-escaped spaces (e.g.,
+    # /Applications/Google\ Chrome.app/...) without relying on the
+    # backslash-space substitution below, which behaves differently in ZSH vs Bash.
+    if [[ "$input" == /* || "$input" == ./* || "$input" == ../* || "$input" == '~/'* ]]; then
+        echo "shell"
+        return
+    fi
+
     # Auto mode: check special cases and commands
     # Extract first token respecting:
     #   - backslash-escaped spaces: /path/to/Google\ Chrome

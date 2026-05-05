@@ -91,8 +91,12 @@ lacy_shell_smart_accept_line() {
                 agent_input="${agent_input#"${agent_input%%[^[:space:]]*}"}"
             fi
 
-            # Add to history before clearing buffer
-            print -s -- "$input"
+            # Add to history before clearing buffer.
+            # Double backslashes before print -s: ZSH's print processes \X escape
+            # sequences even with -s, so "Google\ Chrome" becomes "Google Chrome".
+            # Doubling (\ → \\) makes print convert \\ → \, preserving the original.
+            local _hist_input="${input//\\/\\\\}"
+            print -s -- "$_hist_input"
             # Flush to HISTFILE immediately — needed for INC_APPEND_HISTORY / SHARE_HISTORY users,
             # since the subsequent empty-buffer accept-line doesn't trigger a file write.
             fc -AI 2>/dev/null
