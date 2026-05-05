@@ -140,10 +140,14 @@ lacy_shell_classify_input() {
         first_word="'${_after%%\'*}'"
         first_word_cmd="${_after%%\'*}"
     else
-        # Backslash-escaped spaces
-        local _esc_input="${input//\\ /$'\x01'}"
+        # Backslash-escaped spaces: use a variable for the placeholder so that
+        # $'\x01' is processed by ANSI-C quoting at assignment time. In ZSH,
+        # $'\x01' inside ${var//pattern/replacement} is NOT expanded — it is
+        # treated as the literal 6-char string $'\x01', breaking the round-trip.
+        local _lacy_bsp=$'\x01'
+        local _esc_input="${input//\\ /$_lacy_bsp}"
         first_word="${_esc_input%% *}"
-        first_word="${first_word//$'\x01'/\\ }"
+        first_word="${first_word//$_lacy_bsp/\\ }"
         # Un-escaped version for command -v lookups (backslash-space → space)
         first_word_cmd="${first_word//\\ / }"
     fi
