@@ -27,7 +27,8 @@ lacy_shell_smart_accept_line() {
     _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
     case "$_slashcmd" in
         /new|/reset|/clear|/resume)
-            print -s -- "$input"
+            local _slash_hist="${input//\\/\\\\}"
+            print -s -- "$_slash_hist"
             fc -AI 2>/dev/null
             if [[ "$_slashcmd" == "/resume" ]]; then
                 LACY_SHELL_PENDING_CMD="session_resume"
