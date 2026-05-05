@@ -27,7 +27,8 @@ lacy_shell_smart_accept_line() {
     _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
     case "$_slashcmd" in
         /new|/reset|/clear|/resume)
-            print -s -- "$input"
+            local _slash_hist="${input//\\/\\\\}"
+            print -s -- "$_slash_hist"
             fc -AI 2>/dev/null
             if [[ "$_slashcmd" == "/resume" ]]; then
                 LACY_SHELL_PENDING_CMD="session_resume"
@@ -91,8 +92,12 @@ lacy_shell_smart_accept_line() {
                 agent_input="${agent_input#"${agent_input%%[^[:space:]]*}"}"
             fi
 
-            # Add to history before clearing buffer
-            print -s -- "$input"
+            # Add to history before clearing buffer.
+            # Double backslashes before print -s: ZSH's print processes \X escape
+            # sequences even with -s, so "Google\ Chrome" becomes "Google Chrome".
+            # Doubling (\ → \\) makes print convert \\ → \, preserving the original.
+            local _hist_input="${input//\\/\\\\}"
+            print -s -- "$_hist_input"
             # Flush to HISTFILE immediately — needed for INC_APPEND_HISTORY / SHARE_HISTORY users,
             # since the subsequent empty-buffer accept-line doesn't trigger a file write.
             fc -AI 2>/dev/null
