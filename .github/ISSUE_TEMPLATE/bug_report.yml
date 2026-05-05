@@ -1,0 +1,49 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: input
+    id: shell
+    attributes:
+      label: Shell
+      description: Which shell are you using?
+      placeholder: "zsh 5.9 / bash 5.2"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "macOS 15.1 / Ubuntu 24.04 / WSL2"
+    validations:
+      required: true
+  - type: input
+    id: ai-tool
+    attributes:
+      label: AI tool
+      description: Which AI CLI are you using with Lacy?
+      placeholder: "claude / lash / opencode / gemini / codex / none yet"
+  - type: input
+    id: version
+    attributes:
+      label: Lacy version
+      description: "Run `lacy version` to check"
+      placeholder: "1.8.11"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you type and what went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "lacy doctor output"
+      description: "Paste the output of `lacy doctor` if relevant"
+      render: shell
