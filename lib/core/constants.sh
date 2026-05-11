@@ -94,9 +94,13 @@ LACY_AGENT_WORDS=(
     "next" "again" "redo" "undo" "retry"
     "explain" "elaborate" "clarify" "summarize" "describe" "show" "tell"
     # question words
-    "why" "how" "what" "when" "where" "who" "which"
+    "why" "how" "what" "when" "where" "who" "which" "whom" "whose"
     "can" "could" "would" "should" "will" "shall" "may" "might" "must"
     "does" "did" "is" "are" "was" "were" "has" "have" "had"
+    # programming verbs used conversationally (not valid commands on common systems)
+    "refactor" "optimize" "scaffold"
+    # conversational fillers (not in the list above but commonly typed alone)
+    "actually" "basically" "honestly"
 )
 
 # Natural language markers — common English words unusual as shell arguments.
@@ -195,9 +199,12 @@ LACY_TOOL_LIST=(lash claude opencode gemini codex hermes)
 # === User-Facing Messages ===
 LACY_MSG_QUIT="Exiting Lacy Shell..."
 LACY_MSG_CTRL_C_HINT="Press Ctrl-C again to quit"
-LACY_MSG_NO_TOOL="  No AI tool configured"
-LACY_MSG_INSTALL_HINT="  Install one:  npm install -g lashcode"
-LACY_MSG_CONFIGURE_HINT="  Or configure: lacy setup"
+LACY_MSG_NO_TOOL="  No AI tool found. Install one to get started:"
+LACY_MSG_INSTALL_HINT="    npm install -g lashcode   (lash — recommended)"
+LACY_MSG_INSTALL_HINT2="    brew install claude       (Claude Code CLI)"
+LACY_MSG_INSTALL_HINT3="    brew install opencode     (OpenCode CLI)"
+LACY_MSG_INSTALL_HINT4="    npm install -g @openai/codex"
+LACY_MSG_CONFIGURE_HINT="  Run \`lacy setup\` to configure after installing."
 LACY_MSG_RECOVERY_TOOL="  Try: tool set <name>    Switch to a different tool"
 LACY_MSG_RECOVERY_ASK='       ask "your query"   Send directly to agent'
 LACY_MSG_RECOVERY_DOCTOR="       lacy doctor        Diagnose issues"

@@ -317,6 +317,31 @@ except: pass" 2>/dev/null)
     printf '%s' "$stripped"
 }
 
+# Append a query entry to the query log (rotates at ~1000 lines or ~1 MB).
+# Usage: _lacy_log_query "tool_name" "query_text"
+_lacy_log_query() {
+    local tool="$1"
+    local query="$2"
+    local log_dir="${LACY_SHELL_HOME}/logs"
+    local log_file="${log_dir}/queries.log"
+
+    mkdir -p "$log_dir" 2>/dev/null || return 0
+
+    local ts
+    ts=$(date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo "unknown")
+    printf '%s\t%s\t%s\n' "$ts" "$tool" "$query" >> "$log_file" 2>/dev/null || true
+
+    # Rotate: keep last 1000 lines if file is large
+    local size
+    if [[ -f "$log_file" ]]; then
+        size=$(wc -c < "$log_file" 2>/dev/null || echo 0)
+        if (( size > 1048576 )); then
+            local tmp
+            tmp=$(mktemp) && tail -n 1000 "$log_file" > "$tmp" && mv "$tmp" "$log_file" 2>/dev/null || true
+        fi
+    fi
+}
+
 # Send query to AI agent (configurable tool or fallback)
 lacy_shell_query_agent() {
     local query="$1"
@@ -451,6 +476,9 @@ EOF
     else
         cmd=$(lacy_tool_cmd "$tool")
     fi
+
+    # Log the query (tool name + input text, not the AI response)
+    _lacy_log_query "$tool" "$query"
 
     # Show which tool was auto-detected
     if [[ "$_auto_detected" == true ]]; then
