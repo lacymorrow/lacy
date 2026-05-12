@@ -379,9 +379,10 @@ _lacy_save_last_session() {
 
     local session_id=""
     case "$tool" in
-        lash|opencode) session_id="$LACY_PREHEAT_SERVER_SESSION_ID" ;;
-        claude)        session_id="$LACY_PREHEAT_CLAUDE_SESSION_ID" ;;
-        gemini)        session_id="$LACY_GEMINI_SESSION_ID" ;;
+        lash|opencode)   session_id="$LACY_PREHEAT_SERVER_SESSION_ID" ;;
+        claude)          session_id="$LACY_PREHEAT_CLAUDE_SESSION_ID" ;;
+        gemini)          session_id="$LACY_GEMINI_SESSION_ID" ;;
+        codex|copilot)   session_id="default" ;;
     esac
 
     [[ -n "$session_id" && -n "$tool" ]] || return 0
@@ -457,6 +458,8 @@ lacy_session_resume() {
         gemini)
             LACY_GEMINI_SESSION_ID="$saved_id"
             echo "$saved_id" > "$LACY_GEMINI_SESSION_ID_FILE"
+            ;;
+        codex|copilot)
             ;;
     esac
 
