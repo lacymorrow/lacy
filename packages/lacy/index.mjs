@@ -166,7 +166,7 @@ const TOOLS = [
   { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
   { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
   { value: "copilot", label: "copilot (beta)", hint: "GitHub Copilot CLI" },
-  { value: "goose", label: "goose", hint: "Block's Goose AI agent" },
+  { value: "goose", label: "goose (beta)", hint: "Block's Goose AI agent" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
