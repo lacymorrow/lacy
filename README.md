@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/lacy)](https://www.npmjs.com/package/lacy)
 [![npm downloads](https://img.shields.io/npm/dm/lacy)](https://www.npmjs.com/package/lacy)
 [![GitHub stars](https://img.shields.io/github/stars/lacymorrow/lacy)](https://github.com/lacymorrow/lacy/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](https://fsl.software)
 
 <p align="center">
   <img src="docs/demo-full.gif" alt="Lacy Shell demo — commands run in shell, questions go to AI" width="680" />
