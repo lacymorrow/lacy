@@ -170,6 +170,7 @@ lacy_shell_tool() {
                 echo "Usage: tool set <name>"
                 echo "Options: lash, claude, opencode, gemini, codex, hermes, custom, auto"
                 echo "Options: lash, claude, opencode, gemini, codex, copilot, custom, auto"
+                echo "Options: lash, claude, opencode, gemini, codex, copilot, amp, custom, auto"
                 echo "  tool set custom \"command -flags\""
                 return 1
             fi

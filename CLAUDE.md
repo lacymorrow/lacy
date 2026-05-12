@@ -180,6 +180,7 @@ Lacy's `_lacy_forward_char_or_accept` and `_lacy_expand_or_accept` widgets check
 | codex    | `codex exec resume --last "query"` | positional   |
 | hermes   | `hermes chat -q "query"` | `-q`         |
 | copilot  | `copilot -p "query"`   | `-p`         |
+| amp      | `amp -x "query"`       | `-x`         |
 | custom   | user-defined command   | user-defined |
 
 lash is the recommended default — it's an opencode fork built by the same author. Website: lash.lacy.sh. During onboarding, lacy offers to install lash if no AI CLI tool is detected.
