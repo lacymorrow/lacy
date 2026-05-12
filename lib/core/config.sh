@@ -282,7 +282,7 @@ appearance:
 # AI CLI tool selection
 # Lacy auto-detects installed tools, or you can set one explicitly
 agent_tools:
-  # Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
+  # Options: lash, claude, opencode, gemini, codex, copilot, amp, custom, or empty for auto-detect
   active:
   # Custom command (used when active: custom)
   # custom_command: "your-command -flags"
