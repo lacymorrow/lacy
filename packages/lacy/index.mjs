@@ -167,6 +167,7 @@ const TOOLS = [
   { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
   { value: "copilot", label: "copilot (beta)", hint: "GitHub Copilot CLI" },
   { value: "goose", label: "goose (beta)", hint: "Block's Goose AI agent" },
+  { value: "amp", label: "amp", hint: "Sourcegraph Amp CLI" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
@@ -652,6 +653,41 @@ async function install() {
         gooseSpinner.stop(`goose installation failed: ${e.message}`);
         p.log.warn(
           "You can install it manually later: brew install goose",
+        );
+      }
+    }
+  }
+
+  // Offer to install amp if selected but not installed
+  if (selectedTool === "amp" && !commandExists("amp")) {
+    const installAmp = await p.confirm({
+      message: "amp is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installAmp)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installAmp) {
+      const ampSpinner = p.spinner();
+      ampSpinner.start("Installing amp");
+
+      try {
+        if (commandExists("npm")) {
+          execSync("npm install -g @sourcegraph/amp", { stdio: "pipe" });
+          ampSpinner.stop("amp installed");
+        } else {
+          ampSpinner.stop("Could not install amp");
+          p.log.warn(
+            "Please install npm, then run: npm install -g @sourcegraph/amp",
+          );
+        }
+      } catch (e) {
+        ampSpinner.stop("amp installation failed");
+        p.log.warn(
+          "You can install it manually later: npm install -g @sourcegraph/amp",
         );
       }
     }

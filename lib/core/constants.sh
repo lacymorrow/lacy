@@ -192,7 +192,7 @@ LACY_SPINNER_FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 LACY_SPINNER_TEXT='Thinking'
 
 # === Tool List (canonical order for detection and display) ===
-LACY_TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose)
+LACY_TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose amp)
 
 # === User-Facing Messages ===
 LACY_MSG_QUIT="Exiting Lacy Shell..."

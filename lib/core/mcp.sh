@@ -173,6 +173,7 @@ lacy_tool_cmd() {
         hermes)   echo "hermes chat -q" ;;
         copilot)  echo "copilot -p" ;;
         goose)    echo "goose run -t" ;;
+        amp)      echo "amp -x" ;;
         *)        echo "" ;;
     esac
 }
@@ -207,6 +208,7 @@ lacy_resume_cmd() {
         hermes)   echo "hermes --continue" ;;
         copilot)  echo "copilot --resume" ;;
         goose)    echo "goose session resume" ;;
+        amp)      echo "amp --continue" ;;
     esac
 }
 
@@ -453,6 +455,7 @@ EOF
                 echo "  hermes:   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
                 echo "  copilot:  gh extension install github/gh-copilot"
                 echo "  goose:    brew install goose"
+                echo "  amp:      npm install -g @sourcegraph/amp"
                 return 1
             fi
         else
@@ -466,6 +469,7 @@ EOF
             echo "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash  (hermes)"
             echo "  gh extension install github/gh-copilot  (copilot)"
             echo "  brew install goose"
+            echo "  npm install -g @sourcegraph/amp"
             return 1
         fi
     fi
