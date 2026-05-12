@@ -99,8 +99,6 @@ LACY_AGENT_WORDS=(
     "does" "did" "is" "are" "was" "were" "has" "have" "had"
     # programming verbs used conversationally (not valid commands on common systems)
     "refactor" "optimize" "scaffold"
-    # conversational fillers (not in the list above but commonly typed alone)
-    "actually" "basically" "honestly"
 )
 
 # Natural language markers — common English words unusual as shell arguments.

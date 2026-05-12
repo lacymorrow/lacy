@@ -63,7 +63,8 @@ function _lacy_log_query --description "Append query to ~/.lacy/logs/queries.log
 
     mkdir -p "$log_dir" 2>/dev/null
     set -l ts (date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null; or echo unknown)
-    printf '%s\t%s\t%s\n' $ts $tool $query >> $log_file 2>/dev/null
+    set -l escaped_query (string replace -a \n '\\n' -- "$query")
+    printf '%s\t%s\t%s\n' "$ts" "$tool" "$escaped_query" >> "$log_file" 2>/dev/null
 
     # Rotate if over 1 MB
     if test -f "$log_file"

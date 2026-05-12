@@ -329,7 +329,8 @@ _lacy_log_query() {
 
     local ts
     ts=$(date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo "unknown")
-    printf '%s\t%s\t%s\n' "$ts" "$tool" "$query" >> "$log_file" 2>/dev/null || true
+    local escaped_query="${query//$'\n'/\\n}"
+    printf '%s\t%s\t%s\n' "$ts" "$tool" "$escaped_query" >> "$log_file" 2>/dev/null || true
 
     # Rotate: keep last 1000 lines if file is large
     local size
