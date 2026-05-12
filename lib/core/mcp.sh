@@ -172,6 +172,7 @@ lacy_tool_cmd() {
         codex)    echo "codex exec resume --last" ;;
         hermes)   echo "hermes chat -q" ;;
         copilot)  echo "copilot -p" ;;
+        goose)    echo "goose run -t" ;;
         *)        echo "" ;;
     esac
 }
@@ -205,6 +206,7 @@ lacy_resume_cmd() {
         codex)    echo "codex exec resume --last" ;;
         hermes)   echo "hermes --continue" ;;
         copilot)  echo "copilot --resume" ;;
+        goose)    echo "goose session resume" ;;
     esac
 }
 
@@ -424,6 +426,7 @@ EOF
                 echo "  codex:    npm install -g @openai/codex"
                 echo "  hermes:   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
                 echo "  copilot:  gh extension install github/gh-copilot"
+                echo "  goose:    brew install goose"
                 return 1
             fi
         else
@@ -436,6 +439,7 @@ EOF
             echo "  npm install -g @openai/codex"
             echo "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash  (hermes)"
             echo "  gh extension install github/gh-copilot  (copilot)"
+            echo "  brew install goose"
             return 1
         fi
     fi
