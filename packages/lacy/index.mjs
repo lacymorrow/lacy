@@ -168,6 +168,7 @@ const TOOLS = [
   { value: "copilot", label: "copilot (beta)", hint: "GitHub Copilot CLI" },
   { value: "goose", label: "goose (beta)", hint: "Block's Goose AI agent" },
   { value: "amp", label: "amp", hint: "Sourcegraph Amp CLI" },
+  { value: "aider", label: "aider", hint: "Aider AI pair programming — pipx install aider-chat" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
@@ -688,6 +689,44 @@ async function install() {
         ampSpinner.stop("amp installation failed");
         p.log.warn(
           "You can install it manually later: npm install -g @sourcegraph/amp",
+        );
+      }
+    }
+  }
+
+  // Offer to install aider if selected but not installed
+  if (selectedTool === "aider" && !commandExists("aider")) {
+    const installAider = await p.confirm({
+      message: "aider is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installAider)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installAider) {
+      const aiderSpinner = p.spinner();
+      aiderSpinner.start("Installing aider");
+
+      try {
+        if (commandExists("pipx")) {
+          execSync("pipx install aider-chat", { stdio: "pipe" });
+          aiderSpinner.stop("aider installed");
+        } else if (commandExists("pip3")) {
+          execSync("pip3 install --user aider-chat", { stdio: "pipe" });
+          aiderSpinner.stop("aider installed");
+        } else {
+          aiderSpinner.stop("Could not install aider");
+          p.log.warn(
+            "Please install pipx, then run: pipx install aider-chat",
+          );
+        }
+      } catch (e) {
+        aiderSpinner.stop("aider installation failed");
+        p.log.warn(
+          "You can install it manually later: pipx install aider-chat",
         );
       }
     }
