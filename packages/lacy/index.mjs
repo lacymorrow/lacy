@@ -165,6 +165,7 @@ const TOOLS = [
   { value: "gemini", label: "gemini", hint: "Google Gemini CLI" },
   { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
   { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
+  { value: "copilot", label: "copilot", hint: "GitHub Copilot CLI" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
@@ -413,6 +414,7 @@ async function install() {
   // Detect installed tools
   let detected = [];
   for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes"]) {
+  for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "copilot"]) {
     if (commandExists(tool)) {
       detected.push(tool);
     }
@@ -583,6 +585,41 @@ async function install() {
       } catch (e) {
         p.log.warn(
           "Installation failed. You can install manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+        );
+      }
+    }
+  }
+
+  // Offer to install copilot if selected but not installed
+  if (selectedTool === "copilot" && !commandExists("copilot")) {
+    const installCopilot = await p.confirm({
+      message: "copilot is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installCopilot)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installCopilot) {
+      const copilotSpinner = p.spinner();
+      copilotSpinner.start("Installing copilot");
+
+      try {
+        if (commandExists("npm")) {
+          execSync("npm install -g @github/copilot", { stdio: "pipe" });
+          copilotSpinner.stop("copilot installed");
+        } else {
+          copilotSpinner.stop("Could not install copilot");
+          p.log.warn(
+            "Please install npm, then run: npm install -g @github/copilot",
+          );
+        }
+      } catch (e) {
+        copilotSpinner.stop("copilot installation failed");
+        p.log.warn(
+          "You can install it manually later: npm install -g @github/copilot",
         );
       }
     }
@@ -813,6 +850,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
     const mode = readConfigValue("default");
     const detected = [];
     for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes"]) {
+    for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "copilot"]) {
       if (commandExists(tool)) detected.push(tool);
     }
 
@@ -974,6 +1012,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           ``,
           `  ${pc.bold("AI CLI tools:")}`,
           ...["lash", "claude", "opencode", "gemini", "codex", "hermes"].map((t) =>
+          ...["lash", "claude", "opencode", "gemini", "codex", "copilot"].map((t) =>
             commandExists(t)
               ? `    ${pc.green("✓")} ${t}`
               : `    ${pc.dim("○")} ${pc.dim(t)}`,

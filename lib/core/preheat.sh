@@ -367,6 +367,7 @@ _lacy_get_current_tool() {
     fi
     local t
     for t in lash opencode claude gemini codex hermes; do
+    for t in lash opencode claude gemini codex copilot; do
         command -v "$t" >/dev/null 2>&1 && { echo "$t"; return; }
     done
 }
