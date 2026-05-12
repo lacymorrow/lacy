@@ -423,7 +423,7 @@ EOF
                 echo "  gemini:   brew install gemini"
                 echo "  codex:    npm install -g @openai/codex"
                 echo "  hermes:   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
-                echo "  copilot:  npm install -g @github/copilot"
+                echo "  copilot:  gh extension install github/gh-copilot"
                 return 1
             fi
         else
@@ -435,7 +435,7 @@ EOF
             echo "  brew install gemini"
             echo "  npm install -g @openai/codex"
             echo "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash  (hermes)"
-            echo "  npm install -g @github/copilot"
+            echo "  gh extension install github/gh-copilot"
             return 1
         fi
     fi
