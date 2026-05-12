@@ -18,7 +18,7 @@
     "natural-language"
   ],
   "author": "Lacy Shell Team",
-  "license": "MIT",
+  "license": "FSL-1.1-MIT",
   "dependencies": {},
   "devDependencies": {
     "@clack/prompts": "^1.0.0",
