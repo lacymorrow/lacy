@@ -348,7 +348,7 @@ cmd_status() {
 
     # AI tools
     printf "\n${BOLD}AI CLI Tools${NC}\n"
-    for t in lash claude opencode gemini codex; do
+    for t in lash claude opencode gemini codex copilot amp; do
         if command_exists "$t"; then
             success "$t"
         else
@@ -425,7 +425,7 @@ cmd_doctor() {
 
     # Check AI tool
     local found_tool=0
-    for t in lash claude opencode gemini codex; do
+    for t in lash claude opencode gemini codex copilot amp; do
         if command_exists "$t"; then
             found_tool=1
             break
@@ -552,8 +552,8 @@ setup_tool() {
     printf "\n${BOLD}Select AI tool${NC}\n\n"
 
     local i=1
-    local tools=("lash" "claude" "opencode" "gemini" "codex" "custom" "auto")
-    local hints=("AI coding agent (recommended)" "Claude Code CLI" "OpenCode CLI" "Google Gemini CLI" "OpenAI Codex CLI" "enter your own command" "use first available")
+    local tools=("lash" "claude" "opencode" "gemini" "codex" "copilot" "amp" "custom" "auto")
+    local hints=("AI coding agent (recommended)" "Claude Code CLI" "OpenCode CLI" "Google Gemini CLI" "OpenAI Codex CLI" "GitHub Copilot CLI" "Sourcegraph Amp CLI" "enter your own command" "use first available")
 
     for t in "${tools[@]}"; do
         local hint="${hints[$((i-1))]}"

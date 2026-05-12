@@ -166,6 +166,7 @@ const TOOLS = [
   { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
   { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
   { value: "copilot", label: "copilot", hint: "GitHub Copilot CLI" },
+  { value: "amp", label: "amp", hint: "Sourcegraph Amp CLI" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
@@ -415,6 +416,7 @@ async function install() {
   let detected = [];
   for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes"]) {
   for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "copilot"]) {
+  for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "copilot", "amp"]) {
     if (commandExists(tool)) {
       detected.push(tool);
     }
@@ -620,6 +622,41 @@ async function install() {
         copilotSpinner.stop("copilot installation failed");
         p.log.warn(
           "You can install it manually later: gh extension install github/gh-copilot",
+        );
+      }
+    }
+  }
+
+  // Offer to install amp if selected but not installed
+  if (selectedTool === "amp" && !commandExists("amp")) {
+    const installAmp = await p.confirm({
+      message: "amp is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installAmp)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installAmp) {
+      const ampSpinner = p.spinner();
+      ampSpinner.start("Installing amp");
+
+      try {
+        if (commandExists("npm")) {
+          execSync("npm install -g @sourcegraph/amp", { stdio: "pipe" });
+          ampSpinner.stop("amp installed");
+        } else {
+          ampSpinner.stop("Could not install amp");
+          p.log.warn(
+            "Please install npm, then run: npm install -g @sourcegraph/amp",
+          );
+        }
+      } catch (e) {
+        ampSpinner.stop("amp installation failed");
+        p.log.warn(
+          "You can install it manually later: npm install -g @sourcegraph/amp",
         );
       }
     }
@@ -851,6 +888,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
     const detected = [];
     for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes"]) {
     for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "copilot"]) {
+    for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "copilot", "amp"]) {
       if (commandExists(tool)) detected.push(tool);
     }
 
@@ -1013,6 +1051,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           `  ${pc.bold("AI CLI tools:")}`,
           ...["lash", "claude", "opencode", "gemini", "codex", "hermes"].map((t) =>
           ...["lash", "claude", "opencode", "gemini", "codex", "copilot"].map((t) =>
+          ...["lash", "claude", "opencode", "gemini", "codex", "copilot", "amp"].map((t) =>
             commandExists(t)
               ? `    ${pc.green("✓")} ${t}`
               : `    ${pc.dim("○")} ${pc.dim(t)}`,
