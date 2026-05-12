@@ -75,7 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed JSON output parsing in zsh — replaced `echo` with `printf '%s\n'` to prevent zsh from interpreting escape sequences (`\n`, `\"`) in JSON strings
+- Fixed JSON output parsing in zsh — replaced `echo` with `printf '%s
+'` to prevent zsh from interpreting escape sequences (`
+`, `\"`) in JSON strings
 
 ---
 
@@ -318,6 +320,10 @@ None (initial release)
 ---
 
 ## [Unreleased]
+
+### Added
+
+- feat: add GitHub Copilot CLI as a supported backend (LAC-1144)
 
 ### Planned Features
 
