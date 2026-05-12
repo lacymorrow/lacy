@@ -607,19 +607,19 @@ async function install() {
       copilotSpinner.start("Installing copilot");
 
       try {
-        if (commandExists("npm")) {
-          execSync("npm install -g @github/copilot", { stdio: "pipe" });
+        if (commandExists("gh")) {
+          execSync("gh extension install github/gh-copilot", { stdio: "pipe" });
           copilotSpinner.stop("copilot installed");
         } else {
           copilotSpinner.stop("Could not install copilot");
           p.log.warn(
-            "Please install npm, then run: npm install -g @github/copilot",
+            "Please install the GitHub CLI (gh), then run: gh extension install github/gh-copilot",
           );
         }
       } catch (e) {
         copilotSpinner.stop("copilot installation failed");
         p.log.warn(
-          "You can install it manually later: npm install -g @github/copilot",
+          "You can install it manually later: gh extension install github/gh-copilot",
         );
       }
     }
