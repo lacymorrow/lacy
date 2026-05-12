@@ -165,6 +165,7 @@ const TOOLS = [
   { value: "gemini", label: "gemini", hint: "Google Gemini CLI" },
   { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
   { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
+  { value: "copilot", label: "copilot (beta)", hint: "GitHub Copilot CLI" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
@@ -412,7 +413,7 @@ async function install() {
 
   // Detect installed tools
   let detected = [];
-  for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes"]) {
+  for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot"]) {
     if (commandExists(tool)) {
       detected.push(tool);
     }
@@ -587,6 +588,39 @@ async function install() {
       }
     }
   }
+
+  // Offer to install copilot if selected but not installed
+  if (selectedTool === "copilot" && !commandExists("copilot")) {
+    const installCopilot = await p.confirm({
+      message: "copilot is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installCopilot)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installCopilot) {
+      p.log.info("Installing copilot via gh extension...");
+
+      try {
+        if (commandExists("gh")) {
+          execSync("gh extension install github/gh-copilot", { stdio: "inherit" });
+          p.log.success("copilot installed");
+        } else {
+          p.log.warn(
+            "gh CLI not found. Install manually: gh extension install github/gh-copilot",
+          );
+        }
+      } catch (e) {
+        p.log.warn(
+          "Installation failed. You can install manually: gh extension install github/gh-copilot",
+        );
+      }
+    }
+  }
+
 
   // Clone/update repository
   const installSpinner = p.spinner();
@@ -812,7 +846,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
     const active = readConfigValue("active");
     const mode = readConfigValue("default");
     const detected = [];
-    for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes"]) {
+    for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot"]) {
       if (commandExists(tool)) detected.push(tool);
     }
 
@@ -973,7 +1007,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           `  Mode:       ${pc.cyan(modeDisplay)}`,
           ``,
           `  ${pc.bold("AI CLI tools:")}`,
-          ...["lash", "claude", "opencode", "gemini", "codex", "hermes"].map((t) =>
+          ...["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot"].map((t) =>
             commandExists(t)
               ? `    ${pc.green("✓")} ${t}`
               : `    ${pc.dim("○")} ${pc.dim(t)}`,
