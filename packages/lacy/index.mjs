@@ -553,6 +553,44 @@ async function install() {
     }
   }
 
+  // Offer to install hermes if selected but not installed
+  if (selectedTool === "hermes" && !commandExists("hermes")) {
+    const installHermes = await p.confirm({
+      message: "hermes is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installHermes)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installHermes) {
+      const hermesSpinner = p.spinner();
+      hermesSpinner.start("Installing hermes");
+
+      try {
+        if (commandExists("curl")) {
+          execSync(
+            "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+            { stdio: "pipe" },
+          );
+          hermesSpinner.stop("hermes installed");
+        } else {
+          hermesSpinner.stop("Could not install hermes");
+          p.log.warn(
+            "Please install curl, then run: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+          );
+        }
+      } catch (e) {
+        hermesSpinner.stop("hermes installation failed");
+        p.log.warn(
+          "You can install it manually later: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+        );
+      }
+    }
+  }
+
   // Clone/update repository
   const installSpinner = p.spinner();
   installSpinner.start("Installing Lacy");
