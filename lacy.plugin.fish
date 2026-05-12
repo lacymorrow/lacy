@@ -9,10 +9,13 @@
 # ============================================================================
 
 # Require Fish 3.1+ for bind --sets-mode and commandline -f
-if test (string match -r '^(\d+)' -- (fish --version 2>/dev/null | string match -r '\d+\.\d+') | head -n1) -lt 3 2>/dev/null
-    echo "Lacy Shell: Fish 3.1+ is required. You have $(fish --version 2>/dev/null)." >&2
+set -l _lacy_fish_major (string match -r 'fish, version (\d+)' -- (fish --version 2>&1) | tail -1)
+if test -z "$_lacy_fish_major"; or test "$_lacy_fish_major" -lt 3
+    echo "Lacy Shell: Fish 3.1+ is required. You have: "(fish --version 2>&1)"." >&2
+    set --erase _lacy_fish_major
     return
 end
+set --erase _lacy_fish_major
 
 # ============================================================================
 # Paths
