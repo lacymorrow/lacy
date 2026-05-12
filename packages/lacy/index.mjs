@@ -164,7 +164,7 @@ const TOOLS = [
   { value: "opencode", label: "opencode", hint: "OpenCode CLI" },
   { value: "gemini", label: "gemini", hint: "Google Gemini CLI" },
   { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
-  { value: "hermes", label: "hermes", hint: "Hermes Agent — Nous Research" },
+  { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
