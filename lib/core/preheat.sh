@@ -277,11 +277,7 @@ _lacy_session_build_cmd() {
     if [[ "$tool" == "claude" ]]; then
         parts+=" --output-format json"
     fi
-    if [[ "$tool" == "hermes" ]]; then
-        parts+=" chat -q"
-    else
-        parts+=" -p"
-    fi
+    parts+=" -p"
     echo "$parts"
 }
 
@@ -360,33 +356,6 @@ lacy_preheat_gemini_reset_session() {
 }
 
 # ============================================================================
-# Hermes Session Reuse
-# ============================================================================
-
-LACY_HERMES_SESSION_ID=""
-LACY_HERMES_SESSION_ID_FILE="$LACY_SHELL_HOME/.hermes_session_id_$$"
-
-lacy_preheat_hermes_restore_session() {
-    _lacy_session_restore "$LACY_HERMES_SESSION_ID_FILE" "LACY_HERMES_SESSION_ID"
-}
-
-lacy_preheat_hermes_build_cmd() {
-    _lacy_session_build_cmd "hermes" "$LACY_HERMES_SESSION_ID" "$LACY_HERMES_SESSION_ID_FILE" "LACY_HERMES_SESSION_ID"
-}
-
-lacy_preheat_hermes_capture_session() {
-    _lacy_session_capture "$1" "$LACY_HERMES_SESSION_ID_FILE" "LACY_HERMES_SESSION_ID" "session_id"
-}
-
-lacy_preheat_hermes_extract_result() {
-    _lacy_json_get "$1" "response"
-}
-
-lacy_preheat_hermes_reset_session() {
-    _lacy_session_reset "$LACY_HERMES_SESSION_ID_FILE" "LACY_HERMES_SESSION_ID"
-}
-
-# ============================================================================
 # Session Commands (new / resume)
 # ============================================================================
 
@@ -413,7 +382,6 @@ _lacy_save_last_session() {
         lash|opencode) session_id="$LACY_PREHEAT_SERVER_SESSION_ID" ;;
         claude)        session_id="$LACY_PREHEAT_CLAUDE_SESSION_ID" ;;
         gemini)        session_id="$LACY_GEMINI_SESSION_ID" ;;
-        hermes)        session_id="$LACY_HERMES_SESSION_ID" ;;
     esac
 
     [[ -n "$session_id" && -n "$tool" ]] || return 0
@@ -429,7 +397,6 @@ lacy_session_new() {
     # Reset all per-session state
     lacy_preheat_claude_reset_session
     lacy_preheat_gemini_reset_session
-    lacy_preheat_hermes_reset_session
     LACY_PREHEAT_SERVER_SESSION_ID=""
     rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
 
@@ -491,10 +458,6 @@ lacy_session_resume() {
             LACY_GEMINI_SESSION_ID="$saved_id"
             echo "$saved_id" > "$LACY_GEMINI_SESSION_ID_FILE"
             ;;
-        hermes)
-            LACY_HERMES_SESSION_ID="$saved_id"
-            echo "$saved_id" > "$LACY_HERMES_SESSION_ID_FILE"
-            ;;
     esac
 
     echo ""
@@ -526,6 +489,5 @@ lacy_preheat_init() {
 lacy_preheat_cleanup() {
     lacy_preheat_server_stop
     rm -f "$LACY_PREHEAT_SESSION_FILE" \
-          "$LACY_GEMINI_SESSION_ID_FILE" \
-          "$LACY_HERMES_SESSION_ID_FILE"
+          "$LACY_GEMINI_SESSION_ID_FILE"
 }

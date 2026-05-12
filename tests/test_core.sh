@@ -296,7 +296,15 @@ assert_false "in_list not found" _lacy_in_list "d" "a" "b" "c"
 source "$REPO_DIR/lib/core/mcp.sh"
 assert_eq "tool cmd lash" "lash run -c" "$(lacy_tool_cmd 'lash')"
 assert_eq "tool cmd claude" "claude -p" "$(lacy_tool_cmd 'claude')"
+assert_eq "tool cmd hermes" "hermes chat -q" "$(lacy_tool_cmd 'hermes')"
 assert_eq "tool cmd unknown" "" "$(lacy_tool_cmd 'unknown')"
+
+# Hermes in LACY_TOOL_LIST
+assert_true "hermes in tool list" _lacy_in_list "hermes" "${LACY_TOOL_LIST[@]}"
+
+# Hermes resume command
+source "$REPO_DIR/lib/core/preheat.sh"
+assert_eq "hermes resume cmd" "hermes --continue" "$(lacy_resume_cmd 'hermes')"
 
 # ============================================================================
 # Telemetry JSON Escaping Tests

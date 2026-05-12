@@ -566,26 +566,23 @@ async function install() {
     }
 
     if (installHermes) {
-      const hermesSpinner = p.spinner();
-      hermesSpinner.start("Installing hermes");
+      p.log.info("Running hermes installer...");
 
       try {
         if (commandExists("curl")) {
           execSync(
             "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
-            { stdio: "pipe" },
+            { stdio: "inherit" },
           );
-          hermesSpinner.stop("hermes installed");
+          p.log.success("hermes installed");
         } else {
-          hermesSpinner.stop("Could not install hermes");
           p.log.warn(
-            "Please install curl, then run: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+            "curl not found. Install manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
           );
         }
       } catch (e) {
-        hermesSpinner.stop("hermes installation failed");
         p.log.warn(
-          "You can install it manually later: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+          "Installation failed. You can install manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
         );
       }
     }
