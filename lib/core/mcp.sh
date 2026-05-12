@@ -170,6 +170,7 @@ lacy_tool_cmd() {
         opencode) echo "opencode run -c" ;;
         gemini)   echo "gemini -p" ;;
         codex)    echo "codex exec resume --last" ;;
+        hermes)   echo "hermes chat -q" ;;
         *)        echo "" ;;
     esac
 }
@@ -201,6 +202,7 @@ lacy_resume_cmd() {
                 echo "gemini --resume $LACY_GEMINI_SESSION_ID"
             ;;
         codex)    echo "codex exec resume --last" ;;
+        hermes)   echo "hermes --continue" ;;
     esac
 }
 
@@ -418,6 +420,7 @@ EOF
                 echo "  opencode: brew install opencode"
                 echo "  gemini:   brew install gemini"
                 echo "  codex:    npm install -g @openai/codex"
+                echo "  hermes:   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
                 return 1
             fi
         else
@@ -428,6 +431,7 @@ EOF
             echo "  brew install opencode"
             echo "  brew install gemini"
             echo "  npm install -g @openai/codex"
+            echo "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash  (hermes)"
             return 1
         fi
     fi
