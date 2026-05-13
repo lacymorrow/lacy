@@ -348,7 +348,7 @@ cmd_status() {
 
     # AI tools
     printf "\n${BOLD}AI CLI Tools${NC}\n"
-    for t in lash claude opencode gemini codex; do
+    for t in lash claude opencode gemini codex hermes copilot goose; do
         if command_exists "$t"; then
             success "$t"
         else
@@ -425,7 +425,7 @@ cmd_doctor() {
 
     # Check AI tool
     local found_tool=0
-    for t in lash claude opencode gemini codex; do
+    for t in lash claude opencode gemini codex hermes copilot goose; do
         if command_exists "$t"; then
             found_tool=1
             break
