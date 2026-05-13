@@ -166,6 +166,7 @@ const TOOLS = [
   { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
   { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
   { value: "copilot", label: "copilot (beta)", hint: "GitHub Copilot CLI" },
+  { value: "goose", label: "goose (beta)", hint: "Block's Goose AI agent" },
   { value: "custom", label: "Custom", hint: "enter your own command" },
   { value: "auto", label: "Auto-detect", hint: "use first available" },
   { value: "none", label: "None", hint: "I'll install one later" },
@@ -413,7 +414,7 @@ async function install() {
 
   // Detect installed tools
   let detected = [];
-  for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot"]) {
+  for (const tool of TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map((t) => t.value)) {
     if (commandExists(tool)) {
       detected.push(tool);
     }
@@ -615,12 +616,46 @@ async function install() {
         }
       } catch (e) {
         p.log.warn(
-          "Installation failed. You can install manually: gh extension install github/gh-copilot",
+          `Installation failed: ${e.message}. You can install manually: gh extension install github/gh-copilot`,
         );
       }
     }
   }
 
+  // Offer to install goose if selected but not installed
+  if (selectedTool === "goose" && !commandExists("goose")) {
+    const installGoose = await p.confirm({
+      message: "goose is not installed. Would you like to install it now?",
+      initialValue: true,
+    });
+
+    if (p.isCancel(installGoose)) {
+      p.cancel("Installation cancelled");
+      process.exit(0);
+    }
+
+    if (installGoose) {
+      const gooseSpinner = p.spinner();
+      gooseSpinner.start("Installing goose");
+
+      try {
+        if (commandExists("brew")) {
+          execSync("brew install goose", { stdio: "pipe" });
+          gooseSpinner.stop("goose installed");
+        } else {
+          gooseSpinner.stop("Could not install goose");
+          p.log.warn(
+            "Please install homebrew, then run: brew install goose",
+          );
+        }
+      } catch (e) {
+        gooseSpinner.stop(`goose installation failed: ${e.message}`);
+        p.log.warn(
+          "You can install it manually later: brew install goose",
+        );
+      }
+    }
+  }
 
   // Clone/update repository
   const installSpinner = p.spinner();
@@ -846,7 +881,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
     const active = readConfigValue("active");
     const mode = readConfigValue("default");
     const detected = [];
-    for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot"]) {
+    for (const tool of TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map((t) => t.value)) {
       if (commandExists(tool)) detected.push(tool);
     }
 
@@ -1007,7 +1042,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           `  Mode:       ${pc.cyan(modeDisplay)}`,
           ``,
           `  ${pc.bold("AI CLI tools:")}`,
-          ...["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot"].map((t) =>
+          ...TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map(({ value: t }) =>
             commandExists(t)
               ? `    ${pc.green("✓")} ${t}`
               : `    ${pc.dim("○")} ${pc.dim(t)}`,
