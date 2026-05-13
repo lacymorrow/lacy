@@ -87,7 +87,7 @@ LACY_AGENT_WORDS=(
     "please" "sorry" "pardon" "hmm" "huh" "wow" "whoa" "oops" "ugh" "yikes"
     "damn" "dang" "shoot" "welp" "well" "anyway" "anyways" "regardless"
     "meanwhile" "honestly" "basically" "literally" "actually" "really"
-    "seriously" "obviously" "hopefully" "unfortunately" "apparently"
+    "seriously" "hopefully" "unfortunately" "apparently"
     "supposedly" "probably" "maybe" "perhaps" "possibly"
     # action/intent
     "stop" "hold" "pause" "cancel" "abort" "skip" "continue" "proceed"
