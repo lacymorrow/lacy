@@ -182,6 +182,7 @@ Lacy's `_lacy_forward_char_or_accept` and `_lacy_expand_or_accept` widgets check
 | copilot  | `copilot -p "query"`   | `-p`         |
 | goose    | `goose run -t "query"` | `-t`         |
 | amp      | `amp -x "query"`       | `-x`         |
+| aider    | `aider --no-auto-commits --message "query"` | `--message`  |
 | custom   | user-defined command   | user-defined |
 
 lash is the recommended default — it's an opencode fork built by the same author. Website: lash.lacy.sh. During onboarding, lacy offers to install lash if no AI CLI tool is detected.
@@ -268,7 +269,7 @@ LACY_NO_NODE=1 bin/lacy setup
 - `mode [shell|agent|auto]` - Switch modes
 - `mode` - Show current mode and color legend
 - `tool` - Show active AI tool and available tools
-- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, custom, auto) — persists to config.yaml
+- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom, auto) — persists to config.yaml
 - `tool set custom "cmd"` - Set a custom command as the AI tool
 - `/new` / `/reset` / `/clear` - Start a new conversation session
 - `/resume` - Resume the last saved session
@@ -301,7 +302,7 @@ Config file: `~/.lacy/config.yaml`
 
 ```yaml
 agent_tools:
-  active: claude # or lash, opencode, gemini, codex, custom, empty for auto
+  active: claude # or lash, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom, empty for auto
   # custom_command: "your-command -flags"  # used when active: custom
 
 api_keys:
