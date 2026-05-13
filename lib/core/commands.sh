@@ -35,6 +35,10 @@ lacy_shell_execute_agent() {
             lacy_print_color 196 "$LACY_MSG_NO_TOOL"
             echo ""
             lacy_print_color 238 "$LACY_MSG_INSTALL_HINT"
+            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT2"
+            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT3"
+            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT4"
+            echo ""
             lacy_print_color 238 "$LACY_MSG_CONFIGURE_HINT"
             echo ""
         else

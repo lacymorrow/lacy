@@ -666,6 +666,221 @@ cmd_resume() {
     printf '\n%b\n' "Type ${CYAN}resume${NC} inside Lacy Shell to load this session."
 }
 
+cmd_logs() {
+    local log_file="${INSTALL_DIR}/logs/queries.log"
+
+    case "${1:-}" in
+        --clear|-c)
+            if [[ -f "$log_file" ]]; then
+                rm -f "$log_file"
+                success "Query log cleared"
+            else
+                info "No log file found"
+            fi
+            return
+            ;;
+        --count)
+            if [[ -f "$log_file" ]]; then
+                local count
+                count=$(wc -l < "$log_file" 2>/dev/null || echo 0)
+                printf "Entries: %s\n" "$count"
+            else
+                echo "0"
+            fi
+            return
+            ;;
+    esac
+
+    if [[ ! -f "$log_file" ]]; then
+        info "No queries logged yet."
+        printf '\nStart using Lacy Shell and queries will appear here.\n\n'
+        return
+    fi
+
+    local limit="${1:-50}"
+    if [[ "$limit" =~ ^[0-9]+$ ]]; then
+        printf "\n${BOLD}Recent queries${NC} ${DIM}(last %s)${NC}\n\n" "$limit"
+        tail -n "$limit" "$log_file" | while IFS=$'\t' read -r ts tool query; do
+            printf "  ${DIM}%s${NC}  ${CYAN}%-12s${NC}  %s\n" "$ts" "$tool" "$query"
+        done
+    else
+        printf "\n${BOLD}All queries${NC}\n\n"
+        while IFS=$'\t' read -r ts tool query; do
+            printf "  ${DIM}%s${NC}  ${CYAN}%-12s${NC}  %s\n" "$ts" "$tool" "$query"
+        done < "$log_file"
+    fi
+    echo ""
+    printf "${DIM}Log: %s${NC}\n\n" "$log_file"
+}
+
+cmd_changelog() {
+    printf "\n${BOLD}Lacy Shell Changelog${NC}\n\n"
+
+    # Try fetching from GitHub releases API
+    if command_exists curl; then
+        local json
+        json=$(curl -sf --max-time 5 \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/lacymorrow/lacy/releases/latest" 2>/dev/null || true)
+
+        if [[ -n "$json" ]]; then
+            local tag body
+            tag=$(printf '%s\n' "$json" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//')
+            body=$(printf '%s\n' "$json" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    print(d.get('body', ''))
+except: pass" 2>/dev/null || true)
+
+            if [[ -n "$tag" ]]; then
+                printf "${CYAN}Latest release: %s${NC}\n\n" "$tag"
+                if [[ -n "$body" ]]; then
+                    printf '%s\n' "$body"
+                else
+                    printf "${DIM}No release notes.${NC}\n"
+                fi
+                echo ""
+                return
+            fi
+        fi
+    fi
+
+    # Fallback: show local CHANGELOG.md if present
+    local changelog_file="${INSTALL_DIR}/CHANGELOG.md"
+    if [[ -f "$changelog_file" ]]; then
+        head -n 80 "$changelog_file"
+        echo ""
+        return
+    fi
+
+    # Last resort: recent git log
+    if [[ -d "${INSTALL_DIR}/.git" ]]; then
+        warn "Could not fetch release notes (offline?). Showing recent commits:"
+        echo ""
+        git -C "$INSTALL_DIR" log --oneline -20 2>/dev/null || true
+    else
+        warn "Could not fetch changelog. Run \`lacy update\` to get the latest version."
+    fi
+    echo ""
+}
+
+cmd_completions() {
+    local shell_type="${1:-}"
+
+    # Auto-detect if not specified
+    if [[ -z "$shell_type" ]]; then
+        shell_type=$(detect_shell)
+    fi
+
+    case "$shell_type" in
+        zsh)  _completions_zsh ;;
+        bash) _completions_bash ;;
+        *)
+            warn "Unknown shell: $shell_type. Use 'zsh' or 'bash'."
+            exit 1
+            ;;
+    esac
+}
+
+_completions_zsh() {
+    cat <<'ZSHCOMP'
+#compdef lacy
+
+_lacy() {
+    local -a commands
+    commands=(
+        'setup:Interactive settings (tool, mode, config)'
+        'install:Install Lacy Shell'
+        'uninstall:Remove Lacy Shell'
+        'update:Pull latest changes'
+        'reinstall:Fresh installation'
+        'status:Show installation status'
+        'info:Show basic information'
+        'doctor:Diagnose common issues'
+        'config:Show or edit configuration'
+        'new:Clear saved session'
+        'resume:Show saved session info'
+        'logs:Show recent agent query log'
+        'changelog:Show latest release notes'
+        'version:Show version'
+        'help:Show help'
+    )
+
+    local -a tool_names
+    tool_names=(lash claude opencode gemini codex custom auto)
+
+    case "$words[2]" in
+        config)
+            local -a config_sub
+            config_sub=('show:Print config file' 'edit:Open in $EDITOR' 'path:Print config path')
+            _describe 'config subcommand' config_sub
+            ;;
+        logs)
+            local -a logs_sub
+            logs_sub=('--clear:Clear the log file' '--count:Print entry count')
+            _describe 'logs option' logs_sub
+            ;;
+        tool)
+            case "$words[3]" in
+                set) _describe 'tool name' tool_names ;;
+                *)   local -a tool_sub; tool_sub=('set:Set the active tool' 'list:List available tools')
+                     _describe 'tool subcommand' tool_sub ;;
+            esac
+            ;;
+        completions)
+            _describe 'shell' '(zsh bash)'
+            ;;
+        *)
+            _describe 'lacy command' commands
+            ;;
+    esac
+}
+
+_lacy "$@"
+ZSHCOMP
+}
+
+_completions_bash() {
+    cat <<'BASHCOMP'
+_lacy_completions() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    local commands="setup install uninstall update reinstall status info doctor config new resume logs changelog version help completions"
+    local tool_names="lash claude opencode gemini codex custom auto"
+
+    case "$prev" in
+        config)
+            COMPREPLY=( $(compgen -W "show edit path" -- "$cur") )
+            return
+            ;;
+        logs)
+            COMPREPLY=( $(compgen -W "--clear --count" -- "$cur") )
+            return
+            ;;
+        set)
+            COMPREPLY=( $(compgen -W "$tool_names" -- "$cur") )
+            return
+            ;;
+        tool)
+            COMPREPLY=( $(compgen -W "set list" -- "$cur") )
+            return
+            ;;
+        completions)
+            COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
+            return
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+}
+
+complete -F _lacy_completions lacy
+BASHCOMP
+}
+
 cmd_version() {
     echo "lacy $VERSION"
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
@@ -700,6 +915,10 @@ ${BOLD}Commands:${NC}
   config         Show/edit configuration
   new            Clear saved session (start fresh next time)
   resume         Show saved session info
+  logs [N]       Show last N agent queries (default: 50)
+  logs --clear   Clear query log
+  changelog      Show latest release notes
+  completions    Print shell completion script (pipe to source)
   version        Show version
   help           Show this help
 
@@ -753,6 +972,9 @@ main() {
         config|c)   cmd_config "$@" ;;
         new|/new|reset|/reset|clear|/clear) cmd_new "$@" ;;
         resume|/resume)                     cmd_resume "$@" ;;
+        logs)         cmd_logs "$@" ;;
+        changelog)    cmd_changelog "$@" ;;
+        completions)  cmd_completions "$@" ;;
         version|-v|--version) cmd_version ;;
         help|-h|--help)       cmd_help ;;
         "")                   cmd_enter ;;

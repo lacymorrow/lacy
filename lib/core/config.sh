@@ -96,6 +96,7 @@ lacy_shell_load_config() {
         local agent_tools_map="active:LACY_ACTIVE_TOOL,custom_command:LACY_CUSTOM_TOOL_CMD"
         local preheat_map="eager:LACY_PREHEAT_EAGER,server_port:LACY_PREHEAT_SERVER_PORT"
         local context_map="output:_LACY_CTX_OUTPUT_ENABLED,output_lines:_LACY_CTX_OUTPUT_MAX_LINES"
+        local spinner_map="style:LACY_SPINNER_STYLE"
 
         # Track current section
         local current_section=""
@@ -117,6 +118,9 @@ lacy_shell_load_config() {
                 continue
             elif [[ "$line" =~ ^context: ]]; then
                 current_section="context"
+                continue
+            elif [[ "$line" =~ ^spinner: ]]; then
+                current_section="spinner"
                 continue
             elif [[ "$line" =~ ^agent: ]]; then
                 current_section="agent"
@@ -156,6 +160,9 @@ lacy_shell_load_config() {
                     "context")
                         lacy_shell_export_config_value "$key" "$value" "$context_map"
                         ;;
+                    "spinner")
+                        lacy_shell_export_config_value "$key" "$value" "$spinner_map"
+                        ;;
                 esac
             fi
         done < "$LACY_SHELL_CONFIG_FILE"
@@ -187,6 +194,7 @@ lacy_shell_load_config() {
             printf 'LACY_SHELL_MCP_SERVERS_JSON=%q\n' "$LACY_SHELL_MCP_SERVERS_JSON"
             printf '_LACY_CTX_OUTPUT_ENABLED=%q\n' "${_LACY_CTX_OUTPUT_ENABLED:-true}"
             printf '_LACY_CTX_OUTPUT_MAX_LINES=%q\n' "${_LACY_CTX_OUTPUT_MAX_LINES:-50}"
+            printf 'LACY_SPINNER_STYLE=%q\n' "${LACY_SPINNER_STYLE:-random}"
         } > "$LACY_SHELL_CONFIG_CACHE_FILE"
 
         LACY_CONFIG_CACHE_VALID=true
@@ -288,6 +296,13 @@ agent_tools:
 # context:
 #   output: true          # Capture terminal screen at query time
 #   output_lines: 50      # Max lines to include (truncates from top)
+
+# Spinner animation style
+# Options: braille, braillewave, dna, scan, rain, scanline, pulse, snake, sparkle,
+#          cascade, columns, orbit, breathe, waverows, checkerboard, helix, fillsweep,
+#          diagswipe, random (picks a different one each query)
+# spinner:
+#   style: random
 
 # Agent CLI configuration (legacy)
 # Configure which CLI tool to use for AI queries

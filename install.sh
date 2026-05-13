@@ -103,7 +103,8 @@ detect_user_shell() {
     case "$login_shell" in
         zsh)  DETECTED_SHELL="zsh" ;;
         bash) DETECTED_SHELL="bash" ;;
-        *)    DETECTED_SHELL="zsh" ;;  # Default to zsh (fish not yet supported)
+        fish) DETECTED_SHELL="fish" ;;
+        *)    DETECTED_SHELL="zsh" ;;
     esac
 }
 
@@ -118,6 +119,7 @@ get_rc_file() {
                 echo "${HOME}/.bashrc"
             fi
             ;;
+        fish) echo "${HOME}/.config/fish/conf.d/lacy.fish" ;;
         *)    echo "${HOME}/.zshrc" ;;
     esac
 }
@@ -126,6 +128,7 @@ get_rc_file() {
 get_plugin_file() {
     case "$DETECTED_SHELL" in
         bash) echo "lacy.plugin.bash" ;;
+        fish) echo "lacy.plugin.fish" ;;
         *)    echo "lacy.plugin.zsh" ;;
     esac
 }
@@ -134,6 +137,7 @@ get_plugin_file() {
 get_shell_restart_cmd() {
     case "$DETECTED_SHELL" in
         bash) echo "bash -l" ;;
+        fish) echo "fish" ;;
         *)    echo "zsh -l" ;;
     esac
 }
@@ -491,6 +495,18 @@ configure_shell() {
         } >> "$rc_file"
 
         printf "${GREEN}✓ Added to ${rc_name}${NC}\n"
+    fi
+
+    # For Fish: also ensure the conf.d directory exists and use `source` syntax
+    if [[ "$DETECTED_SHELL" == "fish" ]]; then
+        mkdir -p "${HOME}/.config/fish/conf.d"
+        # Fish sources all *.fish files in conf.d automatically — create a loader
+        local fish_conf="${HOME}/.config/fish/conf.d/lacy.fish"
+        if [[ ! -f "$fish_conf" ]]; then
+            printf "source %s/lacy.plugin.fish\n" "${INSTALL_DIR}" > "$fish_conf"
+            printf "${GREEN}✓ Created %s${NC}\n" "$fish_conf"
+        fi
+        return
     fi
 
     # For Bash on macOS, also add to .bashrc if it exists (some terminals source it)
