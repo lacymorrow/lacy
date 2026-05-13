@@ -279,7 +279,7 @@ detect_tools() {
     printf "${BLUE}Detecting AI CLI tools...${NC}\n"
     local found=0
 
-    for tool in lash claude opencode gemini codex copilot amp; do
+    for tool in lash claude opencode gemini codex hermes copilot amp; do
         if command -v "$tool" >/dev/null 2>&1; then
             printf "  ${GREEN}✓${NC} $tool\n"
             found=1
@@ -315,15 +315,16 @@ select_tool() {
     printf "  3) opencode   ${DIM}- OpenCode CLI${NC}\n"
     printf "  4) gemini     ${DIM}- Google Gemini CLI${NC}\n"
     printf "  5) codex      ${DIM}- OpenAI Codex CLI${NC}\n"
-    printf "  6) copilot    ${DIM}- GitHub Copilot CLI${NC}\n"
-    printf "  7) amp        ${DIM}- Sourcegraph Amp CLI${NC}\n"
-    printf "  8) Auto-detect ${DIM}(use first available)${NC}\n"
-    printf "  9) None       ${DIM}- I'll install one later${NC}\n"
-    printf " 10) Custom     ${DIM}- enter your own command${NC}\n"
+    printf "  6) hermes     ${DIM}- Hermes Agent CLI${NC}\n"
+    printf "  7) copilot    ${DIM}- GitHub Copilot CLI${NC}\n"
+    printf "  8) amp        ${DIM}- Sourcegraph Amp CLI${NC}\n"
+    printf "  9) Auto-detect ${DIM}(use first available)${NC}\n"
+    printf " 10) None       ${DIM}- I'll install one later${NC}\n"
+    printf " 11) Custom     ${DIM}- enter your own command${NC}\n"
     printf "\n"
 
     local choice
-    read -p "Select [1-10, default=8]: " choice < /dev/tty 2>/dev/null || choice="8"
+    read -p "Select [1-11, default=9]: " choice < /dev/tty 2>/dev/null || choice="9"
 
     case "$choice" in
         1) SELECTED_TOOL="lash" ;;
@@ -331,11 +332,12 @@ select_tool() {
         3) SELECTED_TOOL="opencode" ;;
         4) SELECTED_TOOL="gemini" ;;
         5) SELECTED_TOOL="codex" ;;
-        6) SELECTED_TOOL="copilot" ;;
-        7) SELECTED_TOOL="amp" ;;
-        8|"") SELECTED_TOOL="" ;;
-        9) SELECTED_TOOL="none" ;;
-        10)
+        6) SELECTED_TOOL="hermes" ;;
+        7) SELECTED_TOOL="copilot" ;;
+        8) SELECTED_TOOL="amp" ;;
+        9|"") SELECTED_TOOL="" ;;
+        10) SELECTED_TOOL="none" ;;
+        11)
             SELECTED_TOOL="custom"
             printf "\n"
             read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND < /dev/tty 2>/dev/null || CUSTOM_COMMAND=""
@@ -368,6 +370,7 @@ select_tool() {
                     opencode) printf "  brew install opencode\n" ;;
                     gemini) printf "  brew install gemini\n" ;;
                     codex) printf "  npm install -g @openai/codex\n" ;;
+                    hermes) printf "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash\n" ;;
                     copilot) printf "  gh extension install github/gh-copilot\n" ;;
                     amp) printf "  npm install -g @sourcegraph/amp\n" ;;
                 esac
@@ -383,7 +386,7 @@ select_tool() {
         # Auto-detect: check if any tool is available
         printf "\n"
         local first_tool_found=""
-        for t in lash claude opencode gemini codex copilot amp; do
+        for t in lash claude opencode gemini codex hermes copilot amp; do
             if command -v "$t" >/dev/null 2>&1; then
                 first_tool_found="$t"
                 break
