@@ -174,6 +174,7 @@ lacy_tool_cmd() {
         copilot)  echo "copilot -p" ;;
         goose)    echo "goose run -t" ;;
         amp)      echo "amp -x" ;;
+        aider)    echo "aider --no-auto-commits --message" ;;
         *)        echo "" ;;
     esac
 }
@@ -456,6 +457,7 @@ EOF
                 echo "  copilot:  gh extension install github/gh-copilot"
                 echo "  goose:    brew install goose"
                 echo "  amp:      npm install -g @sourcegraph/amp"
+                echo "  aider:    pipx install aider-chat"
                 return 1
             fi
         else
@@ -470,6 +472,7 @@ EOF
             echo "  gh extension install github/gh-copilot  (copilot)"
             echo "  brew install goose"
             echo "  npm install -g @sourcegraph/amp"
+            echo "  pipx install aider-chat  (aider)"
             return 1
         fi
     fi
