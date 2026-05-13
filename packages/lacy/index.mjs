@@ -414,7 +414,7 @@ async function install() {
 
   // Detect installed tools
   let detected = [];
-  for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose"]) {
+  for (const tool of TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map((t) => t.value)) {
     if (commandExists(tool)) {
       detected.push(tool);
     }
@@ -616,7 +616,7 @@ async function install() {
         }
       } catch (e) {
         p.log.warn(
-          "Installation failed. You can install manually: gh extension install github/gh-copilot",
+          `Installation failed: ${e.message}. You can install manually: gh extension install github/gh-copilot`,
         );
       }
     }
@@ -649,7 +649,7 @@ async function install() {
           );
         }
       } catch (e) {
-        gooseSpinner.stop("goose installation failed");
+        gooseSpinner.stop(`goose installation failed: ${e.message}`);
         p.log.warn(
           "You can install it manually later: brew install goose",
         );
@@ -881,7 +881,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
     const active = readConfigValue("active");
     const mode = readConfigValue("default");
     const detected = [];
-    for (const tool of ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose"]) {
+    for (const tool of TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map((t) => t.value)) {
       if (commandExists(tool)) detected.push(tool);
     }
 
@@ -1042,7 +1042,7 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           `  Mode:       ${pc.cyan(modeDisplay)}`,
           ``,
           `  ${pc.bold("AI CLI tools:")}`,
-          ...["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose"].map((t) =>
+          ...TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map(({ value: t }) =>
             commandExists(t)
               ? `    ${pc.green("✓")} ${t}`
               : `    ${pc.dim("○")} ${pc.dim(t)}`,
