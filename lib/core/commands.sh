@@ -172,7 +172,7 @@ lacy_shell_tool() {
         set)
             if [[ -z "$2" ]]; then
                 echo "Usage: tool set <name>"
-                echo "Options: lash, claude, opencode, gemini, codex, hermes, copilot, goose, custom, auto"
+                echo "Options: lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, custom, auto"
                 echo "  tool set custom \"command -flags\""
                 return 1
             fi
@@ -201,7 +201,7 @@ lacy_shell_tool() {
             ;;
         *)
             echo "Usage: tool [set <name>]"
-            echo "Options: lash, claude, opencode, gemini, codex, hermes, copilot, goose, custom, auto"
+            echo "Options: lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, custom, auto"
             echo "  tool set custom \"command -flags\""
             ;;
     esac
