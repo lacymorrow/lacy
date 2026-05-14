@@ -1,11 +1,18 @@
-# Lacy
+<p align="center">
+  <a href="https://lacy.sh">
+    <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal.svg" alt="Lacy" width="220">
+  </a>
+</p>
 
-**Talk to your shell.** Commands run. Questions go to AI. No prefixes. No context switching. You just type.
+<p align="center"><strong>Talk to your shell.</strong> Commands run. Questions go to AI. No prefixes. No context switching. You just type.</p>
 
-[![npm version](https://img.shields.io/npm/v/lacy)](https://www.npmjs.com/package/lacy)
-[![npm downloads](https://img.shields.io/npm/dm/lacy)](https://www.npmjs.com/package/lacy)
-[![GitHub stars](https://img.shields.io/github/stars/lacymorrow/lacy)](https://github.com/lacymorrow/lacy/stargazers)
-[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](https://fsl.software)
+<p align="center">
+  <a href="https://www.npmjs.com/package/lacy"><img alt="npm version" src="https://img.shields.io/npm/v/lacy?style=flat"></a>
+  <a href="https://www.npmjs.com/package/lacy"><img alt="npm downloads" src="https://img.shields.io/npm/dm/lacy?style=flat"></a>
+  <a href="https://github.com/lacymorrow/lacy/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/lacymorrow/lacy/ci.yml?style=flat&label=CI"></a>
+  <a href="https://github.com/lacymorrow/lacy/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/lacymorrow/lacy?style=flat"></a>
+  <a href="https://fsl.software"><img alt="License: FSL-1.1-MIT" src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue?style=flat"></a>
+</p>
 
 <p align="center">
   <img src="docs/demo-full.gif" alt="Lacy Shell demo — commands run in shell, questions go to AI" width="680" />
@@ -211,4 +218,4 @@ Lacy is open source and contributions are welcome! Whether you're fixing a typo,
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+[FSL-1.1-MIT](LICENSE) — Functional Source License v1.1 with MIT Future License (converts to MIT after 2 years). See [fsl.software](https://fsl.software) for the full text.
