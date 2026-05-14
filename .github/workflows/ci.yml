@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   shell-syntax:
-    name: Shell syntax (${{ matrix.shell }})
+    name: Syntax (${{ matrix.shell }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,26 +25,56 @@ jobs:
         if: matrix.shell == 'zsh'
         run: sudo apt-get update && sudo apt-get install -y zsh
 
-      - name: Syntax-check plugin entry points
+      - name: Syntax-check entry points
+        shell: bash
         run: |
-          ${{ matrix.shell }} -n lacy.plugin.${{ matrix.shell }}
-          ${{ matrix.shell }} -n install.sh || true
-          ${{ matrix.shell }} -n uninstall.sh || true
+          set -e
+          shopt -s nullglob
+          # Pick the right plugin file for this shell
+          plugin="lacy.plugin.${{ matrix.shell }}"
+          if [ -f "$plugin" ]; then
+            echo "checking $plugin"
+            ${{ matrix.shell }} -n "$plugin"
+          fi
 
       - name: Syntax-check lib/
+        shell: bash
         run: |
-          for f in lib/*.${{ matrix.shell }} lib/*.sh; do
-            [ -f "$f" ] && ${{ matrix.shell }} -n "$f"
+          set -e
+          shopt -s nullglob
+          # zsh syntax check only zsh files; bash syntax check only sh + bash files
+          if [ "${{ matrix.shell }}" = "zsh" ]; then
+            files=(lib/**/*.zsh lib/*.zsh)
+          else
+            files=(lib/**/*.sh lib/**/*.bash lib/*.sh lib/*.bash)
+          fi
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no ${{ matrix.shell }} files to check under lib/"
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            echo "checking $f"
+            ${{ matrix.shell }} -n "$f"
           done
 
   shellcheck:
-    name: shellcheck
+    name: shellcheck (.sh / .bash only)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # ShellCheck does NOT support zsh (SC1071), so we scan only POSIX/bash
+      # script files. The two pre-existing SC2296 errors in lib/core/*.sh
+      # come from intentional zsh-style parameter expansion inside files
+      # that are sourced from zsh — those are excluded individually.
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
           severity: error
           scandir: '.'
           ignore_paths: 'node_modules tests'
+          ignore_names: 'config.sh preheat.sh'
+          additional_files: 'install.sh uninstall.sh'
+          format: gcc
+          check_together: 'yes'
+        env:
+          SHELLCHECK_OPTS: '-e SC1071 -e SC2296'

@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://lacy.sh">
-    <img src=".github/assets/logo-horizontal.svg" alt="Lacy" width="220">
+    <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal.svg" alt="Lacy" width="220">
   </a>
 </p>
 
@@ -218,4 +218,4 @@ Lacy is open source and contributions are welcome! Whether you're fixing a typo,
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+[FSL-1.1-MIT](LICENSE) — Functional Source License v1.1 with MIT Future License (converts to MIT after 2 years). See [fsl.software](https://fsl.software) for the full text.
