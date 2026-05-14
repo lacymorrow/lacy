@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  shell-syntax:
+    name: Shell syntax (${{ matrix.shell }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [bash, zsh]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        if: matrix.shell == 'zsh'
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      - name: Syntax-check plugin entry points
+        run: |
+          ${{ matrix.shell }} -n lacy.plugin.${{ matrix.shell }}
+          ${{ matrix.shell }} -n install.sh || true
+          ${{ matrix.shell }} -n uninstall.sh || true
+
+      - name: Syntax-check lib/
+        run: |
+          for f in lib/*.${{ matrix.shell }} lib/*.sh; do
+            [ -f "$f" ] && ${{ matrix.shell }} -n "$f"
+          done
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          severity: error
+          scandir: '.'
+          ignore_paths: 'node_modules tests'
