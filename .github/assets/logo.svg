@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <title>lacy</title>
+  <!-- Rounded square — terminal emerald -->
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="#10b981"/>
+  <!-- Shell prompt: `>_` glyph -->
+  <g fill="#ffffff">
+    <!-- Chevron > -->
+    <path d="M70 80 L110 128 L70 176" stroke="#ffffff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <!-- Underscore cursor -->
+    <rect x="124" y="166" width="68" height="14" rx="4"/>
+  </g>
+</svg>
