@@ -99,7 +99,7 @@ Tags: @AnthropicAI @GoogleDeepMind
 
 ## Schedule
 
-- Wed May 6, 9:00am ET: Post Show HN
-- Wed May 6, 10:30am ET: Post Twitter thread
-- Thu May 7: Post r/commandline + r/zsh
-- Fri May 8: Publish Dev.to article
+- Tue May 12 or Wed May 13, 9:00am ET: Post Show HN
+- Same day, 10:30am ET: Post Twitter thread
+- Next day: Post r/commandline + r/zsh
+- Day after: Publish Dev.to article

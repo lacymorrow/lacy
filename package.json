@@ -11,11 +11,20 @@
   "keywords": [
     "shell",
     "terminal",
+    "zsh",
+    "bash",
+    "shell-plugin",
+    "cli",
     "ai",
-    "mcp",
-    "developer-tools",
     "ai-agent",
-    "natural-language"
+    "ai-shell",
+    "mcp",
+    "natural-language",
+    "claude",
+    "gemini",
+    "opencode",
+    "codex",
+    "developer-tools"
   ],
   "author": "Lacy Shell Team",
   "license": "FSL-1.1-MIT",
