@@ -50,9 +50,6 @@ curl -fsSL https://lacy.sh/install | bash
 brew tap lacymorrow/tap
 brew install lacy
 
-# npx (interactive)
-npx lacy
-
 # Manual
 git clone https://github.com/lacymorrow/lacy.git ~/.lacy
 echo 'source ~/.lacy/lacy.plugin.zsh' >> ~/.zshrc
