@@ -28,6 +28,16 @@
 
 ## Install
 
+> Supported installation methods: `npm`, `curl`, `homebrew`, `git`
+
+#### Install using `npx`
+
+```bash
+npx lacy
+```
+
+#### Install using `curl`
+
 ```bash
 curl -fsSL https://lacy.sh/install | bash
 ```
