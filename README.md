@@ -1,6 +1,9 @@
 <p align="center">
   <a href="https://lacy.sh">
-    <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal.svg" alt="Lacy" width="220">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal-dark.svg">
+      <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal.svg" alt="Lacy" width="220">
+    </picture>
   </a>
 </p>
 
