@@ -113,6 +113,41 @@ assert_eq "how → agent" "agent" "$(lacy_shell_classify_input 'how')"
 assert_eq "no → agent" "agent" "$(lacy_shell_classify_input 'no')"
 assert_eq "nope → agent" "agent" "$(lacy_shell_classify_input 'nope')"
 
+# New agent words — affirmations/reactions
+assert_eq "gotcha → agent" "agent" "$(lacy_shell_classify_input 'gotcha')"
+assert_eq "roger → agent" "agent" "$(lacy_shell_classify_input 'roger')"
+assert_eq "understood → agent" "agent" "$(lacy_shell_classify_input 'understood')"
+assert_eq "kudos → agent" "agent" "$(lacy_shell_classify_input 'kudos')"
+assert_eq "noice → agent" "agent" "$(lacy_shell_classify_input 'noice')"
+
+# New agent words — conversational/reactions
+assert_eq "sheesh → agent" "agent" "$(lacy_shell_classify_input 'sheesh')"
+assert_eq "oof → agent" "agent" "$(lacy_shell_classify_input 'oof')"
+assert_eq "meh → agent" "agent" "$(lacy_shell_classify_input 'meh')"
+assert_eq "duh → agent" "agent" "$(lacy_shell_classify_input 'duh')"
+assert_eq "bummer → agent" "agent" "$(lacy_shell_classify_input 'bummer')"
+
+# New agent words — internet/chat shorthand
+assert_eq "lol → agent" "agent" "$(lacy_shell_classify_input 'lol')"
+assert_eq "omg → agent" "agent" "$(lacy_shell_classify_input 'omg')"
+assert_eq "idk → agent" "agent" "$(lacy_shell_classify_input 'idk')"
+assert_eq "btw → agent" "agent" "$(lacy_shell_classify_input 'btw')"
+assert_eq "tbh → agent" "agent" "$(lacy_shell_classify_input 'tbh')"
+assert_eq "fyi → agent" "agent" "$(lacy_shell_classify_input 'fyi')"
+
+# New agent words — programming verbs
+assert_eq "debug → agent" "agent" "$(lacy_shell_classify_input 'debug')"
+assert_eq "deploy → agent" "agent" "$(lacy_shell_classify_input 'deploy')"
+assert_eq "implement → agent" "agent" "$(lacy_shell_classify_input 'implement')"
+assert_eq "diagnose → agent" "agent" "$(lacy_shell_classify_input 'diagnose')"
+assert_eq "troubleshoot → agent" "agent" "$(lacy_shell_classify_input 'troubleshoot')"
+assert_eq "rollback → agent" "agent" "$(lacy_shell_classify_input 'rollback')"
+
+# New agent words — action/intent
+assert_eq "suggest → agent" "agent" "$(lacy_shell_classify_input 'suggest')"
+assert_eq "recommend → agent" "agent" "$(lacy_shell_classify_input 'recommend')"
+assert_eq "imagine → agent" "agent" "$(lacy_shell_classify_input 'imagine')"
+
 # Agent words — with trailing punctuation
 assert_eq "why? → agent" "agent" "$(lacy_shell_classify_input 'why?')"
 assert_eq "how? → agent" "agent" "$(lacy_shell_classify_input 'how?')"
