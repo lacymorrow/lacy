@@ -298,9 +298,10 @@ agent_tools:
 #   output_lines: 50      # Max lines to include (truncates from top)
 
 # Spinner animation style
-# Options: braille, braillewave, dna, scan, rain, scanline, pulse, snake, sparkle,
-#          cascade, columns, orbit, breathe, waverows, checkerboard, helix, fillsweep,
-#          diagswipe, random (picks a different one each query)
+# Options: braille (default), dots, ascii (no Unicode), braillewave, dna, scan,
+#          rain, scanline, pulse, snake, sparkle, cascade, columns, orbit, breathe,
+#          waverows, checkerboard, helix, fillsweep, diagswipe,
+#          random (picks a different one each query)
 # spinner:
 #   style: random
 
