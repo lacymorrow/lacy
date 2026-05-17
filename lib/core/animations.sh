@@ -14,7 +14,7 @@
 
 # Available animation names
 LACY_SPINNER_ANIMATIONS=(
-    "braille" "braillewave" "dna" "scan" "rain" "scanline"
+    "braille" "dots" "ascii" "braillewave" "dna" "scan" "rain" "scanline"
     "pulse" "snake" "sparkle" "cascade" "columns" "orbit"
     "breathe" "waverows" "checkerboard" "helix" "fillsweep" "diagswipe"
 )
@@ -41,6 +41,15 @@ lacy_set_spinner_animation() {
             # Classic rotating dots
             LACY_SPINNER_ANIM=("⠋⠀⠀⠀" "⠙⠀⠀⠀" "⠹⠀⠀⠀" "⠸⠀⠀⠀" "⠼⠀⠀⠀" "⠴⠀⠀⠀"
                 "⠦⠀⠀⠀" "⠧⠀⠀⠀" "⠇⠀⠀⠀" "⠏⠀⠀⠀")
+            ;;
+        dots)
+            # Single dot traveling all 8 braille positions
+            LACY_SPINNER_ANIM=("⠁⠀⠀⠀" "⠂⠀⠀⠀" "⠄⠀⠀⠀" "⡀⠀⠀⠀" "⢀⠀⠀⠀" "⠠⠀⠀⠀"
+                "⠐⠀⠀⠀" "⠈⠀⠀⠀")
+            ;;
+        ascii)
+            # ASCII-only fallback for terminals without Unicode
+            LACY_SPINNER_ANIM=("|   " "/   " "-   " "\\   ")
             ;;
         braillewave)
             # Traveling dot wave
