@@ -32,14 +32,18 @@ lacy_shell_execute_agent() {
     if ! lacy_shell_query_agent "$query"; then
         if [[ -z "$LACY_ACTIVE_TOOL" ]] && ! _lacy_is_any_tool_installed; then
             echo ""
-            lacy_print_color 196 "$LACY_MSG_NO_TOOL"
+            printf '\e[38;5;196m  No AI tool detected.\e[0m Lacy needs an AI CLI to handle queries.\n'
             echo ""
-            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT"
-            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT2"
-            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT3"
-            lacy_print_color 238 "$LACY_MSG_INSTALL_HINT4"
+            printf '\e[1m  Supported tools:\e[0m\n'
             echo ""
-            lacy_print_color 238 "$LACY_MSG_CONFIGURE_HINT"
+            printf '    \e[38;5;34m%-12s\e[0m %s\n' "lash"     "npm install -g lashcode        (recommended)"
+            printf '    \e[38;5;238m%-12s\e[0m %s\n' "claude"   "brew install claude"
+            printf '    \e[38;5;238m%-12s\e[0m %s\n' "opencode" "brew install opencode"
+            printf '    \e[38;5;238m%-12s\e[0m %s\n' "gemini"   "brew install gemini"
+            printf '    \e[38;5;238m%-12s\e[0m %s\n' "codex"    "npm install -g @openai/codex"
+            echo ""
+            printf '  \e[38;5;75mThen run:\e[0m  lacy setup\n'
+            printf '  \e[38;5;75mDocs:\e[0m      %s\n' "$LACY_DOCS_URL"
             echo ""
         else
             local _tool="${LACY_ACTIVE_TOOL}"
