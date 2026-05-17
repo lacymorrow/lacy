@@ -7,7 +7,7 @@ Thanks for your interest in contributing to Lacy! This guide will help you get s
 ### Prerequisites
 
 - **ZSH** or **Bash 4+** (macOS ships with Bash 3.2 -- install Bash 4+ via `brew install bash`)
-- **Git**
+- **Git** (for development; not required for end-user installation)
 - An AI CLI tool for testing agent routing (Claude Code, Lash, Gemini CLI, etc.)
 
 ### Development Setup
