@@ -11,7 +11,7 @@ import {
   appendFileSync,
   rmSync,
 } from "fs";
-import { homedir } from "os";
+import { homedir, tmpdir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -19,6 +19,7 @@ const INSTALL_DIR = join(homedir(), ".lacy");
 const INSTALL_DIR_OLD = join(homedir(), ".lacy-shell");
 const CONFIG_FILE = join(INSTALL_DIR, "config.yaml");
 const REPO_URL = "https://github.com/lacymorrow/lacy.git";
+const TARBALL_URL = "https://github.com/lacymorrow/lacy/archive/refs/heads";
 
 // Version — read from installed package.json (single source of truth),
 // fall back to this npm package's own package.json
@@ -188,6 +189,14 @@ function commandExists(cmd) {
   } catch {
     return false;
   }
+}
+
+function installViaTarball(branch) {
+  const tmpFile = join(tmpdir(), `lacy-${Date.now()}.tar.gz`);
+  execSync(`curl -fsSL "${TARBALL_URL}/${branch}.tar.gz" -o "${tmpFile}"`, { stdio: "pipe" });
+  mkdirSync(INSTALL_DIR, { recursive: true });
+  execSync(`tar xzf "${tmpFile}" --strip-components=1 -C "${INSTALL_DIR}"`, { stdio: "pipe" });
+  try { rmSync(tmpFile); } catch {}
 }
 
 function isInstalled() {
@@ -402,8 +411,6 @@ async function install() {
   } else {
     if (!commandExists("zsh")) missing.push("zsh");
   }
-
-  if (!commandExists("git")) missing.push("git");
 
   if (missing.length > 0) {
     prerequisites.stop("Prerequisites check failed");
@@ -736,24 +743,38 @@ async function install() {
   const installSpinner = p.spinner();
   installSpinner.start("Installing Lacy");
 
+  const hasGit = commandExists("git");
+
   try {
     if (existsSync(INSTALL_DIR)) {
       // Update existing
       try {
-        execSync("git pull origin main", { cwd: INSTALL_DIR, stdio: "pipe" });
+        if (hasGit && existsSync(join(INSTALL_DIR, ".git"))) {
+          execSync("git pull origin main", { cwd: INSTALL_DIR, stdio: "pipe" });
+        } else {
+          installViaTarball("main");
+        }
       } catch {
-        // Ignore pull errors, use existing
+        // Ignore update errors, use existing
       }
       installSpinner.stop("Lacy updated");
     } else {
-      execSync(`git clone --depth 1 ${REPO_URL} "${INSTALL_DIR}"`, {
-        stdio: "pipe",
-      });
+      if (hasGit) {
+        try {
+          execSync(`git clone --depth 1 ${REPO_URL} "${INSTALL_DIR}"`, {
+            stdio: "pipe",
+          });
+        } catch {
+          installViaTarball("main");
+        }
+      } else {
+        installViaTarball("main");
+      }
       installSpinner.stop("Lacy installed");
     }
   } catch (e) {
     installSpinner.stop("Installation failed");
-    p.log.error(`Could not clone repository: ${e.message}`);
+    p.log.error(`Could not download repository: ${e.message}`);
     p.outro(pc.red("Installation failed"));
     process.exit(1);
   }
@@ -1140,7 +1161,11 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
           ? INSTALL_DIR
           : INSTALL_DIR_OLD;
         try {
-          execSync("git pull origin main", { cwd: updateDir, stdio: "pipe" });
+          if (commandExists("git") && existsSync(join(updateDir, ".git"))) {
+            execSync("git pull origin main", { cwd: updateDir, stdio: "pipe" });
+          } else {
+            installViaTarball("main");
+          }
           const updatedVersion = getVersion();
           updateSpinner.stop(`Lacy updated to v${updatedVersion}`);
           trackEvent("update", "npx");
