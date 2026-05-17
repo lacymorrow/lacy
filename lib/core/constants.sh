@@ -72,15 +72,17 @@ LACY_AGENT_WORDS=(
     "yes" "yeah" "yep" "yup" "sure" "ok" "okay" "alright"
     "absolutely" "definitely" "certainly" "indeed" "correct" "right" "exactly"
     "perfect" "agreed" "affirmative" "totally" "clearly" "obviously" "lgtm"
+    "roger" "understood" "acknowledged" "gotcha"
     # negations
-    "no" "nope" "nah" "never" "wrong" "disagree"
+    "no" "nope" "nah" "never" "wrong" "disagree" "nay" "meh"
     # gratitude
-    "thanks" "thank" "thx" "ty" "cheers" "appreciated"
+    "thanks" "thank" "thx" "ty" "cheers" "appreciated" "kudos" "congrats" "bravo"
     # reactions
     "great" "good" "nice" "cool" "awesome" "amazing" "wonderful" "brilliant"
     "excellent" "fantastic" "sweet" "neat" "beautiful" "gorgeous" "impressive"
     "incredible" "outstanding" "superb" "marvelous" "magnificent" "stellar"
     "phenomenal" "terrific" "splendid" "fine" "solid" "dope" "sick" "fire" "lit" "rad" "legit"
+    "noice" "yay" "hooray" "woah"
     # greetings/closings
     "hey" "hi" "hello" "howdy" "sup" "yo" "bye" "goodbye" "cya" "later"
     # conversational
@@ -89,16 +91,22 @@ LACY_AGENT_WORDS=(
     "meanwhile" "honestly" "basically" "literally" "actually" "really"
     "seriously" "hopefully" "unfortunately" "apparently"
     "supposedly" "probably" "maybe" "perhaps" "possibly"
+    "sheesh" "geez" "oof" "ouch" "bummer" "duh"
+    # internet/chat shorthand
+    "lol" "haha" "heh" "omg" "wtf" "idk" "fyi" "btw" "imho" "imo" "tbh" "pls" "plz"
     # action/intent
     "stop" "hold" "pause" "cancel" "abort" "skip" "continue" "proceed"
     "next" "again" "redo" "undo" "retry"
     "explain" "elaborate" "clarify" "summarize" "describe" "show" "tell"
+    "suggest" "recommend" "consider" "imagine" "suppose"
     # question words
     "why" "how" "what" "when" "where" "who" "which" "whom" "whose"
     "can" "could" "would" "should" "will" "shall" "may" "might" "must"
     "does" "did" "is" "are" "was" "were" "has" "have" "had"
     # programming verbs used conversationally (not valid commands on common systems)
-    "refactor" "optimize" "scaffold"
+    "refactor" "optimize" "scaffold" "debug" "deploy" "implement"
+    "migrate" "lint" "render" "integrate" "iterate"
+    "diagnose" "troubleshoot" "hotfix" "rollback" "revert"
 )
 
 # Natural language markers — common English words unusual as shell arguments.
