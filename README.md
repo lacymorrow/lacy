@@ -27,7 +27,7 @@
 - **Zero friction** — No slash commands, no hotkeys, no separate terminal. Type naturally and Lacy routes it. A real-time color indicator shows you what will happen before you press enter.
 - **Smart detection** — Lacy classifies input using word analysis, not AI. It's instant. Commands like `ls -la` stay green (shell). Questions like `what files are here` turn magenta (AI). If a command fails with natural language patterns, it silently reroutes to AI.
 
-> *Works with ZSH and Bash 4+ on macOS, Linux, and WSL.*
+> *Works with ZSH, Bash 4+, and Fish 3.1+ on macOS, Linux, and WSL.*
 
 ## Install
 
@@ -53,9 +53,13 @@ curl -fsSL https://lacy.sh/install | bash
 brew tap lacymorrow/tap
 brew install lacy
 
-# Manual
+# Manual (ZSH)
 git clone https://github.com/lacymorrow/lacy.git ~/.lacy
 echo 'source ~/.lacy/lacy.plugin.zsh' >> ~/.zshrc
+
+# Manual (Fish)
+git clone https://github.com/lacymorrow/lacy.git ~/.lacy
+echo 'source ~/.lacy/lacy.plugin.fish' > ~/.config/fish/conf.d/lacy.fish
 ```
 
 </details>

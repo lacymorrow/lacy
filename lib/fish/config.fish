@@ -7,7 +7,7 @@
 set -g LACY_SHELL_MODE auto         # shell | agent | auto
 set -g LACY_ACTIVE_TOOL ""          # empty = auto-detect
 set -g LACY_CUSTOM_TOOL_CMD ""
-set -g LACY_TOOL_LIST lash claude opencode gemini codex
+set -g LACY_TOOL_LIST lash claude opencode gemini codex hermes copilot goose amp aider
 
 # Colors (256-color indices)
 set -g LACY_COLOR_SHELL 34          # green
