@@ -24,6 +24,7 @@ NC='\033[0m' # No Color
 # Installation directory
 INSTALL_DIR="${HOME}/.lacy"
 REPO_URL="https://github.com/lacymorrow/lacy.git"
+TARBALL_URL="https://github.com/lacymorrow/lacy/archive/refs/heads"
 CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 
 # Release channel (set via --beta, --channel, or LACY_CHANNEL env var)
@@ -258,12 +259,11 @@ check_prerequisites() {
         missing=1
     fi
 
-    # Check for git
+    # Check for git (optional — curl fallback available)
     if command -v git >/dev/null 2>&1; then
         printf "  ${GREEN}✓${NC} git\n"
     else
-        printf "  ${RED}✗${NC} git (required)\n"
-        missing=1
+        printf "  ${YELLOW}○${NC} git (not found, will use curl fallback)\n"
     fi
 
     printf "\n"
@@ -430,6 +430,27 @@ install_lash() {
     fi
 }
 
+# Download and extract tarball (curl fallback when git is not available)
+install_via_tarball() {
+    local branch="$1"
+    local tarball_file
+    tarball_file=$(mktemp "${TMPDIR:-/tmp}/lacy-XXXXXX.tar.gz")
+
+    curl -fsSL "${TARBALL_URL}/${branch}.tar.gz" -o "$tarball_file" 2>/dev/null || {
+        rm -f "$tarball_file"
+        return 1
+    }
+
+    mkdir -p "$INSTALL_DIR"
+    tar xzf "$tarball_file" --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
+        rm -f "$tarball_file"
+        return 1
+    }
+
+    rm -f "$tarball_file"
+    return 0
+}
+
 # Clone or update repository
 install_plugin() {
     printf "${BLUE}Installing Lacy...${NC}\n"
@@ -440,19 +461,37 @@ install_plugin() {
         branch="$LACY_CHANNEL"
     fi
 
+    local has_git=0
+    command -v git >/dev/null 2>&1 && has_git=1
+
     if [[ -d "$INSTALL_DIR" ]]; then
         printf "${YELLOW}Existing installation found. Updating...${NC}\n"
-        cd "$INSTALL_DIR" || exit 1
-        git pull origin "$branch" 2>/dev/null || git pull origin main 2>/dev/null || git pull 2>/dev/null || {
-            printf "${YELLOW}Could not update, using existing installation${NC}\n"
-        }
+        if [[ $has_git -eq 1 && -d "$INSTALL_DIR/.git" ]]; then
+            cd "$INSTALL_DIR" || exit 1
+            git pull origin "$branch" 2>/dev/null || git pull origin main 2>/dev/null || git pull 2>/dev/null || {
+                printf "${YELLOW}Could not update, using existing installation${NC}\n"
+            }
+        else
+            install_via_tarball "$branch" || install_via_tarball "main" || {
+                printf "${YELLOW}Could not update, using existing installation${NC}\n"
+            }
+        fi
     else
-        # Try channel branch first, fall back to main
-        git clone --depth 1 -b "$branch" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || \
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
-            printf "${RED}Failed to clone repository${NC}\n"
-            exit 1
-        }
+        if [[ $has_git -eq 1 ]]; then
+            git clone --depth 1 -b "$branch" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || \
+            git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
+                # Git failed, try curl fallback
+                install_via_tarball "$branch" || install_via_tarball "main" || {
+                    printf "${RED}Failed to install repository${NC}\n"
+                    exit 1
+                }
+            }
+        else
+            install_via_tarball "$branch" || install_via_tarball "main" || {
+                printf "${RED}Failed to download repository${NC}\n"
+                exit 1
+            }
+        fi
     fi
 
     local version
@@ -779,7 +818,13 @@ check_existing_installation() {
                     printf "${RED}Could not find installation directory${NC}\n"
                     exit 1
                 }
-                if git pull origin main 2>/dev/null || git pull 2>/dev/null; then
+                local update_ok=0
+                if command -v git >/dev/null 2>&1 && [[ -d "$INSTALL_DIR/.git" ]]; then
+                    git pull origin main 2>/dev/null || git pull 2>/dev/null && update_ok=1
+                else
+                    install_via_tarball "main" && update_ok=1
+                fi
+                if [[ $update_ok -eq 1 ]]; then
                     local updated_version
                     updated_version=$(get_installed_version)
                     printf "${GREEN}✓ Lacy updated${NC}"
