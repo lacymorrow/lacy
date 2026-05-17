@@ -393,7 +393,23 @@ EOF
         fi
 
         echo ""
-        echo "No AI CLI tool found."
+        printf '\e[38;5;196m  No AI tool detected.\e[0m Lacy needs an AI CLI to handle queries.\n'
+        echo ""
+        printf '\e[1m  Supported tools:\e[0m\n'
+        echo ""
+        printf '    \e[38;5;34m%-12s\e[0m %s\n' "lash"     "npm install -g lashcode        (recommended)"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "claude"   "brew install claude"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "opencode" "brew install opencode"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "gemini"   "brew install gemini"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "codex"    "npm install -g @openai/codex"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "hermes"   "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "copilot"  "gh extension install github/gh-copilot"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "goose"    "brew install goose"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "amp"      "npm install -g @sourcegraph/amp"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "aider"    "pipx install aider-chat"
+        echo ""
+        printf '  \e[38;5;75mThen run:\e[0m  lacy setup\n'
+        printf '  \e[38;5;75mDocs:\e[0m      %s\n' "$LACY_DOCS_URL"
         echo ""
 
         # Offer to install lash interactively if terminal is available
@@ -406,73 +422,49 @@ EOF
 
         if [[ "$can_prompt" == true ]]; then
             local install_now=""
-            echo "Would you like to install lash? (AI coding agent — lash.lacy.sh)"
+            printf '  Install \e[38;5;34mlash\e[0m now? (AI coding agent — lash.lacy.sh)\n'
             echo ""
             if [[ -t 0 ]]; then
-                read -p "Install lash now? [Y/n]: " install_now
+                read -p "  [Y/n]: " install_now
             else
-                read -p "Install lash now? [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
+                read -p "  [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
             fi
 
             if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
                 echo ""
                 if command -v npm >/dev/null 2>&1; then
-                    echo "Installing lash..."
+                    echo "  Installing lash..."
                     if npm install -g lashcode; then
                         echo ""
-                        echo "lash installed! Re-running your query..."
+                        printf '  \e[38;5;34m✓\e[0m lash installed! Re-running your query...\n'
                         echo ""
                         tool="lash"
                     else
                         echo ""
-                        echo "Installation failed. You can try manually: npm install -g lashcode"
+                        printf '  \e[38;5;196m✗\e[0m Installation failed. Try manually: npm install -g lashcode\n'
                         return 1
                     fi
                 elif command -v brew >/dev/null 2>&1; then
-                    echo "Installing lash..."
+                    echo "  Installing lash..."
                     if brew tap lacymorrow/tap && brew install lash; then
                         echo ""
-                        echo "lash installed! Re-running your query..."
+                        printf '  \e[38;5;34m✓\e[0m lash installed! Re-running your query...\n'
                         echo ""
                         tool="lash"
                     else
                         echo ""
-                        echo "Installation failed. You can try manually: brew install lacymorrow/tap/lash"
+                        printf '  \e[38;5;196m✗\e[0m Installation failed. Try manually: brew install lacymorrow/tap/lash\n'
                         return 1
                     fi
                 else
-                    echo "Neither npm nor brew found. Please install one of them first, then run:"
-                    echo "  npm install -g lashcode"
+                    printf '  \e[38;5;196m✗\e[0m Neither npm nor brew found. Install one, then run:\n'
+                    echo "    npm install -g lashcode"
                     return 1
                 fi
             else
-                echo ""
-                echo "Install options:"
-                echo "  lash:     npm install -g lashcode"
-                echo "  claude:   brew install claude"
-                echo "  opencode: brew install opencode"
-                echo "  gemini:   brew install gemini"
-                echo "  codex:    npm install -g @openai/codex"
-                echo "  hermes:   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
-                echo "  copilot:  gh extension install github/gh-copilot"
-                echo "  goose:    brew install goose"
-                echo "  amp:      npm install -g @sourcegraph/amp"
-                echo "  aider:    pipx install aider-chat"
                 return 1
             fi
         else
-            echo "Install an AI CLI tool to get started:"
-            echo ""
-            echo "  npm install -g lashcode     (recommended) — lash.lacy.sh"
-            echo "  brew install claude"
-            echo "  brew install opencode"
-            echo "  brew install gemini"
-            echo "  npm install -g @openai/codex"
-            echo "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash  (hermes)"
-            echo "  gh extension install github/gh-copilot  (copilot)"
-            echo "  brew install goose"
-            echo "  npm install -g @sourcegraph/amp"
-            echo "  pipx install aider-chat  (aider)"
             return 1
         fi
     fi

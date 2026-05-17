@@ -33,11 +33,20 @@ function _lacy_query_agent --description "Route a query to the AI agent"
     set -l tool (_lacy_detect_tool)
 
     if test -z "$tool"
-        printf '\n\e[38;5;196m  No AI tool found. Install one:\e[0m\n'
-        printf '    npm install -g lashcode   (lash — recommended)\n'
-        printf '    brew install claude\n'
-        printf '    brew install opencode\n'
-        printf '\e[38;5;238m  Run `lacy setup` to configure after installing.\e[0m\n\n'
+        printf '\n\e[38;5;196m  No AI tool detected.\e[0m Lacy needs an AI CLI to handle queries.\n\n'
+        printf '\e[1m  Supported tools:\e[0m\n\n'
+        printf '    \e[38;5;34m%-12s\e[0m %s\n' "lash"     "npm install -g lashcode        (recommended)"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "claude"   "brew install claude"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "opencode" "brew install opencode"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "gemini"   "brew install gemini"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "codex"    "npm install -g @openai/codex"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "hermes"   "curl -fsSL .../install.sh | bash"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "copilot"  "gh extension install github/gh-copilot"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "goose"    "brew install goose"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "amp"      "npm install -g @sourcegraph/amp"
+        printf '    \e[38;5;238m%-12s\e[0m %s\n' "aider"    "pipx install aider-chat"
+        printf '\n  \e[38;5;75mThen run:\e[0m  lacy setup\n'
+        printf '  \e[38;5;75mDocs:\e[0m      https://lacy.sh/docs\n\n'
         return 1
     end
 
