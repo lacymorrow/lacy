@@ -29,7 +29,7 @@ _lacy_completions() {
             return
             ;;
         completions)
-            COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
+            COMPREPLY=( $(compgen -W "zsh bash fish" -- "$cur") )
             return
             ;;
     esac

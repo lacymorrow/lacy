@@ -38,6 +38,7 @@ if test -d "$_lacy_fish_dir"
     source "$_lacy_fish_dir/execute.fish"
     source "$_lacy_fish_dir/keybindings.fish"
     source "$_lacy_fish_dir/prompt.fish"
+    source "$_lacy_fish_dir/completions.fish"
 else
     echo "Lacy Shell: lib/fish not found at $_lacy_fish_dir" >&2
 end
