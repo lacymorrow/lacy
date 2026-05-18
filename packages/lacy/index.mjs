@@ -81,7 +81,11 @@ function detectShell() {
   const shell = process.env.SHELL || "";
   const base = shell.split("/").pop();
   if (base === "bash") return "bash";
-  return "zsh"; // default
+  if (base === "zsh") return "zsh";
+  // Unknown $SHELL — check what's available
+  if (commandExists("zsh")) return "zsh";
+  if (commandExists("bash")) return "bash";
+  return "bash";
 }
 
 function getShellConfig(shell) {
