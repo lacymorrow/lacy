@@ -248,8 +248,14 @@ check_prerequisites() {
             ;;
         bash)
             if command -v bash >/dev/null 2>&1; then
-                local bash_version
-                bash_version=$(bash -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || echo "0")
+                local bash_version user_bash
+                # Use the user's $SHELL if it's bash — on macOS, plain `bash` resolves
+                # to /bin/bash (3.2) even when the user has a newer bash as their shell
+                case "${SHELL:-}" in
+                    */bash) user_bash="$SHELL" ;;
+                    *)      user_bash="bash" ;;
+                esac
+                bash_version=$("$user_bash" -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || bash -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || echo "0")
                 if [[ "$bash_version" -ge 4 ]]; then
                     printf "  ${GREEN}✓${NC} bash ${bash_version}+\n"
                 else

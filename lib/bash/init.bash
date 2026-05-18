@@ -4,7 +4,7 @@
 
 # Require Bash 4+ (for declare -A, ${var,,}, READLINE_LINE)
 if [[ ${BASH_VERSINFO[0]} -lt 4 ]]; then
-    echo "Lacy Shell requires Bash 4+. You have Bash ${BASH_VERSION}."
+    echo "Lacy Shell requires Bash 4 or later. You have Bash ${BASH_VERSION}."
     echo ""
     echo "Upgrade options:"
     echo "  macOS:  brew install bash"
