@@ -403,11 +403,20 @@ async function install() {
   if (shell === "bash") {
     if (commandExists("bash")) {
       try {
-        const bashVer = execSync('bash -c "echo ${BASH_VERSINFO[0]}"', {
-          stdio: "pipe",
-        })
-          .toString()
-          .trim();
+        // Use $SHELL if it's bash — on macOS, plain `bash` resolves to /bin/bash (3.2)
+        // even when the user has a newer bash (e.g. 5.x from Homebrew) as their login shell
+        const shellEnv = process.env.SHELL || "";
+        const userBash = shellEnv.endsWith("/bash") ? shellEnv : "bash";
+        let bashVer;
+        try {
+          bashVer = execSync(`"${userBash}" -c "echo \\${BASH_VERSINFO[0]}"`, {
+            stdio: "pipe",
+          }).toString().trim();
+        } catch {
+          bashVer = execSync('bash -c "echo ${BASH_VERSINFO[0]}"', {
+            stdio: "pipe",
+          }).toString().trim();
+        }
         if (parseInt(bashVer) < 4) {
           missing.push(
             `bash 4+ (found bash ${bashVer}, upgrade with: brew install bash)`,
