@@ -252,6 +252,13 @@ async function restartShell(
     // Restore terminal state before handing off to the new shell
     restoreTerminalState();
 
+    // Remove signal handlers so Ctrl+C in the child shell doesn't kill Node.
+    // The child shell manages its own signals; Node just waits for it to exit.
+    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+      process.removeAllListeners(sig);
+    }
+    process.on("SIGINT", () => {});
+
     // Spawn a new login shell that inherits our stdio, then exit Node.
     // We use spawn (not execSync) to avoid creating a nested shell —
     // execSync("exec ...") only replaces the *child* process, not Node,
@@ -1216,7 +1223,9 @@ ${pc.dim("https://github.com/lacymorrow/lacy")}
   await install();
 }
 
-main().catch((e) => {
+main().then(() => {
+  process.exit(0);
+}).catch((e) => {
   restoreTerminalState();
   p.log.error(e.message);
   process.exit(1);
