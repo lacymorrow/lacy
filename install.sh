@@ -105,7 +105,20 @@ detect_user_shell() {
         zsh)  DETECTED_SHELL="zsh" ;;
         bash) DETECTED_SHELL="bash" ;;
         fish) DETECTED_SHELL="fish" ;;
-        *)    DETECTED_SHELL="zsh" ;;
+        *)
+            # Detect from running process or what's available
+            if [[ -n "${BASH_VERSION:-}" ]]; then
+                DETECTED_SHELL="bash"
+            elif [[ -n "${ZSH_VERSION:-}" ]]; then
+                DETECTED_SHELL="zsh"
+            elif command -v zsh >/dev/null 2>&1; then
+                DETECTED_SHELL="zsh"
+            elif command -v bash >/dev/null 2>&1; then
+                DETECTED_SHELL="bash"
+            else
+                DETECTED_SHELL="bash"
+            fi
+            ;;
     esac
 }
 

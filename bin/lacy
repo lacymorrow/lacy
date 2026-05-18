@@ -63,11 +63,36 @@ command_exists() {
 
 detect_shell() {
     local shell
-    shell=$(basename "${SHELL:-zsh}")
+    shell=$(basename "${SHELL:-}")
     case "$shell" in
         zsh|bash) echo "$shell" ;;
-        *) echo "zsh" ;;
+        *)
+            # Detect from the running process if $SHELL is unhelpful
+            if [[ -n "${BASH_VERSION:-}" ]]; then
+                echo "bash"
+            elif [[ -n "${ZSH_VERSION:-}" ]]; then
+                echo "zsh"
+            elif command_exists bash; then
+                echo "bash"
+            elif command_exists zsh; then
+                echo "zsh"
+            else
+                echo "bash"
+            fi
+            ;;
     esac
+}
+
+update_via_tarball() {
+    local dir="$1"
+    local tarball_url="https://github.com/lacymorrow/lacy/archive/refs/heads/main.tar.gz"
+    local tmp_file
+    tmp_file=$(mktemp)
+    curl -fsSL "$tarball_url" -o "$tmp_file" 2>/dev/null || { rm -f "$tmp_file"; return 1; }
+    # Extract over existing directory
+    tar xzf "$tmp_file" --strip-components=1 -C "$dir" 2>/dev/null || { rm -f "$tmp_file"; return 1; }
+    rm -f "$tmp_file"
+    return 0
 }
 
 get_rc_file() {
@@ -237,20 +262,21 @@ cmd_update() {
 
     info "Updating Lacy Shell..."
 
-    if [[ -d "${dir}/.git" ]]; then
+    if [[ -d "${dir}/.git" ]] && command_exists git; then
         if git -C "$dir" pull origin main 2>/dev/null || git -C "$dir" pull 2>/dev/null; then
-            # Re-read version after update
             VERSION="$(get_version)"
             VERSION="${VERSION:-$VERSION_FALLBACK}"
             success "Lacy Shell updated to v${VERSION}"
         else
             die "Update failed. Try: lacy reinstall"
         fi
+    elif command_exists curl; then
+        update_via_tarball "$dir" || die "Update failed. Try: lacy reinstall"
+        VERSION="$(get_version)"
+        VERSION="${VERSION:-$VERSION_FALLBACK}"
+        success "Lacy Shell updated to v${VERSION}"
     else
-        warn "Not a git repo. Reinstalling..."
-        rm -rf "$dir"
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || die "Clone failed"
-        success "Lacy Shell reinstalled"
+        die "Neither git nor curl available. Cannot update."
     fi
 }
 
@@ -268,8 +294,22 @@ cmd_reinstall() {
     [[ -d "$INSTALL_DIR" ]] && rm -rf "$INSTALL_DIR"
     [[ -d "$INSTALL_DIR_OLD" ]] && rm -rf "$INSTALL_DIR_OLD"
 
-    # Clone fresh
-    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || die "Clone failed"
+    # Install fresh (git with tarball fallback)
+    local installed=false
+    if command_exists git; then
+        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null && installed=true
+    fi
+    if [[ "$installed" == false ]] && command_exists curl; then
+        local tarball_url="https://github.com/lacymorrow/lacy/archive/refs/heads/main.tar.gz"
+        local tmp_file
+        tmp_file=$(mktemp)
+        curl -fsSL "$tarball_url" -o "$tmp_file" 2>/dev/null && \
+            mkdir -p "$INSTALL_DIR" && \
+            tar xzf "$tmp_file" --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null && \
+            installed=true
+        rm -f "$tmp_file"
+    fi
+    [[ "$installed" == false ]] && die "Install failed. Need git or curl."
 
     # Restore user config
     if [[ -n "$config_backup" ]]; then
@@ -457,12 +497,11 @@ cmd_doctor() {
         issues=$((issues + 1))
     fi
 
-    # Check git
+    # Check git (optional — tarball fallback available)
     if command_exists git; then
         success "git available"
     else
-        printf "  ${RED}✗${NC} git not found (required for updates)\n"
-        issues=$((issues + 1))
+        printf "  ${YELLOW}○${NC} git not found (optional, updates use curl fallback)\n"
     fi
 
     # Check curl
