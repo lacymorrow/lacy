@@ -1,8 +1,8 @@
 <p align="center">
   <a href="https://lacy.sh">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal-dark.svg">
-      <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/.github/assets/logo-horizontal.svg" alt="Lacy" width="220">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/.github/assets/logo-horizontal-dark.svg">
+      <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/.github/assets/logo-horizontal.svg" alt="Lacy" width="220">
     </picture>
   </a>
 </p>
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-full.gif" alt="Lacy Shell demo — commands run in shell, questions go to AI" width="680" />
+  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/docs/demo-full.gif" alt="Lacy Shell demo — commands run in shell, questions go to AI" width="680" />
 </p>
 
 ## Why Lacy?
@@ -65,7 +65,7 @@ echo 'source ~/.lacy/lacy.plugin.zsh' >> ~/.zshrc
 Real-time visual feedback shows what will happen before you hit enter:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/docs/demo-indicator.gif" alt="Green indicator for shell commands, magenta for AI" width="680" />
+  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/docs/demo-indicator.gif" alt="Green indicator for shell commands, magenta for AI" width="680" />
 </p>
 
 Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no context switching — you just type.
@@ -90,7 +90,7 @@ The first word of your input is also syntax-highlighted in real-time: **green** 
 ## Modes
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/assets/mode-indicators.jpeg" alt="Shell and Agent mode indicators" width="480" />
+  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/assets/mode-indicators.jpeg" alt="Shell and Agent mode indicators" width="480" />
 </p>
 
 | Mode      | Behavior                | Activate                     |
@@ -104,7 +104,7 @@ The first word of your input is also syntax-highlighted in real-time: **green** 
 Lacy auto-detects your installed AI CLI. All tools handle their own auth — no API keys needed.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/main/assets/supported-tools.jpeg" alt="Supported AI CLI tools" width="680" />
+  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/assets/supported-tools.jpeg" alt="Supported AI CLI tools" width="680" />
 </p>
 
 ```bash
