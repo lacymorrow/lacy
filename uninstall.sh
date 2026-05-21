@@ -49,4 +49,15 @@ fi
 
 echo ""
 echo "Lacy Shell uninstalled."
+
+# Offer to restart the shell
+if [[ -t 0 ]]; then
+    printf "Restart shell now to apply changes? [Y/n]: "
+    read -r restart
+    if [[ ! "$restart" =~ ^[Nn]$ ]]; then
+        shell_cmd=$(basename "${SHELL:-bash}")
+        echo "Restarting ${shell_cmd}..."
+        exec "$shell_cmd" -l
+    fi
+fi
 echo "Restart your terminal to apply changes."
