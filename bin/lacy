@@ -191,8 +191,8 @@ cmd_uninstall() {
         exit 0
     fi
 
-    # Try fancy Node uninstaller first
-    try_node --uninstall || true
+    # Try fancy Node uninstaller first (suppress npx errors — bash fallback handles it)
+    try_node --uninstall 2>/dev/null || true
 
     # Bash fallback
     if [[ -t 0 ]]; then
@@ -249,7 +249,8 @@ cmd_uninstall() {
     fi
 
     printf "\n${GREEN}Lacy Shell uninstalled.${NC}\n"
-    echo "Restart your terminal to apply changes."
+
+    offer_restart
 }
 
 cmd_update() {
