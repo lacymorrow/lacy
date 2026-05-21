@@ -251,6 +251,7 @@ cmd_uninstall() {
     printf "\n${GREEN}Lacy Shell uninstalled.${NC}\n"
 
     offer_restart
+    echo "Restart your terminal to apply changes."
 }
 
 cmd_update() {
