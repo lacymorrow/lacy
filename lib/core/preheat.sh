@@ -169,7 +169,7 @@ lacy_preheat_server_query() {
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
         LACY_PREHEAT_SERVER_SESSION_ID=""
-        rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+        command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
         return 1
     fi
 
@@ -225,12 +225,12 @@ lacy_preheat_server_stop() {
             kill "$file_pid" 2>/dev/null
             wait "$file_pid" 2>/dev/null
         fi
-        rm -f "$LACY_PREHEAT_SERVER_PID_FILE"
+        command rm -f "$LACY_PREHEAT_SERVER_PID_FILE"
     fi
 
     LACY_PREHEAT_SERVER_PASSWORD=""
     LACY_PREHEAT_SERVER_SESSION_ID=""
-    rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+    command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
 }
 
 # Restore server session ID from file (survives subshell boundary)
@@ -301,7 +301,7 @@ _lacy_session_reset() {
     local file="$1"
     local var_name="$2"
     printf -v "$var_name" '%s' ""
-    rm -f "$file"
+    command rm -f "$file"
 }
 
 # ============================================================================
@@ -399,7 +399,7 @@ lacy_session_new() {
     lacy_preheat_claude_reset_session
     lacy_preheat_gemini_reset_session
     LACY_PREHEAT_SERVER_SESSION_ID=""
-    rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+    command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
 
     # Reset terminal context so the next query sends full context
     _lacy_ctx_reset
@@ -491,6 +491,6 @@ lacy_preheat_init() {
 
 lacy_preheat_cleanup() {
     lacy_preheat_server_stop
-    rm -f "$LACY_PREHEAT_SESSION_FILE" \
-          "$LACY_GEMINI_SESSION_ID_FILE"
+    command rm -f "$LACY_PREHEAT_SESSION_FILE" \
+                  "$LACY_GEMINI_SESSION_ID_FILE"
 }

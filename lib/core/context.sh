@@ -71,9 +71,9 @@ _lacy_ctx_detect_terminal() {
 _lacy_ctx_screen_capture() {
     local tmpfile
     tmpfile=$(mktemp) || return
-    screen -X hardcopy "$tmpfile" 2>/dev/null || { rm -f "$tmpfile"; return; }
+    screen -X hardcopy "$tmpfile" 2>/dev/null || { command rm -f "$tmpfile"; return; }
     cat "$tmpfile" 2>/dev/null
-    rm -f "$tmpfile" 2>/dev/null
+    command rm -f "$tmpfile" 2>/dev/null
 }
 
 # iTerm2: AppleScript to get current session contents
