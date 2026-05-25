@@ -271,7 +271,7 @@ lacy_shell_spinner() {
 # === Conversation Management ===
 
 lacy_shell_clear_conversation() {
-    rm -f "$LACY_SHELL_CONVERSATION_FILE"
+    command rm -f "$LACY_SHELL_CONVERSATION_FILE"
     echo "$LACY_MSG_CONVERSATION_CLEARED"
 }
 

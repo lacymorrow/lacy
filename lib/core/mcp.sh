@@ -387,7 +387,7 @@ EOF
             lacy_shell_send_to_ai_streaming "$temp_file" "$query"
             local exit_code=$?
             lacy_stop_spinner
-            rm -f "$temp_file"
+            command rm -f "$temp_file"
             echo ""
             return $exit_code
         fi
