@@ -39,44 +39,20 @@ $env.LACY_SHELL_RESERVED_WORDS = ["do" "done" "then" "else" "elif" "fi" "esac" "
 # YAML config parser (reads ~/.lacy/config.yaml)
 # ============================================================================
 
-def _lacy_load_config [] {
+def --env _lacy_load_config [] {
     let config_file = ($env.HOME | path join ".lacy" "config.yaml")
     if not ($config_file | path exists) { return }
 
-    let file_lines = (open --raw $config_file | lines)
+    let cfg = (open --raw $config_file | from yaml)
 
-    # Parse agent_tools.active
-    let active_lines = ($file_lines | where { |line| ($line | str trim | str starts-with "active:") })
-    if ($active_lines | length) > 0 {
-        let active = ($active_lines | first
-            | str replace -r '.*active:\s*' ''
-            | str trim
-            | str replace --all '"' ''
-            | str replace --all "'" '')
-        if $active != "" { $env.LACY_ACTIVE_TOOL = $active }
-    }
+    let active = ($cfg | get --optional agent_tools.active | default "" | into string | str trim)
+    if $active != "" { $env.LACY_ACTIVE_TOOL = $active }
 
-    # Parse agent_tools.custom_command
-    let custom_lines = ($file_lines | where { |line| ($line | str trim | str starts-with "custom_command:") })
-    if ($custom_lines | length) > 0 {
-        let custom = ($custom_lines | first
-            | str replace -r '.*custom_command:\s*' ''
-            | str trim
-            | str replace --all '"' ''
-            | str replace --all "'" '')
-        if $custom != "" { $env.LACY_CUSTOM_TOOL_CMD = $custom }
-    }
+    let custom = ($cfg | get --optional agent_tools.custom_command | default "" | into string | str trim)
+    if $custom != "" { $env.LACY_CUSTOM_TOOL_CMD = $custom }
 
-    # Parse modes.default
-    let mode_lines = ($file_lines | where { |line| ($line | str trim | str starts-with "default:") })
-    if ($mode_lines | length) > 0 {
-        let mode = ($mode_lines | first
-            | str replace -r '.*default:\s*' ''
-            | str trim
-            | str replace --all '"' ''
-            | str replace --all "'" '')
-        if $mode != "" { $env.LACY_SHELL_MODE = $mode }
-    }
+    let mode = ($cfg | get --optional modes.default | default "" | into string | str trim)
+    if $mode != "" { $env.LACY_SHELL_MODE = $mode }
 }
 
 _lacy_load_config

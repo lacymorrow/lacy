@@ -7,7 +7,7 @@
 #   Alt+Enter   — send current buffer to AI agent (_lacy_send_to_agent)
 #   Ctrl+Space  — cycle modes: auto → shell → agent → auto
 
-def _lacy_toggle_mode [] {
+def --env _lacy_toggle_mode [] {
     $env.LACY_SHELL_MODE = (match $env.LACY_SHELL_MODE {
         "auto"  => "shell"
         "shell" => "agent"
