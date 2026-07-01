@@ -19,7 +19,7 @@ jobs:
         shell: [bash, zsh]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install zsh
         if: matrix.shell == 'zsh'
@@ -61,7 +61,7 @@ jobs:
     name: shellcheck (.sh / .bash only)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # ShellCheck does NOT support zsh (SC1071), so we scan only POSIX/bash
       # script files. The two pre-existing SC2296 errors in lib/core/*.sh
       # come from intentional zsh-style parameter expansion inside files
