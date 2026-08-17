@@ -9,8 +9,8 @@ function _lacy_setup_bindings --description "Register Lacy keybindings"
     bind \r _lacy_accept_line
 
     # Ctrl+Space to cycle modes: auto → shell → agent → auto
-    bind \c@ _lacy_toggle_mode   # \c@ = Ctrl+Space in many terminals
-    bind \e\[32~ _lacy_toggle_mode  # fallback sequence for some terminals
+    bind \c@ _lacy_toggle_mode
+    bind \e\[32~ _lacy_toggle_mode
 end
 
 function _lacy_toggle_mode --description "Cycle through shell/agent/auto modes"
@@ -30,9 +30,9 @@ end
 
 # Register after user bindings so we don't clobber them unless necessary.
 if functions -q fish_user_key_bindings
-    set -l _old_bindings (functions fish_user_key_bindings)
+    functions -c fish_user_key_bindings _lacy_original_key_bindings
     function fish_user_key_bindings
-        eval $_old_bindings
+        _lacy_original_key_bindings
         _lacy_setup_bindings
     end
 else

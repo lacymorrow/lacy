@@ -817,8 +817,9 @@ cmd_completions() {
     case "$shell_type" in
         zsh)  _completions_zsh ;;
         bash) _completions_bash ;;
+        fish) _completions_fish ;;
         *)
-            warn "Unknown shell: $shell_type. Use 'zsh' or 'bash'."
+            warn "Unknown shell: $shell_type. Use 'zsh', 'bash', or 'fish'."
             exit 1
             ;;
     esac
@@ -870,7 +871,7 @@ _lacy() {
             esac
             ;;
         completions)
-            _describe 'shell' '(zsh bash)'
+            _describe 'shell' '(zsh bash fish)'
             ;;
         *)
             _describe 'lacy command' commands
@@ -910,7 +911,7 @@ _lacy_completions() {
             return
             ;;
         completions)
-            COMPREPLY=( $(compgen -W "zsh bash" -- "$cur") )
+            COMPREPLY=( $(compgen -W "zsh bash fish" -- "$cur") )
             return
             ;;
     esac
@@ -920,6 +921,25 @@ _lacy_completions() {
 
 complete -F _lacy_completions lacy
 BASHCOMP
+}
+
+_completions_fish() {
+    cat <<'FISHCOMP'
+complete -c lacy -f
+complete -c lacy -n "__fish_use_subcommand" -a setup -d "Interactive settings"
+complete -c lacy -n "__fish_use_subcommand" -a install -d "Install Lacy Shell"
+complete -c lacy -n "__fish_use_subcommand" -a uninstall -d "Remove Lacy Shell"
+complete -c lacy -n "__fish_use_subcommand" -a update -d "Pull latest changes"
+complete -c lacy -n "__fish_use_subcommand" -a reinstall -d "Fresh installation"
+complete -c lacy -n "__fish_use_subcommand" -a status -d "Show installation status"
+complete -c lacy -n "__fish_use_subcommand" -a doctor -d "Diagnose common issues"
+complete -c lacy -n "__fish_use_subcommand" -a config -d "Show/edit config"
+complete -c lacy -n "__fish_use_subcommand" -a version -d "Show version"
+complete -c lacy -n "__fish_use_subcommand" -a help -d "Show all commands"
+complete -c lacy -n "__fish_use_subcommand" -a completions -d "Print completion script"
+complete -c lacy -n "__fish_seen_subcommand_from config" -a "show edit path"
+complete -c lacy -n "__fish_seen_subcommand_from completions" -a "zsh bash fish"
+FISHCOMP
 }
 
 cmd_version() {

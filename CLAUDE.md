@@ -8,7 +8,7 @@ Enable developers to talk directly to their shell.
 
 ## Project Overview
 
-Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No context switching required.
+Lacy Shell is a shell plugin (ZSH, Bash 4+, and Fish 3.1+) that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No context switching required.
 
 **Install location:** `~/.lacy`
 **Package name:** `lacy` (npm)
@@ -195,6 +195,7 @@ All tools handle their own authentication - no API keys needed from lacy.
 ~/.lacy/
 ├── lacy.plugin.zsh          # Entry point (ZSH)
 ├── lacy.plugin.bash         # Entry point (Bash 4+)
+├── lacy.plugin.fish         # Entry point (Fish 3.1+)
 ├── config.yaml              # User configuration
 ├── install.sh               # Installer (bash + npx fallback)
 ├── uninstall.sh             # Uninstaller
@@ -220,6 +221,13 @@ All tools handle their own authentication - no API keys needed from lacy.
     │   ├── keybindings.bash     # Macro-based Enter override, Ctrl+Space toggle
     │   ├── prompt.bash          # Mode badge in PS1
     │   └── execute.bash         # Execution routing, reroute candidate logic
+    ├── fish/
+    │   ├── config.fish          # Fish config loader (YAML → globals)
+    │   ├── detection.fish       # classify_input() ported to Fish syntax
+    │   ├── execute.fish         # Execution routing, session commands, user commands
+    │   ├── keybindings.fish     # Enter override, Ctrl+Space toggle
+    │   ├── prompt.fish          # Mode badge in right prompt
+    │   └── completions.fish     # Tab completions for lacy/mode/tool commands
     └── *.zsh                    # Backward-compat wrappers → lib/core/ or lib/zsh/
 
 packages/lacy/               # npm package for interactive installer
@@ -338,3 +346,13 @@ modes:
 - **No real-time indicator**: Bash can't redraw PS1 on keystroke (no `zle-line-pre-redraw` equivalent). Mode badge in PS1 updates on each prompt cycle only
 - **Ctrl+Space**: Uses macro `"\C-a\C-k _lacy_mode_toggle_\C-j"` — types hidden command and submits, so PROMPT_COMMAND can update PS1
 - **macOS default bash is 3.2** — adapter requires 4+ and shows a clear error if version is too old. Users install modern bash via `brew install bash`
+
+### Fish adapter notes
+
+- **Enter key**: `bind \r _lacy_accept_line` — Fish's `commandline` builtin gives full buffer access. `commandline -f execute` submits. No macro workaround needed.
+- **No shared core modules**: Fish syntax is incompatible with Bash/ZSH, so detection logic is reimplemented in native Fish (`lib/fish/detection.fish`). Keep in sync manually with `lib/core/detection.sh`.
+- **No real-time indicator**: Like Bash, Fish lacks per-keystroke redraw hooks. Mode badge in `fish_right_prompt` updates each prompt cycle.
+- **Ctrl+Space**: `bind \c@` works directly in Fish — no macro needed.
+- **No `region_highlight`**: Fish has no equivalent. First-word syntax highlighting is not available.
+- **Plugin coexistence**: `fish_user_key_bindings` is wrapped (copied + extended) to coexist with other plugins. `fish_right_prompt` is similarly wrapped.
+- **Requires Fish 3.1+**: for `bind --sets-mode`, `commandline -f`, and `string` builtins. Checked at load time.
