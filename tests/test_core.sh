@@ -210,8 +210,94 @@ assert_eq "done with this → agent" "agent" "$(lacy_shell_classify_input 'done 
 assert_eq "then what → agent" "agent" "$(lacy_shell_classify_input 'then what happens next')"
 assert_eq "else something → agent" "agent" "$(lacy_shell_classify_input 'else something')"
 assert_eq "in the codebase → agent" "agent" "$(lacy_shell_classify_input 'in the codebase')"
-assert_eq "function of module → agent" "agent" "$(lacy_shell_classify_input 'function of this module')"
 assert_eq "select all users → agent" "agent" "$(lacy_shell_classify_input 'select all users')"
+# `function` is no longer reserved: it opens a real definition one-liner
+assert_eq "function of module → shell (function not reserved)" "shell" "$(lacy_shell_classify_input 'function of this module')"
+
+# ============================================================================
+# Shell-syntax misroute fixes (audit 2026-09)
+# ============================================================================
+
+echo ""
+echo "--- Detection: shell syntax first tokens → shell ---"
+
+LACY_SHELL_CURRENT_MODE="auto"
+
+# a) path-shaped or redirect-first tokens
+assert_eq "./nonexistent.sh --flag → shell" "shell" "$(lacy_shell_classify_input './nonexistent.sh --flag')"
+assert_eq "~/bin/nonexistent arg → shell" "shell" "$(lacy_shell_classify_input '~/bin/nonexistent arg')"
+assert_eq "/usr/bin/nonexistent arg → shell" "shell" "$(lacy_shell_classify_input '/usr/bin/nonexistent arg')"
+assert_eq "\\ls -la → shell" "shell" "$(lacy_shell_classify_input '\ls -la')"
+assert_eq "< file cat → shell" "shell" "$(lacy_shell_classify_input '< file cat')"
+assert_eq "<<< here cat → shell" "shell" "$(lacy_shell_classify_input '<<< "here" cat')"
+assert_eq "> out ls → shell" "shell" "$(lacy_shell_classify_input '> out ls')"
+assert_eq "2>/dev/null ls → shell" "shell" "$(lacy_shell_classify_input '2>/dev/null ls')"
+assert_eq "&>log ls → shell" "shell" "$(lacy_shell_classify_input '&>log ls')"
+assert_eq "(cd /tmp && ls) → shell" "shell" "$(lacy_shell_classify_input '(cd /tmp && ls)')"
+
+# b) compound keywords that open real one-liners
+assert_eq "[[ -f x ]] && echo yes → shell" "shell" "$(lacy_shell_classify_input '[[ -f x ]] && echo yes')"
+assert_eq "{ ls; } > out → shell" "shell" "$(lacy_shell_classify_input '{ ls; } > out')"
+assert_eq "function foo() { :; } → shell" "shell" "$(lacy_shell_classify_input 'function foo() { :; }')"
+assert_eq "coproc cat → shell" "shell" "$(lacy_shell_classify_input 'coproc cat')"
+
+# c) env-prefix parsing
+assert_eq "FOO=\"a b\" ls → shell" "shell" "$(lacy_shell_classify_input 'FOO="a b" ls')"
+assert_eq "x=\$(ls) && echo hi → shell" "shell" "$(lacy_shell_classify_input 'x=$(ls) && echo hi')"
+assert_eq "FOO=1 && ls → shell" "shell" "$(lacy_shell_classify_input 'FOO=1 && ls')"
+
+# d) multi-line buffer: first line decides, whitespace split
+assert_eq "ls<nl>echo hi → shell" "shell" "$(lacy_shell_classify_input $'ls\necho hi')"
+assert_eq "what is this<nl>ls → agent" "agent" "$(lacy_shell_classify_input $'what is this\nls')"
+assert_eq "ls<tab>-la → shell" "shell" "$(lacy_shell_classify_input $'ls\t-la')"
+
+# e) single agent word that the user aliased or defined as a function
+alias stop='kill -STOP' 2>/dev/null
+alias lint='npm run lint' 2>/dev/null
+alias cancel='echo cancel' 2>/dev/null
+alias continue='echo continue' 2>/dev/null
+render() { :; }
+deploy() { :; }
+assert_eq "stop (alias) → shell" "shell" "$(lacy_shell_classify_input 'stop')"
+assert_eq "lint (alias) → shell" "shell" "$(lacy_shell_classify_input 'lint')"
+assert_eq "cancel (alias) → shell" "shell" "$(lacy_shell_classify_input 'cancel')"
+assert_eq "continue (alias) → shell" "shell" "$(lacy_shell_classify_input 'continue')"
+assert_eq "render (function) → shell" "shell" "$(lacy_shell_classify_input 'render')"
+assert_eq "deploy (function) → shell" "shell" "$(lacy_shell_classify_input 'deploy')"
+assert_eq "stop it please (alias, NL args) → agent" "agent" "$(lacy_shell_classify_input 'stop it please')"
+unalias stop lint cancel continue 2>/dev/null
+unset -f render deploy
+assert_eq "stop (no alias) → agent" "agent" "$(lacy_shell_classify_input 'stop')"
+assert_eq "deploy (no function) → agent" "agent" "$(lacy_shell_classify_input 'deploy')"
+# builtins and external commands keep the agent-word behaviour
+assert_eq "yes (external cmd) → agent" "agent" "$(lacy_shell_classify_input 'yes')"
+assert_eq "what → agent" "agent" "$(lacy_shell_classify_input 'what')"
+
+# f) negation, unterminated quote, comment
+assert_eq "! true → shell" "shell" "$(lacy_shell_classify_input '! true')"
+assert_eq "\"unterminated → shell" "shell" "$(lacy_shell_classify_input '"unterminated')"
+assert_eq "# note → shell" "shell" "$(lacy_shell_classify_input '# note')"
+
+# must still go to agent
+assert_eq "what is this → agent (still)" "agent" "$(lacy_shell_classify_input 'what is this')"
+assert_eq "yes → agent (still)" "agent" "$(lacy_shell_classify_input 'yes')"
+assert_eq "fix the bug → agent (still)" "agent" "$(lacy_shell_classify_input 'fix the bug')"
+assert_eq "do we have tests → agent (still)" "agent" "$(lacy_shell_classify_input 'do we have tests')"
+assert_eq "in the codebase where is auth → agent (still)" "agent" "$(lacy_shell_classify_input 'in the codebase where is auth')"
+
+# _LACY_CLASSIFY_RESULT mirrors stdout (hot paths read the variable, no fork)
+echo ""
+echo "--- Detection: _LACY_CLASSIFY_RESULT matches stdout ---"
+for _ci in 'ls -la' 'what is this' 'yes' '' '! true' 'FOO=1 && ls'; do
+    _cout="$(lacy_shell_classify_input "$_ci")"
+    lacy_shell_classify_input "$_ci" >/dev/null
+    assert_eq "result var == stdout for '$_ci'" "$_cout" "$_LACY_CLASSIFY_RESULT"
+done
+LACY_SHELL_CURRENT_MODE="shell"
+_cout="$(lacy_shell_classify_input 'what is this')"
+lacy_shell_classify_input 'what is this' >/dev/null
+assert_eq "result var == stdout (shell mode)" "$_cout" "$_LACY_CLASSIFY_RESULT"
+LACY_SHELL_CURRENT_MODE="auto"
 
 # ============================================================================
 # NL Markers Tests

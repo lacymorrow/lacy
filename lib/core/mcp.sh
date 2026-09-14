@@ -127,6 +127,10 @@ _lacy_render_markdown_basic() {
 _lacy_run_tool_cmd() {
     local cmd_str="$1"
     local query="$2"
+    if [[ -z "${cmd_str//[[:space:]]/}" ]]; then
+        echo "  No tool command configured." >&2
+        return 127
+    fi
     local -a cmd_parts
     if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
         cmd_parts=( ${=cmd_str} )
@@ -159,6 +163,31 @@ _lacy_gemini_query_exec() {
     else
         _lacy_run_tool_cmd "$gemini_cmd" "$gemini_query" 2>/dev/null
     fi
+}
+
+# Install command for a supported tool (empty for unknown names)
+# Usage: hint=$(lacy_tool_install_cmd <tool_name>)
+lacy_tool_install_cmd() {
+    case "$1" in
+        lash)     echo "npm install -g lashcode" ;;
+        claude)   echo "brew install claude" ;;
+        opencode) echo "brew install opencode" ;;
+        gemini)   echo "brew install gemini" ;;
+        codex)    echo "npm install -g @openai/codex" ;;
+        hermes)   echo "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash" ;;
+        copilot)  echo "gh extension install github/gh-copilot" ;;
+        goose)    echo "brew install goose" ;;
+        amp)      echo "npm install -g @sourcegraph/amp" ;;
+        aider)    echo "pipx install aider-chat" ;;
+        *)        echo "" ;;
+    esac
+}
+
+# Known tool names joined for messages: "lash, claude, ..."
+_lacy_tool_list_joined() {
+    local joined
+    joined=$(printf '%s, ' "${LACY_TOOL_LIST[@]}")
+    printf '%s' "${joined%, }"
 }
 
 # Tool registry — function-based for maximum portability
@@ -354,6 +383,9 @@ _lacy_log_query() {
 lacy_shell_query_agent() {
     local query="$1"
     local tool="${LACY_ACTIVE_TOOL}"
+    # Declared once. A second `local exit_code` in the same scope prints
+    # "exit_code=N" in zsh and clobbers pipestatus.
+    local exit_code=0
 
     # Prepend delta-based terminal context (cwd, git, exit code, recent commands).
     # Only includes what changed since the last query — zero overhead when idle.
@@ -385,7 +417,7 @@ EOF
             echo ""
             lacy_start_spinner
             lacy_shell_send_to_ai_streaming "$temp_file" "$query"
-            local exit_code=$?
+            exit_code=$?
             lacy_stop_spinner
             command rm -f "$temp_file"
             echo ""
@@ -397,16 +429,12 @@ EOF
         echo ""
         printf '\e[1m  Supported tools:\e[0m\n'
         echo ""
-        printf '    \e[38;5;34m%-12s\e[0m %s\n' "lash"     "npm install -g lashcode        (recommended)"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "claude"   "brew install claude"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "opencode" "brew install opencode"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "gemini"   "brew install gemini"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "codex"    "npm install -g @openai/codex"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "hermes"   "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "copilot"  "gh extension install github/gh-copilot"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "goose"    "brew install goose"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "amp"      "npm install -g @sourcegraph/amp"
-        printf '    \e[38;5;238m%-12s\e[0m %s\n' "aider"    "pipx install aider-chat"
+        printf '    \e[38;5;34m%-12s\e[0m %s\n' "lash" "$(lacy_tool_install_cmd lash)        (recommended)"
+        local _t
+        for _t in "${LACY_TOOL_LIST[@]}"; do
+            [[ "$_t" == "lash" ]] && continue
+            printf '    \e[38;5;238m%-12s\e[0m %s\n' "$_t" "$(lacy_tool_install_cmd "$_t")"
+        done
         echo ""
         printf '  \e[38;5;75mThen run:\e[0m  lacy setup\n'
         printf '  \e[38;5;75mDocs:\e[0m      %s\n' "$LACY_DOCS_URL"
@@ -483,6 +511,30 @@ EOF
         cmd="$LACY_CUSTOM_TOOL_CMD"
     else
         cmd=$(lacy_tool_cmd "$tool")
+        if [[ -z "$cmd" ]]; then
+            echo ""
+            lacy_print_color 196 "  Unknown tool '${tool}'. Known: $(_lacy_tool_list_joined)"
+            lacy_print_color 238 "  Pick one with: tool set <name>"
+            echo ""
+            return 1
+        fi
+    fi
+
+    # The tool binary must exist before anything is sent
+    local _tool_bin="${cmd%% *}"
+    if ! command -v "$_tool_bin" >/dev/null 2>&1; then
+        echo ""
+        if [[ "$tool" == "custom" ]]; then
+            lacy_print_color 196 "  Custom tool command '${_tool_bin}' is not installed."
+        else
+            lacy_print_color 196 "  ${tool} is set as your tool but is not installed."
+            local _install_hint
+            _install_hint=$(lacy_tool_install_cmd "$tool")
+            [[ -n "$_install_hint" ]] && lacy_print_color 238 "  Install: ${_install_hint}"
+        fi
+        lacy_print_color 238 "  Or switch: tool set <name>"
+        echo ""
+        return 1
     fi
 
     # Log the query (tool name + input text, not the AI response)
@@ -494,24 +546,61 @@ EOF
     fi
 
     # === Preheat: lash/opencode background server ===
+    local _blank_printed=false
     if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
+        echo ""
+        _blank_printed=true
+        lacy_start_spinner
         if lacy_preheat_server_is_healthy || lacy_preheat_server_start "$tool"; then
-            echo ""
-            lacy_start_spinner
             local server_result
             server_result=$(lacy_preheat_server_query "$query")
-            local exit_code=$?
+            exit_code=$?
             lacy_stop_spinner
             # Restore session ID from file (lost in subshell)
             lacy_preheat_server_restore_session
-            if [[ $exit_code -eq 0 && -n "$server_result" ]]; then
-                while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
-                _lacy_render_markdown "$server_result"
-                _lacy_print_resume_hint "$tool"
-                echo ""
-                return 0
-            fi
-            # Server query failed — fall through to single-shot
+            case "$exit_code" in
+                "$LACY_SERVER_QUERY_OK")
+                    while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
+                    if [[ -n "$server_result" ]]; then
+                        _lacy_render_markdown "$server_result"
+                    else
+                        lacy_print_color 238 "  (no text response)"
+                    fi
+                    _lacy_print_resume_hint "$tool"
+                    echo ""
+                    return 0
+                    ;;
+                "$LACY_SERVER_QUERY_TIMEOUT")
+                    # The server has the prompt and is still working on it.
+                    lacy_print_color 238 "  still running: ${tool} --session ${LACY_PREHEAT_SERVER_SESSION_ID}"
+                    echo ""
+                    return 0
+                    ;;
+                "$LACY_SERVER_QUERY_LOST")
+                    lacy_print_color 196 "  Lost the connection to ${tool} mid-request."
+                    [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
+                        lacy_print_color 238 "  Check on it: ${tool} --session ${LACY_PREHEAT_SERVER_SESSION_ID}"
+                    echo ""
+                    return 1
+                    ;;
+                "$LACY_SERVER_QUERY_HTTP_ERROR")
+                    _lacy_print_server_error "$tool" "$server_result"
+                    return 1
+                    ;;
+                "$LACY_SERVER_QUERY_SESSION_GONE")
+                    # The subshell already reset its copy; mirror it here
+                    LACY_PREHEAT_SERVER_SESSION_ID=""
+                    : > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+                    lacy_print_color 196 "  That session is gone. Send it again to start a new one."
+                    echo ""
+                    return 1
+                    ;;
+            esac
+            # Unreachable: the server is gone, drop the session and go single-shot
+            LACY_PREHEAT_SERVER_SESSION_ID=""
+            : > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+        else
+            lacy_stop_spinner
         fi
     fi
 
@@ -523,7 +612,7 @@ EOF
         lacy_start_spinner
         local json_output
         json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
-        local exit_code=$?
+        exit_code=$?
         lacy_stop_spinner
 
         # Normalize: strip noise, extract last element from JSON array
@@ -592,7 +681,7 @@ EOF
         local json_output
         lacy_start_spinner
         json_output=$(_lacy_gemini_query_exec "$query")
-        local exit_code=$?
+        exit_code=$?
         lacy_stop_spinner
         # Restore session ID lost in subshell
         lacy_preheat_gemini_restore_session
@@ -623,57 +712,138 @@ EOF
     fi
 
     # === Generic path (codex, custom, and fallback) ===
-    echo ""
+    # stdout streams live and is copied to a temp file; stderr goes only to a
+    # second temp file. A failure shows the tail of both instead of a raw
+    # stack trace.
+    [[ "$_blank_printed" == true ]] || echo ""
+    local _out_file _err_file
+    _out_file=$(mktemp 2>/dev/null) || _out_file="${LACY_SHELL_HOME}/.tool_out_$$"
+    _err_file="${_out_file}.err"
+    : > "$_out_file"
+    : > "$_err_file"
+    # Tools may prompt on the terminal; without one (CI, tests) feed /dev/null
+    local _stdin_src=/dev/null
+    ( : </dev/tty ) 2>/dev/null && _stdin_src=/dev/tty
+    local -a _ps
     lacy_start_spinner
-    _lacy_run_tool_cmd "$cmd" "$query" </dev/tty 2>&1 | {
-        local _spinner_killed=false
-        local _full_output=""
-        local _line_count=0
-        while IFS= read -r line; do
-            # Skip agent startup noise (e.g. "> build · big-pickle", "exit_code=0")
-            [[ "$line" =~ ^'> '[a-z]+' · ' ]] && continue
-            [[ "$line" =~ ^exit_code= ]] && continue
-            if ! $_spinner_killed; then
-                if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
-                    kill "$LACY_SPINNER_PID" 2>/dev/null
-                    sleep "$LACY_TERMINAL_FLUSH_DELAY"
-                    printf '\e[2K\r\e[?25h\e[?7h'
-                fi
-                _spinner_killed=true
-            fi
-            _full_output+="$line"
-            (( _line_count++ ))
-            # Only buffer first line to check for JSON errors
-            if (( _line_count > 1 )); then
-                # Multi-line output — not a JSON error blob, flush everything
-                if [[ $_line_count -eq 2 ]]; then
-                    printf '%s\n' "$_full_output"
-                fi
-                printf '%s\n' "$line"
-            fi
-        done
-        if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
-            kill "$LACY_SPINNER_PID" 2>/dev/null
-            sleep "$LACY_TERMINAL_FLUSH_DELAY"
-            printf '\e[2K\r\e[?25h\e[?7h'
-        fi
-        # Single-line output — check if it's a JSON error
-        if (( _line_count <= 1 )); then
-            lacy_format_tool_error "$_full_output" "$tool" || printf '%s\n' "$_full_output"
-        fi
-    }
-    local exit_code
-    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-        exit_code=${pipestatus[1]}
-    else
-        exit_code=${PIPESTATUS[0]}
-    fi
+    _lacy_run_tool_cmd "$cmd" "$query" <"$_stdin_src" 2>>"$_err_file" | _lacy_stream_tool_output "$tool" "$_out_file"
+    _ps=("${pipestatus[@]}" "${PIPESTATUS[@]}")
+    exit_code="${_ps[$_LACY_ARR_OFFSET]}"
     lacy_stop_spinner
-    if [[ $exit_code -eq 0 ]]; then
+
+    if [[ "$exit_code" -eq 0 ]]; then
         _lacy_print_resume_hint "$tool"
+    elif [[ "$exit_code" -ge "$LACY_SIGNAL_EXIT_THRESHOLD" ]]; then
+        # Signal (Ctrl+C and friends): nothing to explain
+        command rm -f "$_out_file" "$_err_file"
+        return "$exit_code"
+    else
+        _lacy_print_tool_failure "$tool" "$exit_code" "$_out_file" "$_err_file"
+    fi
+    command rm -f "$_out_file" "$_err_file"
+    echo ""
+    return "$exit_code"
+}
+
+# Stream a tool's output live from the read side of a pipe.
+# The first line is held back so a single-line JSON error can be formatted;
+# from the second line on everything is printed as it arrives. Each line is
+# also appended to $2 for the failure summary.
+_lacy_stream_tool_output() {
+    local tool="$1" out_file="$2"
+    local line _first_line="" _line_count=0 _spinner_killed=false
+    # `|| [[ -n "$line" ]]` keeps a final line that has no trailing newline
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip agent startup noise (e.g. "> build · big-pickle", "exit_code=0")
+        [[ "$line" =~ ^'> '[a-z]+' · ' ]] && continue
+        [[ "$line" =~ ^exit_code= ]] && continue
+        if ! $_spinner_killed; then
+            if [[ -n "$LACY_SPINNER_PID" ]] && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
+                kill "$LACY_SPINNER_PID" 2>/dev/null
+                sleep "$LACY_TERMINAL_FLUSH_DELAY"
+                printf '\e[2K\r\e[?25h\e[?7h'
+            fi
+            _spinner_killed=true
+        fi
+        [[ -n "$out_file" ]] && printf '%s\n' "$line" >> "$out_file"
+        (( _line_count++ ))
+        if (( _line_count == 1 )); then
+            _first_line="$line"
+            continue
+        fi
+        (( _line_count == 2 )) && printf '%s\n' "$_first_line"
+        printf '%s\n' "$line"
+    done
+    if ! $_spinner_killed && [[ -n "$LACY_SPINNER_PID" ]]; then
+        kill "$LACY_SPINNER_PID" 2>/dev/null
+        sleep "$LACY_TERMINAL_FLUSH_DELAY"
+        printf '\e[2K\r\e[?25h\e[?7h'
+    fi
+    # Single-line output: it may be a JSON error blob
+    if (( _line_count == 1 )); then
+        lacy_format_tool_error "$_first_line" "$tool" || printf '%s\n' "$_first_line"
+    fi
+}
+
+# Framed failure summary for the generic path: exit code, the last lines the
+# tool wrote (stdout then stderr, dimmed, escapes stripped), and a recovery hint.
+_lacy_print_tool_failure() {
+    local tool="$1" code="$2" out_file="$3" err_file="$4"
+    # A single JSON error line was already rendered by the stream; do not repeat it
+    local first_line=""
+    IFS= read -r first_line < "$out_file" 2>/dev/null
+    if [[ ! -s "$err_file" ]] && [[ "$(wc -l < "$out_file" 2>/dev/null | tr -d ' ')" == "1" ]] && \
+       lacy_format_tool_error "$first_line" "$tool" >/dev/null 2>&1; then
+        lacy_print_color 238 "  Check your setup: lacy doctor"
+        lacy_print_color 238 "  Switch tools:     tool set <name>"
+        return 0
     fi
     echo ""
-    return $exit_code
+    lacy_print_color 196 "  ${tool} exited with code ${code}"
+    if [[ -s "$out_file" || -s "$err_file" ]]; then
+        local line
+        # awk 1 prints every line with a newline, so a file whose last line
+        # has none (Bun's "Bun v1.x (macOS arm64)") does not glue to the next
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            lacy_print_color 238 "  ${line}"
+        done < <(awk 1 "$out_file" "$err_file" 2>/dev/null | tail -n 10 | sed $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g')
+    fi
+    echo ""
+    lacy_print_color 238 "  Check your setup: lacy doctor"
+    lacy_print_color 238 "  Switch tools:     tool set <name>"
+}
+
+# Pull a readable message out of a lash/opencode error body.
+# Tries .info.error and .error shapes, then falls back to the raw body.
+_lacy_server_error_message() {
+    local body="$1" msg="" expr
+    for expr in '.info.error.data.message' '.info.error.message' '.info.error.name' \
+                '.error.data.message' '.error.message' '.error' '.data.message' '.message' '.name'; do
+        msg=$(_lacy_json_query "$body" "$expr")
+        [[ -n "$msg" && "$msg" != "{"* && "$msg" != "["* && "$msg" != "null" ]] && break
+        msg=""
+    done
+    if [[ -z "$msg" ]]; then
+        msg="${body//$'\n'/ }"
+        (( ${#msg} > 200 )) && msg="${msg:0:200}..."
+    fi
+    printf '%s' "$msg"
+}
+
+# Print a server (HTTP) error in the same frame as lacy_format_tool_error.
+_lacy_print_server_error() {
+    local tool="$1" body="$2"
+    local msg
+    msg=$(_lacy_server_error_message "$body")
+    echo ""
+    lacy_print_color 196 "  Error from ${tool}"
+    echo ""
+    if [[ -n "$msg" ]]; then
+        lacy_print_color 220 "  ${msg}"
+    else
+        lacy_print_color 220 "  The server returned an error (no details available)"
+    fi
+    echo ""
 }
 
 # Check if API keys are configured (used by mcp.sh)

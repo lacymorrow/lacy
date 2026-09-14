@@ -43,3 +43,10 @@ agent/.*-bun-build
 # Built binaries
 agent/lacy-agent
 .vercel
+
+# lash agent session state. Never commit: the log once carried OAuth tokens.
+.lash/
+lib/.lash/
+.venv/
+lash-panic-*.log
+.claude/settings.local.json

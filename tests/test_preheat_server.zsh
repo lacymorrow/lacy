@@ -26,6 +26,7 @@ source "$REPO_ROOT/lib/constants.zsh"
 source "$REPO_ROOT/lib/spinner.zsh"
 source "$REPO_ROOT/lib/mcp.zsh"
 source "$REPO_ROOT/lib/preheat.zsh"
+source "$REPO_ROOT/lib/core/context.sh"
 
 # ============================================================================
 # Assertion helpers
@@ -133,7 +134,7 @@ create_mock_server() {
     cat > "$mock_bin" << 'MOCK_SERVER'
 #!/usr/bin/env python3
 """Fast mock server mimicking lash/opencode REST API using raw sockets."""
-import socket, json, sys, uuid, threading
+import socket, json, sys, uuid, threading, time
 
 if "serve" not in sys.argv:
     print(f"Unknown command: {sys.argv[1:]}", file=sys.stderr)
@@ -180,14 +181,24 @@ def handle_client(conn):
                     if p.get("type") == "text":
                         qt = p["text"]
                 sessions[sid].append(qt)
-                status_code = 200
-                resp_body = json.dumps([{
-                    "role": "assistant",
-                    "parts": [{"type": "text", "text": f"Mock response to: {qt}"}]
-                }])
+                if "MOCK_SLOW" in qt:
+                    time.sleep(3)  # longer than the test's message timeout
+                if "MOCK_FAIL" in qt:
+                    status_code = 500
+                    resp_body = json.dumps({"info": {"error": {"name": "ProviderError",
+                        "data": {"message": "mock provider exploded"}}}})
+                elif "MOCK_EMPTY" in qt:
+                    status_code = 200
+                    resp_body = json.dumps([{"role": "assistant", "parts": [{"type": "step-finish"}]}])
+                else:
+                    status_code = 200
+                    resp_body = json.dumps([{
+                        "role": "assistant",
+                        "parts": [{"type": "text", "text": f"Mock response to: {qt}"}]
+                    }])
             # else: 404 (default)
 
-        status_text = "OK" if status_code == 200 else "Not Found"
+        status_text = {200: "OK", 404: "Not Found"}.get(status_code, "Error")
         resp = (
             f"HTTP/1.1 {status_code} {status_text}\r\n"
             f"Content-Type: application/json\r\n"
@@ -363,8 +374,8 @@ run_tests_for_tool() {
     lacy_preheat_server_query "hello" > "$_stale_out" 2>/dev/null
     local stale_rc=$?
 
-    # The query should fail (404 from mock for unknown session)
-    assert_eq "$tool: stale session query fails" "1" "$stale_rc"
+    # The mock answers 404 for an unknown session: distinct "session gone" code
+    assert_eq "$tool: stale session query returns SESSION_GONE" "$LACY_SERVER_QUERY_SESSION_GONE" "$stale_rc"
     assert_empty "$tool: stale session ID cleared" "$LACY_PREHEAT_SERVER_SESSION_ID"
 
     # ------------------------------------------------------------------
@@ -415,7 +426,185 @@ run_tests_for_tool() {
     assert_nonblank "$tool: mcp integration returns text" "$mcp_result"
     assert_nonblank "$tool: server PID set during integration" "$LACY_PREHEAT_SERVER_PID"
 
+    # ------------------------------------------------------------------
+    # Test 9: query outcomes that must not re-send the prompt
+    # ------------------------------------------------------------------
+    local _strip=$'s/\x1b\\[[0-9;?]*[a-zA-Z]//g'
+    local session_before="$LACY_PREHEAT_SERVER_SESSION_ID"
+
+    # Timeout: keep the session, say it is still running, return 0
+    local _saved_timeout="$LACY_SESSION_MESSAGE_TIMEOUT"
+    LACY_SESSION_MESSAGE_TIMEOUT=1
+    lacy_shell_query_agent "MOCK_SLOW please" > "$_mcp_out" 2>/dev/null
+    mcp_rc=$?
+    LACY_SESSION_MESSAGE_TIMEOUT="$_saved_timeout"
+    mcp_result=$(sed "$_strip" "$_mcp_out")
+    assert_eq "$tool: timeout returns 0" "0" "$mcp_rc"
+    if [[ "$mcp_result" == *"still running: $tool --session $session_before"* ]]; then
+        pass "$tool: timeout prints the still-running line"
+    else
+        fail "$tool: timeout prints the still-running line" "got: $mcp_result"
+    fi
+    assert_eq "$tool: timeout keeps the session" "$session_before" "$LACY_PREHEAT_SERVER_SESSION_ID"
+    sleep 2.5  # let the slow mock request finish before the next one
+
+    # HTTP error: framed message from .info.error, no fallthrough, return 1
+    lacy_shell_query_agent "MOCK_FAIL please" > "$_mcp_out" 2>/dev/null
+    mcp_rc=$?
+    mcp_result=$(sed "$_strip" "$_mcp_out")
+    assert_eq "$tool: http error returns 1" "1" "$mcp_rc"
+    if [[ "$mcp_result" == *"Error from $tool"* && "$mcp_result" == *"mock provider exploded"* ]]; then
+        pass "$tool: http error is framed with the server message"
+    else
+        fail "$tool: http error is framed with the server message" "got: $mcp_result"
+    fi
+    assert_eq "$tool: http error keeps the session" "$session_before" "$LACY_PREHEAT_SERVER_SESSION_ID"
+
+    # 200 with no text part
+    lacy_shell_query_agent "MOCK_EMPTY please" > "$_mcp_out" 2>/dev/null
+    mcp_rc=$?
+    mcp_result=$(sed "$_strip" "$_mcp_out")
+    assert_eq "$tool: empty response returns 0" "0" "$mcp_rc"
+    if [[ "$mcp_result" == *"(no text response)"* ]]; then
+        pass "$tool: empty response is labelled"
+    else
+        fail "$tool: empty response is labelled" "got: $mcp_result"
+    fi
+
+    # Gone session through the $(...) path: parent resets its copy
+    LACY_PREHEAT_SERVER_SESSION_ID="gone-session-id"
+    lacy_shell_query_agent "hello again" > "$_mcp_out" 2>/dev/null
+    mcp_rc=$?
+    assert_eq "$tool: gone session returns 1" "1" "$mcp_rc"
+    assert_empty "$tool: gone session is reset in the parent" "$LACY_PREHEAT_SERVER_SESSION_ID"
+
     # Clean up for next tool
+    reset_preheat_state
+}
+
+# ============================================================================
+# Orphan and stale-PID tests (npm wrapper vs the process holding the port)
+# ============================================================================
+
+run_lifecycle_tests() {
+    local tool="lash"
+    section "Server lifecycle: orphans and stale PIDs"
+
+    ensure_mock_on_path "$tool"
+    reset_preheat_state
+
+    # ------------------------------------------------------------------
+    # (a) Recorded PID is a dead wrapper; the listener it spawned survives.
+    #     Mirrors the npm `lash` wrapper: it spawns the real server and
+    #     forwards no signals, so killing it orphans the port holder.
+    # ------------------------------------------------------------------
+    sh -c "python3 '$TEST_TMPDIR/bin/$tool' serve --port $TEST_PORT; exit \$?" </dev/null >/dev/null 2>&1 &
+    local wrapper_pid=$!
+    disown 2>/dev/null
+    local i=0
+    while (( i < 50 )) && ! lsof -tiTCP:$TEST_PORT -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; (( i++ )); done
+    local listener_pid
+    listener_pid=$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+    assert_nonblank "orphan: mock listener is up" "$listener_pid"
+
+    # Record the wrapper (as the old code did), then kill only the wrapper
+    echo "$wrapper_pid" > "$LACY_PREHEAT_SERVER_PID_FILE"
+    LACY_PREHEAT_SERVER_PID="$wrapper_pid"
+    kill "$wrapper_pid" 2>/dev/null
+    sleep 0.3
+    assert_nonblank "orphan: listener survives the wrapper (the bug)" \
+        "$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null)"
+
+    lacy_preheat_server_stop
+    sleep 0.3
+    local still
+    still=$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null)
+    assert_empty "orphan: stop frees the port when the recorded PID is dead" "$still"
+    if kill -0 "$listener_pid" 2>/dev/null; then
+        fail "orphan: listener process is gone" "PID $listener_pid still alive"
+        kill -9 "$listener_pid" 2>/dev/null
+    else
+        pass "orphan: listener process is gone"
+    fi
+    [[ -f "$LACY_PREHEAT_SERVER_PID_FILE" ]] && fail "orphan: PID file removed" "still exists" || pass "orphan: PID file removed"
+
+    # ------------------------------------------------------------------
+    # (a2) Live wrapper whose child holds the port: both go away on stop.
+    # ------------------------------------------------------------------
+    reset_preheat_state
+    sh -c "python3 '$TEST_TMPDIR/bin/$tool' serve --port $TEST_PORT; exit \$?" </dev/null >/dev/null 2>&1 &
+    wrapper_pid=$!
+    disown 2>/dev/null
+    i=0
+    while (( i < 50 )) && ! lsof -tiTCP:$TEST_PORT -sTCP:LISTEN >/dev/null 2>&1; do sleep 0.1; (( i++ )); done
+    echo "$wrapper_pid" > "$LACY_PREHEAT_SERVER_PID_FILE"
+    LACY_PREHEAT_SERVER_PID="$wrapper_pid"
+    lacy_preheat_server_stop
+    sleep 0.3
+    still=$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null)
+    assert_empty "wrapper: stop frees the port held by the wrapper's child" "$still"
+    kill -0 "$wrapper_pid" 2>/dev/null && fail "wrapper: wrapper process is gone" "PID $wrapper_pid alive" || pass "wrapper: wrapper process is gone"
+
+    # ------------------------------------------------------------------
+    # (b) Stale PID file pointing at an unrelated process is left alone.
+    # ------------------------------------------------------------------
+    reset_preheat_state
+    sleep 300 &
+    local sleeper_pid=$!
+    disown 2>/dev/null
+    echo "$sleeper_pid" > "$LACY_PREHEAT_SERVER_PID_FILE"
+    LACY_PREHEAT_SERVER_PID="$sleeper_pid"
+    lacy_preheat_server_stop
+    sleep 0.2
+    if kill -0 "$sleeper_pid" 2>/dev/null; then
+        pass "stale PID: unrelated process is not killed"
+    else
+        fail "stale PID: unrelated process is not killed" "sleep $sleeper_pid was killed"
+    fi
+    kill "$sleeper_pid" 2>/dev/null
+    assert_empty "stale PID: in-memory PID cleared" "$LACY_PREHEAT_SERVER_PID"
+
+    # ------------------------------------------------------------------
+    # (c) start() records the listener PID, not the wrapper PID
+    # ------------------------------------------------------------------
+    reset_preheat_state
+    # Wrap the mock in a shell so `$!` is a wrapper, like the npm shim
+    local shim="$TEST_TMPDIR/bin/shimtool"
+    printf '#!/bin/sh\nexec "$0.real" "$@"\n' > "$shim"
+    printf '#!/bin/sh\npython3 "%s/bin/%s" "$@"\n' "$TEST_TMPDIR" "$tool" > "$shim.real"
+    chmod +x "$shim" "$shim.real"
+    lacy_preheat_server_start shimtool
+    local start_rc=$?
+    assert_eq "listener PID: start returns 0 through a wrapper" "0" "$start_rc"
+    listener_pid=$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+    assert_eq "listener PID: recorded PID is the port holder" "$listener_pid" "$(cat "$LACY_PREHEAT_SERVER_PID_FILE")"
+    assert_eq "listener PID: in-memory PID is the port holder" "$listener_pid" "$LACY_PREHEAT_SERVER_PID"
+    lacy_preheat_server_stop
+    sleep 0.3
+    assert_empty "listener PID: stop frees the port" "$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null)"
+
+    # ------------------------------------------------------------------
+    # (d) cleanup only stops the server when this is the last lacy shell
+    # ------------------------------------------------------------------
+    reset_preheat_state
+    lacy_preheat_server_start "$tool"
+    sleep 300 &
+    local other_shell=$!
+    disown 2>/dev/null
+    : > "$LACY_SHELL_HOME/.server_session_id_$other_shell"
+    lacy_preheat_cleanup
+    assert_nonblank "shared server: cleanup keeps the server while another shell is alive" \
+        "$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null)"
+    kill "$other_shell" 2>/dev/null
+    wait "$other_shell" 2>/dev/null
+    lacy_preheat_cleanup
+    sleep 0.3
+    assert_empty "shared server: cleanup stops the server when last shell exits" \
+        "$(lsof -tiTCP:$TEST_PORT -sTCP:LISTEN 2>/dev/null)"
+    [[ -f "$LACY_SHELL_HOME/.server_session_id_$other_shell" ]] && \
+        fail "shared server: dead shell marker removed" "still exists" || \
+        pass "shared server: dead shell marker removed"
+
     reset_preheat_state
 }
 
@@ -440,6 +629,7 @@ fi
 # Run tests for each tool
 run_tests_for_tool "lash"
 run_tests_for_tool "opencode"
+run_lifecycle_tests
 
 # Print summary and exit with appropriate code
 summary

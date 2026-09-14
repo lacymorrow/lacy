@@ -61,7 +61,9 @@ LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
 # Shell reserved words — pass `command -v` but are never valid standalone commands.
 # Used by Layer 1 of natural language detection (see docs/NATURAL_LANGUAGE_DETECTION.md).
-LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "function" "coproc" "{" "}" "!" "[[")
+# Not listed: `{`, `[[`, `function`, `coproc` start real one-liners
+# (`{ ls; } > out`, `[[ -f x ]] && ...`, `function f() {...}`, `coproc cat`).
+LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "}" "!")
 
 # Agent words — common English words that always route to agent, even as
 # single-word input. Some (yes, nice, cancel) exist as real commands but are
@@ -238,15 +240,15 @@ LACY_API_URL_OPENAI="https://api.openai.com/v1/chat/completions"
 LACY_API_URL_ANTHROPIC="https://api.anthropic.com/v1/messages"
 
 # === timing (seconds) ===
-LACY_HEALTH_CHECK_TIMEOUT_SYNC=0.3
+LACY_HEALTH_CHECK_TIMEOUT_SYNC=1
 LACY_HEALTH_CHECK_TIMEOUT_ASYNC=0.5
 
 LACY_SPINNER_FRAME_DELAY=0.05
 LACY_TERMINAL_FLUSH_DELAY=0.02
-LACY_HEALTH_CHECK_ATTEMPTS=30
+LACY_HEALTH_CHECK_ATTEMPTS=150  # x LACY_HEALTH_CHECK_INTERVAL = 15s; lash serve needs 2.5-3.5s
 LACY_HEALTH_CHECK_INTERVAL=0.1
 LACY_SESSION_CREATE_TIMEOUT=10
-LACY_SESSION_MESSAGE_TIMEOUT=120
+LACY_SESSION_MESSAGE_TIMEOUT=600
 
 # === Thresholds ===
 LACY_SIGNAL_EXIT_THRESHOLD=128  # Exit codes >= this are signal-based

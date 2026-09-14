@@ -41,9 +41,11 @@ lacy_shell_smart_accept_line() {
             ;;
     esac
 
-    # Classify using centralized detection (handles whitespace trimming internally)
+    # Classify using centralized detection (handles whitespace trimming internally).
+    # Read the result variable instead of $( ) to avoid a fork on every Enter.
     local classification
-    classification=$(lacy_shell_classify_input "$input")
+    lacy_shell_classify_input "$input" >/dev/null
+    classification="$_LACY_CLASSIFY_RESULT"
 
     case "$classification" in
         "neutral")
@@ -55,7 +57,9 @@ lacy_shell_smart_accept_line() {
             local trimmed="$input"
             trimmed="${trimmed#"${trimmed%%[^[:space:]]*}"}"
 
-            if [[ "$trimmed" == !* ]]; then
+            # Bypass only when ! is glued to the command (`!rm -rf x`).
+            # `! true` with a space is the shell's own negation: leave it alone.
+            if [[ "$trimmed" == \![^[:space:]]* ]]; then
                 # Strip the ! prefix, keep everything after it
                 trimmed="${trimmed#!}"
                 BUFFER="$trimmed"

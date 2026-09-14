@@ -7,6 +7,45 @@
 LACY_CMD_CACHE_WORD=""
 LACY_CMD_CACHE_RESULT=""
 
+# Result of the last lacy_shell_classify_input call ("neutral", "shell", "agent").
+# Hot-path consumers (indicator, highlight, accept-line) read this instead of
+# capturing stdout, which would cost a fork per keystroke.
+_LACY_CLASSIFY_RESULT=""
+
+# Space-delimited copies of the word lists, built once at load time so that
+# membership is a single pattern match instead of a loop over ~150 entries.
+# Local IFS guarantees a space join whatever the caller's IFS is.
+_lacy_build_word_strs() {
+    local IFS=' '
+    _LACY_AGENT_WORDS_STR=" ${LACY_AGENT_WORDS[*]} "
+    _LACY_RESERVED_WORDS_STR=" ${LACY_SHELL_RESERVED_WORDS[*]} "
+    _LACY_NL_MARKERS_STR=" ${LACY_NL_MARKERS[*]} "
+}
+_lacy_build_word_strs
+
+# Lowercase without a fork: sets the named variable instead of echoing.
+# Usage: _lacy_lower_into VARNAME "STRING"
+_lacy_lower_into() {
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        printf -v "$1" '%s' "${2:l}"
+    else
+        printf -v "$1" '%s' "${2,,}"
+    fi
+}
+
+# True if the word is a user alias or shell function (not a builtin or
+# external command). Builtins only, no fork.
+_lacy_is_alias_or_function() {
+    local word="$1"
+    alias "$word" >/dev/null 2>&1 && return 0
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        functions "$word" >/dev/null 2>&1 && return 0
+    else
+        declare -F "$word" >/dev/null 2>&1 && return 0
+    fi
+    return 1
+}
+
 # Check if a word is a valid command, with single-entry cache
 lacy_shell_is_valid_command() {
     local word="$1"
@@ -54,13 +93,14 @@ lacy_shell_has_nl_markers() {
     for token in "${tokens[@]}"; do
         # Skip flags (-x, --flag)
         [[ "$token" == -* ]] && continue
-        # Skip paths (/foo, ./bar, ~/dir)
-        [[ "$token" == /* || "$token" == ./* || "$token" == ~/* ]] && continue
+        # Skip paths (/foo, ./bar, ~/dir). The tilde pattern is quoted so the
+        # shell does not expand it to $HOME before matching.
+        [[ "$token" == /* || "$token" == ./* || "$token" == "~/"* ]] && continue
         # Skip pure numbers
         [[ "$token" =~ ^[0-9]+$ ]] && continue
         # Skip variables ($VAR, ${VAR})
         [[ "$token" == \$* ]] && continue
-        lower_token=$(_lacy_lowercase "$token")
+        _lacy_lower_into lower_token "$token"
         bare_words+=( "$lower_token" )
     done
 
@@ -68,93 +108,134 @@ lacy_shell_has_nl_markers() {
     (( ${#bare_words[@]} < 1 )) && return 1
 
     # Check for strong NL markers
-    local word marker
+    local word
     for word in "${bare_words[@]}"; do
-        for marker in "${LACY_NL_MARKERS[@]}"; do
-            [[ "$word" == "$marker" ]] && return 0
-        done
+        [[ "$_LACY_NL_MARKERS_STR" == *" $word "* ]] && return 0
     done
 
     return 1
 }
 
-# Canonical detection function. Prints "neutral", "shell", or "agent".
-# All detection flows (indicator, execution) must go through this function.
+# Canonical detection function. Prints "neutral", "shell", or "agent" and
+# also stores the answer in _LACY_CLASSIFY_RESULT so hot-path callers can
+# discard stdout and read the variable (no subshell fork per keystroke):
+#
+#     lacy_shell_classify_input "$BUFFER" >/dev/null
+#     case "$_LACY_CLASSIFY_RESULT" in ...
+#
+# All detection flows (indicator, highlight, execution) must go through here.
 lacy_shell_classify_input() {
+    _lacy_classify_impl "$1"
+    printf '%s\n' "$_LACY_CLASSIFY_RESULT"
+}
+
+# Body of lacy_shell_classify_input. Sets _LACY_CLASSIFY_RESULT, prints nothing.
+_lacy_classify_impl() {
     local input="$1"
+    _LACY_CLASSIFY_RESULT="neutral"
 
     # Trim leading whitespace (POSIX-compatible, no extendedglob)
     input="${input#"${input%%[^[:space:]]*}"}"
+    # Multi-line buffers: only the first line drives the decision. A pasted
+    # script or a heredoc starts with a command; classify that, not the blob.
+    local _lacy_nl=$'\n'
+    input="${input%%$_lacy_nl*}"
     # Trim trailing whitespace
     input="${input%"${input##*[^[:space:]]}"}"
 
     # Empty input - show mode color in shell/agent, neutral in auto
     if [[ -z "$input" ]]; then
         case "$LACY_SHELL_CURRENT_MODE" in
-            "shell") echo "shell" ;;
-            "agent") echo "agent" ;;
-            *) echo "neutral" ;;
+            "shell") _LACY_CLASSIFY_RESULT="shell" ;;
+            "agent") _LACY_CLASSIFY_RESULT="agent" ;;
         esac
         return
     fi
 
-    # Emergency bypass prefix (!) = shell
+    # Emergency bypass prefix (!) = shell. Covers both `!rm -rf x` (bypass,
+    # prefix stripped by the accept-line widget) and `! true` (shell negation).
     if [[ "$input" == !* ]]; then
-        echo "shell"
+        _LACY_CLASSIFY_RESULT="shell"
         return
     fi
 
     # Agent bypass prefix (@) = agent
     if [[ "$input" == @* ]]; then
-        echo "agent"
+        _LACY_CLASSIFY_RESULT="agent"
         return
     fi
 
     # In shell mode, everything goes to shell
     if [[ "$LACY_SHELL_CURRENT_MODE" == "shell" ]]; then
-        echo "shell"
+        _LACY_CLASSIFY_RESULT="shell"
         return
     fi
 
     # In agent mode, everything goes to agent
     if [[ "$LACY_SHELL_CURRENT_MODE" == "agent" ]]; then
-        echo "agent"
+        _LACY_CLASSIFY_RESULT="agent"
         return
     fi
 
-    # Auto mode: check special cases and commands
+    # Auto mode from here on.
+
+    # Comment line: let the shell swallow it
+    if [[ "$input" == \#* ]]; then
+        _LACY_CLASSIFY_RESULT="shell"
+        return
+    fi
+
     # Extract first token respecting:
     #   - backslash-escaped spaces: /path/to/Google\ Chrome
     #   - double-quoted paths: "/Applications/Google Chrome.app/..."
     #   - single-quoted paths: '/Applications/Google Chrome.app/...'
-    local first_word first_word_cmd
-    if [[ "$input" == \"* ]]; then
+    # first_word keeps the quoting (it is a literal prefix of input);
+    # first_word_cmd is the unquoted form used for command -v lookups.
+    local first_word="" first_word_cmd="" _after=""
+    if [[ "$input" == \"* && "${input#\"}" == *\"* ]]; then
         # Double-quoted first token: extract up to closing quote
-        local _after="${input#\"}"
+        _after="${input#\"}"
         first_word="\"${_after%%\"*}\""
-        # Strip quotes for command -v lookup
         first_word_cmd="${_after%%\"*}"
-    elif [[ "$input" == \'* ]]; then
+    elif [[ "$input" == \'* && "${input#\'}" == *\'* ]]; then
         # Single-quoted first token: extract up to closing quote
-        local _after="${input#\'}"
+        _after="${input#\'}"
         first_word="'${_after%%\'*}'"
         first_word_cmd="${_after%%\'*}"
     else
         # Backslash-escaped spaces: use a variable for the placeholder so that
         # $'\x01' is processed by ANSI-C quoting at assignment time. In ZSH,
-        # $'\x01' inside ${var//pattern/replacement} is NOT expanded — it is
+        # $'\x01' inside ${var//pattern/replacement} is NOT expanded; it is
         # treated as the literal 6-char string $'\x01', breaking the round-trip.
+        # An unterminated quote also lands here: the token runs to whitespace.
         local _lacy_bsp=$'\x01'
         local _esc_input="${input//\\ /$_lacy_bsp}"
-        first_word="${_esc_input%% *}"
+        first_word="${_esc_input%%[[:space:]]*}"
         first_word="${first_word//$_lacy_bsp/\\ }"
-        # Un-escaped version for command -v lookups (backslash-space → space)
+        # Un-escaped version for command -v lookups (backslash-space to space)
         first_word_cmd="${first_word//\\ / }"
     fi
-    local first_word_lower
-    first_word_lower=$(_lacy_lowercase "$first_word_cmd")
 
-    # Strip trailing punctuation for word-list lookups (e.g., "why?" → "why")
+    # Everything after the first token, leading whitespace removed.
+    # Empty means single-token input.
+    local _rest="${input#"$first_word"}"
+    _rest="${_rest#"${_rest%%[^[:space:]]*}"}"
+
+    # Path-shaped or redirect-first tokens are shell syntax regardless of
+    # whether the target exists: ./run.sh, ~/bin/x, /usr/bin/x, \ls (alias
+    # bypass), (subshell), { group, [[ test, < file, > out, 2>/dev/null, &>log.
+    # Let the shell report the error if the path is missing.
+    case "$first_word_cmd" in
+        */*|\\*|\(*|\{*|\[\[*|\<*|\>*|[0-9]\>*|\&\>*)
+            _LACY_CLASSIFY_RESULT="shell"
+            return
+            ;;
+    esac
+
+    local first_word_lower
+    _lacy_lower_into first_word_lower "$first_word_cmd"
+
+    # Strip trailing punctuation for word-list lookups (e.g., "why?" to "why")
     local first_word_stripped="$first_word_lower"
     while [[ -n "$first_word_stripped" && "$first_word_stripped" == *[?.,\;:!] ]]; do
         first_word_stripped="${first_word_stripped%?}"
@@ -162,60 +243,68 @@ lacy_shell_classify_input() {
 
     # Layer 1a: Shell reserved words pass `command -v` but are never valid
     # standalone commands. Route to agent. (see docs/NATURAL_LANGUAGE_DETECTION.md)
-    if _lacy_in_list "$first_word_stripped" "${LACY_SHELL_RESERVED_WORDS[@]}"; then
-        echo "agent"
+    if [[ "$_LACY_RESERVED_WORDS_STR" == *" $first_word_stripped "* ]]; then
+        _LACY_CLASSIFY_RESULT="agent"
         return
     fi
 
     # Layer 1b: Common English words almost always route to agent.
-    # Exception: if the word is also a valid shell command AND the arguments
-    # look like shell syntax, defer to shell. Heuristic is conservative:
-    # only shell when operators are present OR there is at most one bare word
-    # argument (after flags/paths/numbers) that is not an NL marker.
-    # Examples: `which python` → shell, `yes | cmd` → shell
-    #           `which version to use` → agent, `yes lets go` → agent
-    if _lacy_in_list "$first_word_stripped" "${LACY_AGENT_WORDS[@]}"; then
-        if lacy_shell_is_valid_command "$first_word_cmd"; then
-            # Shell operators anywhere → shell
+    # Exceptions:
+    #   - A single word the user aliased or defined as a function (`stop`,
+    #     `deploy`, `lint`) is an intentional command. Builtins and external
+    #     commands do not get this pass, so `yes` and `no` still go to agent.
+    #   - If the word is also a valid shell command AND the arguments look
+    #     like shell syntax, defer to shell. Heuristic is conservative: only
+    #     shell when operators are present OR there is at most one bare word
+    #     argument (after flags/paths/numbers) that is not an NL marker.
+    # Examples: `which python` to shell, `yes | cmd` to shell
+    #           `which version to use` to agent, `yes lets go` to agent
+    if [[ "$_LACY_AGENT_WORDS_STR" == *" $first_word_stripped "* ]]; then
+        if [[ -z "$_rest" ]] && _lacy_is_alias_or_function "$first_word_cmd"; then
+            _LACY_CLASSIFY_RESULT="shell"
+            return
+        fi
+        if [[ -n "$_rest" ]] && lacy_shell_is_valid_command "$first_word_cmd"; then
+            # Shell operators anywhere to shell
             local _op
             for _op in "${LACY_SHELL_OPERATORS[@]}"; do
-                [[ "$input" == *"$_op"* ]] && { echo "shell"; return; }
-            done
-            # Count bare words (non-flag, non-path, non-number, non-variable)
-            if [[ "$input" == *" "* ]]; then
-                local _rest="${input#* }"
-                local -a _tokens
-                if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-                    _tokens=( ${=_rest} )
-                else
-                    read -ra _tokens <<< "$_rest"
-                fi
-                local -a _bare=()
-                local _tok _ltok
-                for _tok in "${_tokens[@]}"; do
-                    [[ "$_tok" == -* ]] && continue
-                    [[ "$_tok" == /* || "$_tok" == ./* || "$_tok" == ~/* ]] && continue
-                    [[ "$_tok" =~ ^[0-9]+$ ]] && continue
-                    [[ "$_tok" == \$* ]] && continue
-                    _ltok=$(_lacy_lowercase "$_tok")
-                    _bare+=( "$_ltok" )
-                done
-                # 0 bare words (flags only) → shell
-                if (( ${#_bare[@]} == 0 )); then
-                    echo "shell"
+                if [[ "$input" == *"$_op"* ]]; then
+                    _LACY_CLASSIFY_RESULT="shell"
                     return
                 fi
-                # Exactly 1 bare word that is not an NL marker → shell
-                if (( ${#_bare[@]} == 1 )); then
-                    if ! _lacy_in_list "${_bare[${_LACY_ARR_OFFSET}]}" "${LACY_NL_MARKERS[@]}"; then
-                        echo "shell"
-                        return
-                    fi
-                fi
-                # 2+ bare words, or the single bare word is an NL marker → agent
+            done
+            # Count bare words (non-flag, non-path, non-number, non-variable).
+            # Stop counting at 2: that is already enough to decide.
+            local -a _tokens
+            if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+                _tokens=( ${=_rest} )
+            else
+                read -ra _tokens <<< "$_rest"
             fi
+            local _tok _ltok _bare_count=0 _bare_word=""
+            for _tok in "${_tokens[@]}"; do
+                [[ "$_tok" == -* ]] && continue
+                [[ "$_tok" == /* || "$_tok" == ./* || "$_tok" == "~/"* ]] && continue
+                [[ "$_tok" =~ ^[0-9]+$ ]] && continue
+                [[ "$_tok" == \$* ]] && continue
+                _lacy_lower_into _ltok "$_tok"
+                _bare_word="$_ltok"
+                (( _bare_count++ ))
+                (( _bare_count >= 2 )) && break
+            done
+            # 0 bare words (flags only) to shell
+            if (( _bare_count == 0 )); then
+                _LACY_CLASSIFY_RESULT="shell"
+                return
+            fi
+            # Exactly 1 bare word that is not an NL marker to shell
+            if (( _bare_count == 1 )) && [[ "$_LACY_NL_MARKERS_STR" != *" $_bare_word "* ]]; then
+                _LACY_CLASSIFY_RESULT="shell"
+                return
+            fi
+            # 2+ bare words, or the single bare word is an NL marker: agent
         fi
-        echo "agent"
+        _LACY_CLASSIFY_RESULT="agent"
         return
     fi
 
@@ -228,14 +317,28 @@ lacy_shell_classify_input() {
         else
             read -ra _words <<< "$input"
         fi
-        local _w
+        local _w _rhs
         for _w in "${_words[@]}"; do
             if [[ "$_w" == *=* ]]; then
+                # A quoted or $( ) right-hand side is shell syntax the naive
+                # whitespace split cannot follow (FOO="a b" ls, x=$(ls) && ...)
+                _rhs="${_w#*=}"
+                if [[ "$_rhs" == \"* || "$_rhs" == \'* || "$_rhs" == \$\(* ]]; then
+                    _LACY_CLASSIFY_RESULT="shell"
+                    return
+                fi
                 continue
             fi
+            # Assignment followed by an operator: FOO=1 && ls
+            case "$_w" in
+                '&&'|'||'|';'|'|'|'&')
+                    _LACY_CLASSIFY_RESULT="shell"
+                    return
+                    ;;
+            esac
             # Found the actual command after env var(s)
             if lacy_shell_is_valid_command "$_w"; then
-                echo "shell"
+                _LACY_CLASSIFY_RESULT="shell"
                 return
             fi
             break
@@ -244,27 +347,23 @@ lacy_shell_classify_input() {
 
     # Check if it's a valid command (cached)
     if lacy_shell_is_valid_command "$first_word_cmd"; then
-        echo "shell"
+        _LACY_CLASSIFY_RESULT="shell"
         return
     fi
 
-    # Single word that's not a command = probably a typo -> shell
-    # Multiple words with non-command first word = natural language -> agent
-    # Check if there's anything after the first token
-    local _rest_after_first="${input#"$first_word"}"
-    _rest_after_first="${_rest_after_first#"${_rest_after_first%%[^[:space:]]*}"}"
-    if [[ -z "$_rest_after_first" ]]; then
-        echo "shell"
+    # Single word that's not a command = probably a typo, shell
+    # Multiple words with non-command first word = natural language, agent
+    if [[ -z "$_rest" ]]; then
+        _LACY_CLASSIFY_RESULT="shell"
     else
-        echo "agent"
+        _LACY_CLASSIFY_RESULT="agent"
     fi
 }
 
 # Backward-compatible wrapper: returns 0 (agent) or 1 (shell/neutral)
 lacy_shell_should_use_agent() {
-    local result
-    result=$(lacy_shell_classify_input "$1")
-    if [[ "$result" == "agent" ]]; then
+    lacy_shell_classify_input "$1" >/dev/null
+    if [[ "$_LACY_CLASSIFY_RESULT" == "agent" ]]; then
         return 0
     else
         return 1
@@ -305,10 +404,10 @@ lacy_shell_detect_natural_language() {
 
     # Criterion A: output must match at least one error pattern (case-insensitive)
     local output_lower
-    output_lower=$(_lacy_lowercase "$output")
+    _lacy_lower_into output_lower "$output"
     local pattern pattern_lower matched=false
     for pattern in "${LACY_SHELL_ERROR_PATTERNS[@]}"; do
-        pattern_lower=$(_lacy_lowercase "$pattern")
+        _lacy_lower_into pattern_lower "$pattern"
         if [[ "$output_lower" == *"$pattern_lower"* ]]; then
             matched=true
             break
@@ -318,7 +417,7 @@ lacy_shell_detect_natural_language() {
 
     # Criterion B: check for natural language signal
     local second_word
-    second_word=$(_lacy_lowercase "${words[$_LACY_ARR_OFFSET + 1]}")
+    _lacy_lower_into second_word "${words[$_LACY_ARR_OFFSET + 1]}"
 
     # B1: second word is a natural language marker
     if [[ -n "$second_word" ]] && _lacy_in_list "$second_word" "${LACY_NL_MARKERS[@]}"; then

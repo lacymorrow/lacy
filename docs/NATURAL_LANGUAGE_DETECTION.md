@@ -21,10 +21,12 @@ When the first token of user input is a reserved word, skip the `command -v` che
 Complete reserved word list:
 
 ```
-do  done  then  else  elif  fi  esac  in  select  function  coproc  {  }  !  [[
+do  done  then  else  elif  fi  esac  in  select  }  !
 ```
 
 `if`, `for`, `while`, `until`, `case`, and `time` are excluded because they are commonly used as real command prefixes or have standalone uses. Those are handled by Layer 2.
+
+`function`, `coproc`, `{`, and `[[` are also excluded: each opens a real one-liner that people type at the prompt (`function f() { :; }`, `coproc cat`, `{ ls; } > out`, `[[ -f x ]] && echo yes`). `{` and `[[` are additionally caught by the shell-syntax first-token rule below.
 
 Examples caught by this layer:
 
@@ -34,17 +36,40 @@ Examples caught by this layer:
 
 ---
 
+### Shell-syntax first tokens
+
+Some first tokens are shell syntax no matter what follows, and the shell should get them even when the target does not exist (it will print the error). Before any word-list lookup, route to shell when the first token:
+
+- contains `/` (`./run.sh`, `~/bin/x`, `/usr/bin/x`)
+- starts with `\` (alias bypass: `\ls -la`)
+- starts with `(`, `{`, or `[[` (subshell, group, test)
+- starts with `<` or `>`, or matches `[0-9]>` / `&>` (redirect-first: `< file cat`, `> out ls`, `2>/dev/null ls`)
+
+Related first-token rules:
+
+- A leading `!` is shell. Glued (`!rm -rf x`) it is the bypass prefix and is stripped before execution; with a space (`! true`) it is the shell's own negation and is left intact.
+- A leading `#` is a comment line: shell.
+- An unterminated quote (`"unterminated`) is treated as a plain token running to the next whitespace, so a single such token is shell.
+- Only the first line of a multi-line buffer is classified, and words split on any whitespace (tab, newline), not just space.
+
+### Single agent words the user aliased
+
+Agent words (`stop`, `cancel`, `lint`, `deploy`, ...) route to the agent even as a single word, so `yes` and `what` never hit the shell by accident. One exception: when the single word resolves to a user alias or shell function, it is an intentional command and routes to shell. Builtins and external commands do not get this pass. With `alias stop='kill -STOP'`, `stop` is shell; without it, agent.
+
 ### Inline environment variable assignments
 
 Shell syntax like `VAR=value command args` prepends environment variables to a command. The first token (`VAR=value`) is not a command and fails `command -v`, but the input is clearly shell syntax, not natural language.
 
-When the first token contains `=`, skip past all `VAR=value` tokens to find the actual command. If that command passes `command -v`, route to shell. If no valid command follows (or no tokens remain), fall through to the normal multi-word heuristic.
+When the first token contains `=`, skip past all `VAR=value` tokens to find the actual command. If that command passes `command -v`, route to shell. Two shortcuts while skipping: a right-hand side that starts with a quote or `$(` is shell (the whitespace split cannot follow it), and an assignment followed by an operator (`&&`, `||`, `;`, `|`, `&`) is shell. If no valid command follows (or no tokens remain), fall through to the normal multi-word heuristic.
 
 Examples:
 
 - `RUST_LOG=debug cargo run` → `cargo` is valid → shell
 - `FOO=bar BAZ=qux node index.js` → skip both assignments, `node` is valid → shell
 - `CC=gcc make -j4` → `make` is valid → shell
+- `FOO="a b" ls` → quoted right-hand side → shell
+- `x=$(ls) && echo hi` → `$(` right-hand side → shell
+- `FOO=1 && ls` → operator after assignment → shell
 - `FOO=bar unknown_thing here` → `unknown_thing` not valid → falls through to agent (multi-word, non-command first word)
 
 ---
@@ -167,6 +192,10 @@ When natural language is detected, silently reroute the input to the agent. No u
 | `go ahead and fix the tests`             | `go`        | 2     | Runs — "unknown command" + "ahead" is NL — reroute              |
 | `go for it and deploy`                   | `go`        | 2     | Runs — "unknown command" + "for" is NL — reroute                |
 | `cargo ahead with the release`           | `cargo`     | 2     | Runs — "no such command" + "ahead" is NL — reroute              |
+| `./nonexistent.sh --flag`                | `./non…`    | -     | Path-shaped first token: shell (shell reports the error)        |
+| `2>/dev/null ls`                         | `2>/dev…`   | -     | Redirect-first token: shell                                     |
+| `[[ -f x ]] && echo yes`                 | `[[`        | -     | Shell syntax first token: shell                                 |
+| `stop` (with `alias stop=…`)             | `stop`      | -     | Agent word, but user alias: shell                               |
 | `RUST_LOG=debug cargo run`               | `RUST_LOG=…`| —     | Env var prefix — `cargo` is valid command — shell               |
 | `FOO=bar BAZ=qux node index.js`         | `FOO=…`     | —     | Multiple env var prefixes — `node` is valid — shell             |
 | `why?`                                   | `why?`→`why`| 1     | Trailing `?` stripped — matches agent word — route to agent     |

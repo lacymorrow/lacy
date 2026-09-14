@@ -21,6 +21,61 @@ LACY_LAST_SESSION_FILE="$LACY_SHELL_HOME/.last_session"
 # Background Server (lash + opencode)
 # ============================================================================
 
+# --- Port and process helpers -------------------------------------------------
+#
+# The npm `lash` command is a Node wrapper that spawns the Bun binary and
+# forwards no signals. Killing the wrapper PID leaves the real server (the
+# process that holds the port) alive, reparented to PID 1. So every lookup
+# here goes by port, and every kill is verified against the command line.
+
+# Print PIDs listening on a TCP port, one per line. lsof first, fuser second.
+# Returns 1 when neither tool exists (caller falls back to the PID file).
+_lacy_port_listeners() {
+    local port="$1"
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null
+        return 0
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -n tcp "$port" 2>/dev/null | tr -s ' \t' '\n' | grep -E '^[0-9]+$'
+        return 0
+    fi
+    return 1
+}
+
+# True when PID is alive and its command line is a server on our port.
+# Guards every kill: a recycled PID from a stale file must never be signalled.
+_lacy_is_server_pid() {
+    local pid="$1"
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    local cmdline
+    cmdline=$(ps -o command= -p "$pid" 2>/dev/null)
+    [[ "$cmdline" == *"serve --port ${LACY_PREHEAT_SERVER_PORT}" || \
+       "$cmdline" == *"serve --port ${LACY_PREHEAT_SERVER_PORT} "* ]]
+}
+
+# Print the PID that actually holds the server port (the Bun binary, not the
+# npm wrapper). Empty and return 1 when no verified server is listening.
+_lacy_preheat_server_listener_pid() {
+    local listeners pid
+    listeners=$(_lacy_port_listeners "$LACY_PREHEAT_SERVER_PORT") || return 1
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] || continue
+        if _lacy_is_server_pid "$pid"; then
+            echo "$pid"
+            return 0
+        fi
+    done <<< "$listeners"
+    return 1
+}
+
+# Record the server PID in memory and on disk (shared by every lacy shell).
+_lacy_preheat_server_record_pid() {
+    LACY_PREHEAT_SERVER_PID="$1"
+    echo "$1" > "$LACY_PREHEAT_SERVER_PID_FILE"
+}
+
 # Start background server for lash or opencode
 lacy_preheat_server_start() {
     local tool="$1"
@@ -30,35 +85,49 @@ lacy_preheat_server_start() {
         return 0
     fi
 
-    # Clean up stale PID from previous session
-    lacy_preheat_server_stop 2>/dev/null
+    local listener
+    listener=$(_lacy_preheat_server_listener_pid)
+    if [[ -n "$listener" ]]; then
+        # A server already holds the port (another tab, or a survivor from an
+        # earlier shell). Adopt it and wait for it to answer.
+        _lacy_preheat_server_record_pid "$listener"
+    else
+        # Clean up stale PID from previous session
+        lacy_preheat_server_stop 2>/dev/null
 
-    # Generate random password for this session
-    LACY_PREHEAT_SERVER_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || date +%s%N)
+        # Generate random password for this session
+        LACY_PREHEAT_SERVER_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || date +%s%N)
 
-    # Start server in background (suppress all job notifications)
-    # Redirect stdin from /dev/null so the background server doesn't compete
-    # with foreground processes (lash, vim, etc.) for terminal input.
-    _lacy_jobctl_off
-    "$tool" serve --port "$LACY_PREHEAT_SERVER_PORT" </dev/null >/dev/null 2>&1 &
-    LACY_PREHEAT_SERVER_PID=$!
-    disown 2>/dev/null
-    _lacy_jobctl_on
+        # Start server in background (suppress all job notifications)
+        # Redirect stdin from /dev/null so the background server doesn't compete
+        # with foreground processes (lash, vim, etc.) for terminal input.
+        _lacy_jobctl_off
+        "$tool" serve --port "$LACY_PREHEAT_SERVER_PORT" </dev/null >/dev/null 2>&1 &
+        _lacy_preheat_server_record_pid "$!"
+        disown 2>/dev/null
+        _lacy_jobctl_on
+    fi
 
-    # Save PID to file for crash recovery
-    echo "$LACY_PREHEAT_SERVER_PID" > "$LACY_PREHEAT_SERVER_PID_FILE"
-
-    # Wait for server to become healthy (up to 3 seconds)
+    # Wait for the server to answer (LACY_HEALTH_CHECK_ATTEMPTS x INTERVAL)
     local attempts=0
     while (( attempts < LACY_HEALTH_CHECK_ATTEMPTS )); do
         if lacy_preheat_server_is_healthy; then
+            # Swap the wrapper PID for the PID that holds the port
+            listener=$(_lacy_preheat_server_listener_pid)
+            [[ -n "$listener" ]] && _lacy_preheat_server_record_pid "$listener"
             return 0
         fi
         sleep "$LACY_HEALTH_CHECK_INTERVAL"
         (( attempts++ ))
     done
 
-    # Failed to start — clean up
+    # Budget exhausted. A slow server that holds the port is left alone so the
+    # next query can use it. Only a dead one gets cleaned up.
+    listener=$(_lacy_preheat_server_listener_pid)
+    if [[ -n "$listener" ]]; then
+        _lacy_preheat_server_record_pid "$listener"
+        return 1
+    fi
     lacy_preheat_server_stop 2>/dev/null
     return 1
 }
@@ -140,12 +209,23 @@ _lacy_preheat_server_create_session() {
     return 1
 }
 
-# Send query to background server via REST API
+# Return codes from lacy_preheat_server_query. Only UNREACHABLE means the
+# prompt never left this machine; every other failure must not be re-sent.
+LACY_SERVER_QUERY_OK=0
+LACY_SERVER_QUERY_UNREACHABLE=1   # curl 7 or no session: safe to retry single-shot
+LACY_SERVER_QUERY_HTTP_ERROR=2    # server answered with an error; body on stdout
+LACY_SERVER_QUERY_TIMEOUT=3       # curl 28: request still running on the server
+LACY_SERVER_QUERY_LOST=4          # other curl failure mid-request
+LACY_SERVER_QUERY_SESSION_GONE=5  # HTTP 404: the session no longer exists
+
+# Send query to background server via REST API.
+# Prints the assistant text on success. See the return codes above; the caller
+# (usually inside $(...)) resets the session on codes that invalidate it.
 lacy_preheat_server_query() {
     local query="$1"
 
     if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
-        _lacy_preheat_server_create_session || return 1
+        _lacy_preheat_server_create_session || return "$LACY_SERVER_QUERY_UNREACHABLE"
     fi
 
     local escaped_query
@@ -153,24 +233,42 @@ lacy_preheat_server_query() {
 
     # Pass the current working directory on every message request.
     # lash/opencode wraps each request in Instance.provide({ directory }) so
-    # per-message directory takes effect even on an existing session — this
+    # per-message directory takes effect even on an existing session, which
     # preserves conversation continuity while keeping CWD always accurate.
     local _msg_dir
     _msg_dir=$(pwd 2>/dev/null)
 
-    local response
-    response=$(curl -sf --max-time "$LACY_SESSION_MESSAGE_TIMEOUT" \
+    local body_file http_code curl_rc response
+    body_file=$(mktemp 2>/dev/null) || body_file="${LACY_SHELL_HOME}/.server_body_$$"
+    http_code=$(curl -s --max-time "$LACY_SESSION_MESSAGE_TIMEOUT" \
+        -o "$body_file" -w '%{http_code}' \
         -X POST \
         -H "Content-Type: application/json" \
         -H "x-opencode-directory: ${_msg_dir}" \
         -d "{\"parts\": [{\"type\": \"text\", \"text\": \"${escaped_query}\"}]}" \
         "http://localhost:${LACY_PREHEAT_SERVER_PORT}/session/${LACY_PREHEAT_SERVER_SESSION_ID}/message" 2>/dev/null)
+    curl_rc=$?
+    response=$(cat "$body_file" 2>/dev/null)
+    command rm -f "$body_file"
 
-    local exit_code=$?
-    if [[ $exit_code -ne 0 ]]; then
-        LACY_PREHEAT_SERVER_SESSION_ID=""
-        command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
-        return 1
+    case "$curl_rc" in
+        0) ;;
+        7)  return "$LACY_SERVER_QUERY_UNREACHABLE" ;;
+        28) return "$LACY_SERVER_QUERY_TIMEOUT" ;;
+        *)  return "$LACY_SERVER_QUERY_LOST" ;;
+    esac
+
+    if [[ ! "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+        printf '%s' "$response"
+        # 404 means the session is gone: drop it so the next query starts fresh.
+        # This reset is visible only when called directly; a $(...) caller
+        # must mirror it from the return code.
+        if [[ "$http_code" == "404" ]]; then
+            LACY_PREHEAT_SERVER_SESSION_ID=""
+            : > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+            return "$LACY_SERVER_QUERY_SESSION_GONE"
+        fi
+        return "$LACY_SERVER_QUERY_HTTP_ERROR"
     fi
 
     if command -v jq >/dev/null 2>&1; then
@@ -210,27 +308,64 @@ print(data)" 2>/dev/null
     fi
 }
 
-# Stop background server and clean up
+# Stop background server and clean up.
+# Kills by port, not by remembered PID: the npm wrapper dies on its own signal
+# but the Bun process it spawned keeps the port. Every candidate is verified
+# against its command line first, so a recycled PID is never touched.
 lacy_preheat_server_stop() {
-    if [[ -n "$LACY_PREHEAT_SERVER_PID" ]]; then
-        kill "$LACY_PREHEAT_SERVER_PID" 2>/dev/null
-        wait "$LACY_PREHEAT_SERVER_PID" 2>/dev/null
-        LACY_PREHEAT_SERVER_PID=""
-    fi
+    local pid file_pid="" listeners
+    local -a victims
+    victims=()
 
     if [[ -f "$LACY_PREHEAT_SERVER_PID_FILE" ]]; then
-        local file_pid
         file_pid=$(cat "$LACY_PREHEAT_SERVER_PID_FILE" 2>/dev/null)
-        if [[ -n "$file_pid" ]]; then
-            kill "$file_pid" 2>/dev/null
-            wait "$file_pid" 2>/dev/null
-        fi
-        command rm -f "$LACY_PREHEAT_SERVER_PID_FILE"
     fi
+
+    # 1. Whatever holds the port
+    listeners=$(_lacy_port_listeners "$LACY_PREHEAT_SERVER_PORT")
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] || continue
+        _lacy_is_server_pid "$pid" && victims+=("$pid")
+    done <<< "$listeners"
+
+    # 2. Remembered PIDs (wrapper or listener) and the wrapper's children
+    for pid in "$LACY_PREHEAT_SERVER_PID" "$file_pid"; do
+        [[ -n "$pid" ]] || continue
+        _lacy_is_server_pid "$pid" || continue
+        victims+=("$pid")
+        pkill -TERM -P "$pid" -f "serve --port ${LACY_PREHEAT_SERVER_PORT}" 2>/dev/null
+    done
+
+    if (( ${#victims[@]} > 0 )); then
+        for pid in "${victims[@]}"; do
+            kill -TERM "$pid" 2>/dev/null
+        done
+        # Give them a moment, then force anything still alive
+        local tries=0 alive
+        while (( tries < 10 )); do
+            alive=""
+            for pid in "${victims[@]}"; do
+                kill -0 "$pid" 2>/dev/null && alive="1"
+            done
+            [[ -z "$alive" ]] && break
+            sleep 0.1
+            (( tries++ ))
+        done
+        for pid in "${victims[@]}"; do
+            kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null
+            wait "$pid" 2>/dev/null
+        done
+    fi
+
+    LACY_PREHEAT_SERVER_PID=""
+    command rm -f "$LACY_PREHEAT_SERVER_PID_FILE"
+    command rm -f "$LACY_SHELL_HEALTH_CACHE_FILE"
 
     LACY_PREHEAT_SERVER_PASSWORD=""
     LACY_PREHEAT_SERVER_SESSION_ID=""
-    command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+    # Keep the marker file (other shells use it to see we are alive), drop its contents
+    [[ -f "$LACY_PREHEAT_SERVER_SESSION_FILE" ]] && : > "$LACY_PREHEAT_SERVER_SESSION_FILE" 2>/dev/null
+    return 0
 }
 
 # Restore server session ID from file (survives subshell boundary)
@@ -399,7 +534,7 @@ lacy_session_new() {
     lacy_preheat_claude_reset_session
     lacy_preheat_gemini_reset_session
     LACY_PREHEAT_SERVER_SESSION_ID=""
-    command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE"
+    : > "$LACY_PREHEAT_SERVER_SESSION_FILE"
 
     # Reset terminal context so the next query sends full context
     _lacy_ctx_reset
@@ -475,7 +610,9 @@ lacy_session_resume() {
 
 lacy_preheat_init() {
     # Per-shell session files ensure a fresh session on every new shell start.
-    # We no longer need to restore here because the PID-specific file won't exist yet.
+    # Touch ours now so other shells can tell we are alive (see cleanup).
+    mkdir -p "$LACY_SHELL_HOME" 2>/dev/null
+    [[ -f "$LACY_PREHEAT_SERVER_SESSION_FILE" ]] || : > "$LACY_PREHEAT_SERVER_SESSION_FILE" 2>/dev/null
 
     if [[ "$LACY_PREHEAT_EAGER" == "true" ]]; then
         local tool="${LACY_ACTIVE_TOOL}"
@@ -489,8 +626,35 @@ lacy_preheat_init() {
     fi
 }
 
+# Count other lacy shells that are still alive, judged by their per-shell
+# session marker files. Dead shells' leftovers are removed on the way.
+_lacy_preheat_other_shells() {
+    local count=0 f pid
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        pid="${f##*_}"
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        [[ "$pid" == "$$" ]] && continue
+        if kill -0 "$pid" 2>/dev/null; then
+            (( count++ ))
+        else
+            command rm -f "$f"
+        fi
+    done < <(find "$LACY_SHELL_HOME" -maxdepth 1 -name '.server_session_id_*' 2>/dev/null)
+    echo "$count"
+}
+
+# Release this shell's server state. The server itself is shared by every
+# lacy shell on this machine, so it is only stopped by the last one out.
 lacy_preheat_cleanup() {
-    lacy_preheat_server_stop
-    command rm -f "$LACY_PREHEAT_SESSION_FILE" \
+    command rm -f "$LACY_PREHEAT_SERVER_SESSION_FILE" \
+                  "$LACY_PREHEAT_SESSION_FILE" \
                   "$LACY_GEMINI_SESSION_ID_FILE"
+    LACY_PREHEAT_SERVER_SESSION_ID=""
+
+    if [[ "$(_lacy_preheat_other_shells)" == "0" ]]; then
+        lacy_preheat_server_stop
+    else
+        LACY_PREHEAT_SERVER_PID=""
+    fi
 }

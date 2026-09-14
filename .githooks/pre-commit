@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Refuse to commit agent session state, databases, or logs.
+# The .lash/ log once carried OAuth tokens into the public repo via an
+# "auto commit". This hook is the durable guard, independent of .gitignore.
+# Install: git config core.hooksPath .githooks   (bin/lacy and CONTRIBUTING.md say so)
+set -euo pipefail
+
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E \
+  '^(\.lash/|lib/\.lash/|\.claude/settings\.local\.json$)|\.(db|db-wal|db-shm|sqlite|log)$' || true)
+
+if [[ -n "$bad" ]]; then
+  printf '\npre-commit: refusing to commit session state or logs:\n' >&2
+  printf '  %s\n' $bad >&2
+  printf '\nUnstage with: git restore --staged <file>\n' >&2
+  printf 'These paths are gitignored; if they are staged, something used git add -f or -A on a stale index.\n\n' >&2
+  exit 1
+fi
+
+# Secret pattern scan on staged text content (Anthropic keys and OAuth tokens).
+if git --no-pager diff --cached --no-color --no-ext-diff -U0 --diff-filter=ACMR \
+    | grep -E '^\+' | grep -qE 'sk-ant-(api|oat)[A-Za-z0-9_-]{10,}'; then
+  printf '\npre-commit: staged content contains what looks like an Anthropic key or OAuth token. Refusing.\n\n' >&2
+  exit 1
+fi
