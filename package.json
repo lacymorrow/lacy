@@ -5,9 +5,10 @@
   "description": "Talk to your terminal — AI agent routing for your shell",
   "main": "lacy.plugin.zsh",
   "scripts": {
-    "setup:local": "./install.sh",
-    "release": "bun run script/release.ts",
-    "release:beta": "bun run script/release.ts --beta"
+    "test": "bash tests/test_core.sh && zsh tests/test_core.sh && bash tests/test_query_agent.sh && zsh tests/test_query_agent.sh && zsh tests/test_preheat_server.zsh",
+    "release": "shipx",
+    "release:beta": "shipx --beta",
+    "setup:local": "./install.sh"
   },
   "keywords": [
     "shell",
@@ -31,8 +32,7 @@
   "license": "FSL-1.1-MIT",
   "dependencies": {},
   "devDependencies": {
-    "@clack/prompts": "^1.0.0",
-    "picocolors": "^1.0.0"
+    "@lacymorrow/shipx": "^0.1.17"
   },
   "engines": {
     "node": ">=18.0.0"

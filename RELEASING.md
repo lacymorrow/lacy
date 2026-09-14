@@ -1,148 +1,79 @@
 # Releasing Lacy Shell
 
-Step-by-step process for publishing a new version across all distribution channels.
+One command. [shipx](https://github.com/lacymorrow/shipx) runs the whole pipeline from `shipx.config.ts`.
 
 ## Prerequisites
 
-Before you start, verify:
+```bash
+npm whoami          # lacymorrow
+gh auth status      # authenticated, repo scope
+ls ../homebrew-tap  # sibling checkout of lacymorrow/homebrew-tap on main
+```
+
+Have your npm authenticator ready. `npm publish` asks for a one-time password, and shipx retries in a loop if it fails.
+
+## Release
+
+From a clean tree on `main`:
 
 ```bash
-npm whoami          # Must be logged in as lacymorrow
-gh auth status      # Must be authenticated with repo + workflow scopes
+bun run release            # prompts for patch / minor / major
+bun run release patch      # 1.8.21 -> 1.8.22
+bun run release minor      # 1.8.21 -> 1.9.0
+bun run release 2.0.0      # explicit
+bun run release:beta       # 1.8.22-beta.0, npm tag beta, Homebrew skipped
+bun run release -- --dry-run   # print every step, change nothing
 ```
 
-You need push access to:
-- `lacymorrow/lacy` (main repo)
-- `lacymorrow/homebrew-tap` (Homebrew formula)
-- `lacymorrow/lacy-sh` (website — only if updating)
+What runs, in order:
 
-Have your npm 2FA authenticator ready — you'll need a one-time password for `npm publish`.
+1. **Preflight.** Refuses a dirty tree or a branch other than `main`.
+2. **Tests.** The `test` script in package.json: core, query-agent, and preheat suites in bash and zsh. A failure stops the release.
+3. **Bump.** `package.json`, `packages/lacy/package.json`, `bin/lacy` (`VERSION_FALLBACK`), and the two root `version` keys in `packages/lacy/package-lock.json`.
+4. **Changelog** from commit subjects since the last tag.
+5. **Commit and tag** as `release: vX.Y.Z` / `vX.Y.Z`.
+6. **Push.** If the push fails, shipx rolls back the local commit and tag.
+7. **GitHub release.** Notes are passed as an argument, never through a shell, so commit subjects cannot inject.
+8. **npm publish** from `packages/lacy`, public access.
+9. **Homebrew.** Downloads the tag tarball with `curl -f`, writes the sha into `../homebrew-tap/Formula/lacy.rb`, commits, pushes.
 
-## Copy-Paste Release Script
+## After the release
 
-Set your version and run each block in order. The entire process takes under 2 minutes.
+`CHANGELOG.md` is not updated automatically. Add a section at the top if the release is worth a human summary; the GitHub release already has the commit list.
 
-```bash
-# ── Set version ──────────────────────────────────────────────
-VERSION="1.4.0"  # ← Change this
-```
-
-### 1. Bump versions
-
-Both `package.json` files must stay in sync:
-
-```bash
-npm version $VERSION --no-git-tag-version
-cd packages/lacy && npm version $VERSION --no-git-tag-version && cd ../..
-```
-
-Then update `CHANGELOG.md` — add a section at the top:
-
-```markdown
-## [x.y.z] - YYYY-MM-DD
-
-### Added
-- ...
-
-### Fixed
-- ...
-```
-
-### 2. Commit and push
-
-```bash
-git add package.json packages/lacy/package.json packages/lacy/package-lock.json CHANGELOG.md
-git commit -m "release: v$VERSION"
-git push origin main
-```
-
-### 3. Create GitHub release
-
-This creates the git tag. Homebrew depends on it.
-
-```bash
-gh release create "v$VERSION" \
-  --title "v$VERSION" \
-  --notes "See CHANGELOG.md for details." \
-  --target main
-```
-
-### 4. Publish to npm
-
-```bash
-cd packages/lacy
-npm publish --otp=YOUR_OTP_CODE
-cd ../..
-```
-
-Verify: `npm view lacy version` → should print the new version.
-
-### 5. Update Homebrew tap
-
-Get the SHA of the release tarball, then update the formula:
-
-```bash
-# Get SHA
-SHA=$(curl -sL "https://github.com/lacymorrow/lacy/archive/refs/tags/v$VERSION.tar.gz" | shasum -a 256 | cut -d' ' -f1)
-echo "SHA: $SHA"
-
-# Clone/update tap
-gh repo clone lacymorrow/homebrew-tap /tmp/homebrew-tap 2>/dev/null || git -C /tmp/homebrew-tap pull
-
-# Update formula (url + sha256)
-sed -i '' "s|url \".*\"|url \"https://github.com/lacymorrow/lacy/archive/refs/tags/v$VERSION.tar.gz\"|" /tmp/homebrew-tap/Formula/lacy.rb
-sed -i '' "s|sha256 \".*\"|sha256 \"$SHA\"|" /tmp/homebrew-tap/Formula/lacy.rb
-
-# Push (pull first to avoid rejected pushes from remote changes)
-cd /tmp/homebrew-tap
-git pull --rebase origin main
-git add Formula/lacy.rb
-git commit -m "lacy: update to v$VERSION"
-git push origin main
-cd -
-```
-
-### 6. Update the website (if needed)
-
-Only required when install instructions, features, or docs change. The site auto-deploys on push.
+The website (lacy.sh) is a separate repo and only needs a change when install instructions or features change:
 
 ```bash
 gh repo clone lacymorrow/lacy-sh /tmp/lacy-sh 2>/dev/null || git -C /tmp/lacy-sh pull
-# Make changes, then:
-cd /tmp/lacy-sh && git add . && git commit -m "update for v$VERSION" && git push origin main && cd -
 ```
 
-### 7. Verify
+## Verify
 
 ```bash
-gh release view "v$VERSION"                    # GitHub release exists
-npm view lacy version                       # npm shows new version
-brew update && brew info lacymorrow/tap/lacy   # Homebrew shows new version
-```
-
-## Quick Reference
-
-```
-bump versions → commit & push → gh release → npm publish → update homebrew tap → verify
+gh release view vX.Y.Z
+npm view lacy version
+brew update && brew info lacymorrow/tap/lacy
+lacy update && lacy version
 ```
 
 ## Channels
 
-| Channel | What gets updated | Trigger |
-|---------|-------------------|---------|
-| GitHub | Release + tag | `gh release create` |
-| npm | `lacy` package | `npm publish` in `packages/lacy` |
-| Homebrew | `lacymorrow/tap/lacy` formula | Push to `homebrew-tap` repo |
-| curl install | `install.sh` | Pulls from git main (automatic) |
-| Website | lacy.sh | Push to `lacy-sh` repo (Vercel auto-deploy) |
+| Channel | What updates | How |
+|---|---|---|
+| GitHub | release + tag | shipx step 7 |
+| npm | `lacy` package | shipx step 8 |
+| Homebrew | `lacymorrow/tap/lacy` | shipx step 9 |
+| curl install | `install.sh` | clones git main, nothing to do |
+| Website | lacy.sh | push to `lacy-sh`, Vercel deploys |
 
 ## Troubleshooting
 
 | Problem | Fix |
-|---------|-----|
-| `npm publish` OTP expired | TOTP codes last ~30s. Get a fresh code and retry. |
-| `npm publish` permission denied | Run `npm whoami` — must be `lacymorrow`. |
-| Homebrew still shows old version | Run `brew update` to fetch the new tap index. |
-| GitHub release tarball 404 | Wait a few seconds after `gh release create` for the tarball to generate. |
-| SHA mismatch after Homebrew update | Re-fetch: `curl -sL "...tar.gz" \| shasum -a 256` and update formula. |
-| Version mismatch between package.json files | Both root and `packages/lacy/package.json` must match. |
+|---|---|
+| Preflight: dirty tree | Commit or stash. Do not use `--any-branch` on a stable release. |
+| Tests fail | Fix them. `--no-tests` exists for emergencies only. |
+| npm OTP expired | Codes last about 30 s. Enter a fresh one at the retry prompt. |
+| npm asks for browser auth | Complete the link it prints, then choose retry. |
+| Push rejected | shipx rolled back locally. `git pull --rebase origin main` and run again. |
+| Homebrew step failed after npm published | Do not rerun shipx; that would bump again. Finish by hand in `../homebrew-tap`: `curl -fsSL <tag tarball> \| shasum -a 256`, put the sha and URL in `Formula/lacy.rb`, commit, push. |
+| Version drift between files | Run `bun run release -- --dry-run` and check the bump list; all four files must show the same version. |
