@@ -61,7 +61,9 @@ LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
 # Shell reserved words — pass `command -v` but are never valid standalone commands.
 # Used by Layer 1 of natural language detection (see docs/NATURAL_LANGUAGE_DETECTION.md).
-LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "function" "coproc" "{" "}" "!" "[[")
+# Not listed: `{`, `[[`, `function`, `coproc` start real one-liners
+# (`{ ls; } > out`, `[[ -f x ]] && ...`, `function f() {...}`, `coproc cat`).
+LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "}" "!")
 
 # Agent words — common English words that always route to agent, even as
 # single-word input. Some (yes, nice, cancel) exist as real commands but are

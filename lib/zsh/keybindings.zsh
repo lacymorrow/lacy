@@ -76,7 +76,8 @@ LACY_SHELL_OWN_POSTDISPLAY=false  # true when Lacy is managing POSTDISPLAY
 # ============================================================================
 
 # Check if input will go to shell or agent
-# Delegates to centralized detection in detection.zsh
+# Delegates to centralized detection in lib/core/detection.sh.
+# Prints the result; hot paths below read _LACY_CLASSIFY_RESULT instead.
 lacy_shell_detect_input_type() {
     lacy_shell_classify_input "$1"
 }
@@ -87,7 +88,9 @@ lacy_shell_update_input_indicator() {
     [[ "$LACY_SHELL_PROMPT_INITIALIZED" != true ]] && return
     [[ -z "$LACY_SHELL_BASE_PS1" ]] && return
 
-    local input_type=$(lacy_shell_detect_input_type "$BUFFER")
+    # No $( ): a subshell fork per keystroke is the single biggest cost here.
+    lacy_shell_classify_input "$BUFFER" >/dev/null
+    local input_type="$_LACY_CLASSIFY_RESULT"
 
     # Only update prompt if type changed (avoids flickering)
     if [[ "$input_type" != "$LACY_SHELL_INPUT_TYPE" ]]; then
@@ -120,16 +123,12 @@ lacy_shell_update_input_indicator() {
     # preserve highlights from zsh-autosuggestions and other plugins.
     region_highlight=("${(@)region_highlight:#*memo=lacy*}")
     if [[ -n "$BUFFER" ]]; then
-        # Find start of first word (skip leading whitespace)
-        local i=0
-        while (( i < ${#BUFFER} )) && [[ "${BUFFER:$i:1}" == [[:space:]] ]]; do
-            (( i++ ))
-        done
-        # Find end of first word
-        local j=$i
-        while (( j < ${#BUFFER} )) && [[ "${BUFFER:$j:1}" != [[:space:]] ]]; do
-            (( j++ ))
-        done
+        # First word bounds via parameter expansion (no per-character loop,
+        # which took ~90ms on a 5000-char paste). No extendedglob needed.
+        local _lacy_lead="${BUFFER#"${BUFFER%%[^[:space:]]*}"}"   # minus leading whitespace
+        local _lacy_fw="${_lacy_lead%%[[:space:]]*}"              # first word
+        local i=$(( ${#BUFFER} - ${#_lacy_lead} ))
+        local j=$(( i + ${#_lacy_fw} ))
         if (( j > i )); then
             case "$input_type" in
                 "shell")
