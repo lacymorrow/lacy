@@ -19,7 +19,13 @@ Thanks for your interest in contributing to Lacy! This guide will help you get s
    cd lacy
    ```
 
-2. **Symlink for development** instead of using the installed copy:
+2. **Enable the repo git hooks.** They refuse to commit agent session state, logs, and anything that looks like an API key:
+
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+
+3. **Symlink for development** instead of using the installed copy:
 
    ```bash
    # Back up your installed copy if you have one
@@ -29,7 +35,7 @@ Thanks for your interest in contributing to Lacy! This guide will help you get s
    ln -s "$(pwd)" ~/.lacy
    ```
 
-3. **Source the plugin** in your shell:
+4. **Source the plugin** in your shell:
 
    ```bash
    # ZSH
@@ -39,7 +45,7 @@ Thanks for your interest in contributing to Lacy! This guide will help you get s
    source ~/.lacy/lacy.plugin.bash
    ```
 
-4. **Open a new terminal** to test your changes. After editing files, open a fresh shell to reload.
+5. **Open a new terminal** to test your changes. After editing files, open a fresh shell to reload.
 
 ### Project Structure
 
