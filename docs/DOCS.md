@@ -10,8 +10,7 @@ Supplement to [CLAUDE.md](../CLAUDE.md) (canonical reference) and [README.md](..
 |-------|---------|--------------------|--------------------|------------|
 | ZSH   | any     | Yes (per-keystroke) | Yes (`region_highlight`) | RPS1 (right prompt) |
 | Bash  | 4+      | No (per-prompt only) | No | PS1 badge |
-
-**Not yet supported:** Fish (no adapter exists)
+| Fish  | 3.1+    | No (per-prompt only) | No | `fish_right_prompt` |
 
 ---
 
