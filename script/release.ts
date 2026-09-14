@@ -14,9 +14,16 @@
 
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { execSync, spawnSync } from "node:child_process";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const PACKAGE_JSONS = [
@@ -36,6 +43,35 @@ function run(cmd: string, opts?: { cwd?: string; stdio?: "inherit" | "pipe" }) {
 		encoding: "utf-8",
 		shell: "/bin/bash",
 	});
+}
+
+/**
+ * Run a command with an argv array and no shell. Use this for anything that
+ * carries user or git controlled text (commit subjects, tags, notes) so that
+ * backticks, $(...), and quotes in that text are passed literally instead of
+ * being interpreted by bash.
+ */
+function runArgs(
+	cmd: string,
+	args: string[],
+	opts?: { cwd?: string; stdio?: "inherit" | "pipe" },
+): string {
+	const result = spawnSync(cmd, args, {
+		cwd: opts?.cwd ?? ROOT,
+		stdio: opts?.stdio ?? "pipe",
+		encoding: "utf-8",
+	});
+	if (result.error) throw result.error;
+	if (result.status !== 0) {
+		const err = new Error(
+			`${cmd} ${args.join(" ")} exited with ${result.status}`,
+		) as Error & { stderr?: string; stdout?: string; status?: number };
+		err.stderr = result.stderr ?? "";
+		err.stdout = result.stdout ?? "";
+		err.status = result.status ?? undefined;
+		throw err;
+	}
+	return result.stdout ?? "";
 }
 
 function readJson(path: string) {
@@ -222,15 +258,30 @@ async function publishHomebrew(tag: string, version: string) {
 		run("git checkout main", { cwd: HOMEBREW_TAP });
 		run("git pull --rebase origin main", { cwd: HOMEBREW_TAP });
 
-		// Download the release tarball and compute SHA256
+		// Download the release tarball and compute SHA256.
+		// GitHub can 404 the tag tarball for a few seconds after the tag is
+		// pushed. Without -f the 404 page would hash to a valid-looking sha
+		// and get committed to the tap, breaking brew install for everyone.
 		const tarballUrl = `https://github.com/lacymorrow/lacy/archive/refs/tags/${tag}.tar.gz`;
-		const sha256 = run(
-			`curl -sL "${tarballUrl}" | shasum -a 256 | cut -d' ' -f1`,
-		).trim();
+		let sha256 = "";
+		for (let attempt = 1; attempt <= 6; attempt++) {
+			try {
+				sha256 = run(
+					`curl -fsSL "${tarballUrl}" | shasum -a 256 | cut -d' ' -f1`,
+				).trim();
+				if (sha256.length === 64) break;
+			} catch {
+				sha256 = "";
+			}
+			if (attempt < 6) {
+				brewSpinner.message(`Tarball not ready, retrying (${attempt}/6)`);
+				execSync("sleep 5");
+			}
+		}
 
 		if (!sha256 || sha256.length !== 64) {
 			brewSpinner.stop(pc.red("Failed to compute SHA256"));
-			p.log.error(`Got: ${sha256}`);
+			p.log.error(`Could not download ${tarballUrl} after 6 attempts`);
 			return;
 		}
 
@@ -247,9 +298,11 @@ async function publishHomebrew(tag: string, version: string) {
 		writeFileSync(HOMEBREW_FORMULA, formula);
 
 		// Commit and push
-		run("git add Formula/lacy.rb", { cwd: HOMEBREW_TAP });
-		run(`git commit -m "lacy: update to ${tag}"`, { cwd: HOMEBREW_TAP });
-		run("git push", { cwd: HOMEBREW_TAP });
+		runArgs("git", ["add", "Formula/lacy.rb"], { cwd: HOMEBREW_TAP });
+		runArgs("git", ["commit", "-m", `lacy: update to ${tag}`], {
+			cwd: HOMEBREW_TAP,
+		});
+		runArgs("git", ["push"], { cwd: HOMEBREW_TAP });
 
 		brewSpinner.stop(`Homebrew formula updated to ${pc.green(tag)}`);
 	} catch (err: unknown) {
@@ -444,25 +497,43 @@ async function main() {
 	// 3. Commit + tag
 	const gitSpinner = p.spinner();
 	gitSpinner.start("Committing and tagging");
-	run("git add package.json packages/lacy/package.json bin/lacy");
-	run(`git commit -m "release: ${tag}" --no-verify`);
-	run(`git tag ${tag}`);
+	runArgs("git", ["add", "package.json", "packages/lacy/package.json", "bin/lacy"]);
+	runArgs("git", ["commit", "-m", `release: ${tag}`, "--no-verify"]);
+	runArgs("git", ["tag", tag]);
 	gitSpinner.stop(`Committed and tagged ${pc.green(tag)}`);
 
 	// 4. Push
 	const pushSpinner = p.spinner();
 	pushSpinner.start("Pushing to GitHub");
-	run(`git push origin ${branch} --no-verify`);
-	run(`git push origin ${tag}`);
+	runArgs("git", ["push", "origin", branch, "--no-verify"]);
+	runArgs("git", ["push", "origin", tag]);
 	pushSpinner.stop("Pushed to GitHub");
 
 	// 5. GitHub release
+	// The changelog is built from commit subjects, which are attacker and
+	// typo controlled. Never interpolate it into a shell string: write it to
+	// a file and hand gh the path.
 	const releaseSpinner = p.spinner();
 	releaseSpinner.start("Creating GitHub release");
-	const releaseNotes = `## Changes\n\n${changelog}`;
-	run(
-		`gh release create ${tag} --title "${tag}" --notes "${releaseNotes.replace(/"/g, '\\"')}"${isBeta ? " --prerelease" : ""}`,
-	);
+	const releaseNotes = `## Changes\n\n${changelog}\n`;
+	const notesDir = mkdtempSync(join(tmpdir(), "lacy-release-"));
+	const notesFile = join(notesDir, "notes.md");
+	writeFileSync(notesFile, releaseNotes);
+	try {
+		const ghArgs = [
+			"release",
+			"create",
+			tag,
+			"--title",
+			tag,
+			"--notes-file",
+			notesFile,
+		];
+		if (isBeta) ghArgs.push("--prerelease");
+		runArgs("gh", ghArgs);
+	} finally {
+		rmSync(notesDir, { recursive: true, force: true });
+	}
 	releaseSpinner.stop("GitHub release created");
 
 	// 6. npm publish
