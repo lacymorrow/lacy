@@ -61,5 +61,11 @@ lacy_shell_init
 # One-time install tracking (background, fail-silent)
 _lacy_track_first_load
 
-# Cleanup on exit
-trap lacy_shell_cleanup EXIT
+# Cleanup on shell exit. Not an EXIT trap: when this file is sourced inside a
+# function (zinit, antidote, or the `lacy` function after `quit`) an EXIT trap
+# fires on function return, not on shell exit. zshexit_functions only fires
+# when the shell really exits.
+typeset -ga zshexit_functions
+if [[ -z "${zshexit_functions[(r)lacy_shell_cleanup]}" ]]; then
+    zshexit_functions+=(lacy_shell_cleanup)
+fi
