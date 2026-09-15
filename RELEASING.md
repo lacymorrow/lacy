@@ -21,14 +21,13 @@ bun run release            # prompts for patch / minor / major
 bun run release patch      # 1.8.21 -> 1.8.22
 bun run release minor      # 1.8.21 -> 1.9.0
 bun run release 2.0.0      # explicit
-bun run release:beta       # 1.8.22-beta.0, npm tag beta, Homebrew skipped
 bun run release -- --dry-run   # print every step, change nothing
 ```
 
 What runs, in order:
 
 1. **Preflight.** Refuses a dirty tree or a branch other than `main`.
-2. **Tests.** The `test` script in package.json: core, query-agent, and preheat suites in bash and zsh. A failure stops the release.
+2. **Tests.** The `test` script in package.json (`script/test.sh`): every suite in bash, zsh, and fish when installed. A failure stops the release.
 3. **Bump.** `package.json`, `packages/lacy/package.json`, `bin/lacy` (`VERSION_FALLBACK`), and the two root `version` keys in `packages/lacy/package-lock.json`.
 4. **Changelog** from commit subjects since the last tag.
 5. **Commit and tag** as `release: vX.Y.Z` / `vX.Y.Z`.

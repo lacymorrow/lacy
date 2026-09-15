@@ -144,13 +144,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # install.sh clones from LACY_REPO_URL and checks out the latest
-          # tag, so the local clone needs full history and tags.
+          # tests/test_installer.sh pins LACY_REF to this commit and builds
+          # tagged fixture repos from local history.
           fetch-depth: 0
 
       - name: Install zsh (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y zsh
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # The Node installer cases skip without the package dependencies.
+      - name: Install npm package dependencies
+        working-directory: packages/lacy
+        run: npm ci
 
       - name: Install, reinstall, doctor, uninstall (sandboxed HOME)
         shell: bash

@@ -97,17 +97,11 @@ git checkout -b feat/your-feature
 
 ### Testing
 
-Run the test suite in both shells:
+Run every suite in the shells it targets (bash 4+, zsh, and fish when installed):
 
 ```bash
-bash tests/test_core.sh
-zsh tests/test_core.sh
-```
-
-For Bash-specific tests:
-
-```bash
-bash tests/test_bash.bash
+script/test.sh              # all shells
+script/test.sh --shell zsh  # one shell
 ```
 
 Manual testing is also important. Open a fresh shell and verify:
@@ -144,4 +138,4 @@ Open an issue describing the feature, the problem it solves, and how you'd expec
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT).
