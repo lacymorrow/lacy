@@ -7,7 +7,7 @@
 #   bash tests/test_core.sh
 #   zsh  tests/test_core.sh
 
-# Note: no set -e — tests use functions that return nonzero intentionally
+# Note: no set -e - tests use functions that return nonzero intentionally
 
 # Determine which shell we're running in
 if [[ -n "$ZSH_VERSION" ]]; then
@@ -95,7 +95,7 @@ assert_eq "what files → agent" "agent" "$(lacy_shell_classify_input 'what file
 assert_eq "fix the bug → agent" "agent" "$(lacy_shell_classify_input 'fix the bug')"
 assert_eq "hello there → agent" "agent" "$(lacy_shell_classify_input 'hello there')"
 
-# Agent words — single-word conversational
+# Agent words - single-word conversational
 assert_eq "perfect → agent" "agent" "$(lacy_shell_classify_input 'perfect')"
 assert_eq "yes → agent" "agent" "$(lacy_shell_classify_input 'yes')"
 assert_eq "sure → agent" "agent" "$(lacy_shell_classify_input 'sure')"
@@ -113,21 +113,21 @@ assert_eq "how → agent" "agent" "$(lacy_shell_classify_input 'how')"
 assert_eq "no → agent" "agent" "$(lacy_shell_classify_input 'no')"
 assert_eq "nope → agent" "agent" "$(lacy_shell_classify_input 'nope')"
 
-# New agent words — affirmations/reactions
+# New agent words - affirmations/reactions
 assert_eq "gotcha → agent" "agent" "$(lacy_shell_classify_input 'gotcha')"
 assert_eq "roger → agent" "agent" "$(lacy_shell_classify_input 'roger')"
 assert_eq "understood → agent" "agent" "$(lacy_shell_classify_input 'understood')"
 assert_eq "kudos → agent" "agent" "$(lacy_shell_classify_input 'kudos')"
 assert_eq "noice → agent" "agent" "$(lacy_shell_classify_input 'noice')"
 
-# New agent words — conversational/reactions
+# New agent words - conversational/reactions
 assert_eq "sheesh → agent" "agent" "$(lacy_shell_classify_input 'sheesh')"
 assert_eq "oof → agent" "agent" "$(lacy_shell_classify_input 'oof')"
 assert_eq "meh → agent" "agent" "$(lacy_shell_classify_input 'meh')"
 assert_eq "duh → agent" "agent" "$(lacy_shell_classify_input 'duh')"
 assert_eq "bummer → agent" "agent" "$(lacy_shell_classify_input 'bummer')"
 
-# New agent words — internet/chat shorthand
+# New agent words - internet/chat shorthand
 assert_eq "lol → agent" "agent" "$(lacy_shell_classify_input 'lol')"
 assert_eq "omg → agent" "agent" "$(lacy_shell_classify_input 'omg')"
 assert_eq "idk → agent" "agent" "$(lacy_shell_classify_input 'idk')"
@@ -135,7 +135,7 @@ assert_eq "btw → agent" "agent" "$(lacy_shell_classify_input 'btw')"
 assert_eq "tbh → agent" "agent" "$(lacy_shell_classify_input 'tbh')"
 assert_eq "fyi → agent" "agent" "$(lacy_shell_classify_input 'fyi')"
 
-# New agent words — programming verbs
+# New agent words - programming verbs
 assert_eq "debug → agent" "agent" "$(lacy_shell_classify_input 'debug')"
 assert_eq "deploy → agent" "agent" "$(lacy_shell_classify_input 'deploy')"
 assert_eq "implement → agent" "agent" "$(lacy_shell_classify_input 'implement')"
@@ -143,12 +143,12 @@ assert_eq "diagnose → agent" "agent" "$(lacy_shell_classify_input 'diagnose')"
 assert_eq "troubleshoot → agent" "agent" "$(lacy_shell_classify_input 'troubleshoot')"
 assert_eq "rollback → agent" "agent" "$(lacy_shell_classify_input 'rollback')"
 
-# New agent words — action/intent
+# New agent words - action/intent
 assert_eq "suggest → agent" "agent" "$(lacy_shell_classify_input 'suggest')"
 assert_eq "recommend → agent" "agent" "$(lacy_shell_classify_input 'recommend')"
 assert_eq "imagine → agent" "agent" "$(lacy_shell_classify_input 'imagine')"
 
-# Agent words — with trailing punctuation
+# Agent words - with trailing punctuation
 assert_eq "why? → agent" "agent" "$(lacy_shell_classify_input 'why?')"
 assert_eq "how? → agent" "agent" "$(lacy_shell_classify_input 'how?')"
 assert_eq "no! → agent" "agent" "$(lacy_shell_classify_input 'no!')"
@@ -156,7 +156,7 @@ assert_eq "yes. → agent" "agent" "$(lacy_shell_classify_input 'yes.')"
 assert_eq "sure! → agent" "agent" "$(lacy_shell_classify_input 'sure!')"
 assert_eq "do? → agent" "agent" "$(lacy_shell_classify_input 'do?')"
 
-# Agent words — multi-word
+# Agent words - multi-word
 assert_eq "what is this → agent" "agent" "$(lacy_shell_classify_input 'what is this')"
 assert_eq "yes lets go → agent" "agent" "$(lacy_shell_classify_input 'yes lets go')"
 assert_eq "no I dont → agent" "agent" "$(lacy_shell_classify_input 'no I dont want that')"
@@ -268,6 +268,17 @@ assert_eq "stop it please (alias, NL args) → agent" "agent" "$(lacy_shell_clas
 unalias stop lint cancel continue 2>/dev/null
 unset -f render deploy
 assert_eq "stop (no alias) → agent" "agent" "$(lacy_shell_classify_input 'stop')"
+
+# Contractions: a lone word with an unbalanced quote is speech, and the shell
+# would only open a continuation prompt for it
+assert_eq "what's → agent" "agent" "$(lacy_shell_classify_input "what's")"
+assert_eq "don't → agent" "agent" "$(lacy_shell_classify_input "don't")"
+assert_eq "let's → agent" "agent" "$(lacy_shell_classify_input "let's")"
+assert_eq "who's → agent" "agent" "$(lacy_shell_classify_input "who's")"
+assert_eq "unterminated double quote stays shell" "shell" "$(lacy_shell_classify_input '"hello')"
+assert_eq "whats (no quote) → shell" "shell" "$(lacy_shell_classify_input 'whats')"
+assert_eq "balanced quotes stay shell" "shell" "$(lacy_shell_classify_input "'ls'")"
+assert_eq "what's this → agent" "agent" "$(lacy_shell_classify_input "what's this")"
 assert_eq "deploy (no function) → agent" "agent" "$(lacy_shell_classify_input 'deploy')"
 # builtins and external commands keep the agent-word behaviour
 assert_eq "yes (external cmd) → agent" "agent" "$(lacy_shell_classify_input 'yes')"
@@ -324,11 +335,11 @@ assert_false "echo hello | grep the (has pipe)" lacy_shell_has_nl_markers "echo 
 echo ""
 echo "--- Detection: detect_natural_language ---"
 
-# Successful commands — no detection
+# Successful commands - no detection
 lacy_shell_detect_natural_language "ls -la" "file1" 0
 assert_eq "exit 0 → no detect" "1" "$?"
 
-# Non-NL second word — no detection
+# Non-NL second word - no detection
 lacy_shell_detect_natural_language "ls foo" "no such file or directory" 1
 assert_eq "non-NL second word → no detect" "1" "$?"
 
@@ -336,31 +347,31 @@ assert_eq "non-NL second word → no detect" "1" "$?"
 lacy_shell_detect_natural_language "do We already have a way to uninstall?" "(eval):1: parse error near do" 1
 assert_eq "parse error + NL word → detect" "0" "$?"
 
-# go ahead — unknown command
+# go ahead - unknown command
 lacy_shell_detect_natural_language "go ahead and fix it" "go ahead: unknown command" 2
 assert_eq "go ahead → detect" "0" "$?"
 
-# make sure — no rule to make target
+# make sure - no rule to make target
 lacy_shell_detect_natural_language "make sure the tests pass" "make: *** No rule to make target 'sure'.  Stop." 2
 assert_eq "make sure → detect" "0" "$?"
 
-# git me — not a git command
+# git me - not a git command
 lacy_shell_detect_natural_language "git me the latest changes" "git: 'me' is not a git command." 1
 assert_eq "git me → detect" "0" "$?"
 
-# find out — unknown primary
+# find out - unknown primary
 lacy_shell_detect_natural_language "find out how the auth works" "find: out: unknown primary or operator" 1
 assert_eq "find out → detect" "0" "$?"
 
-# find the file — no such file or directory
+# find the file - no such file or directory
 lacy_shell_detect_natural_language "find the file" "find: the: No such file or directory" 1
 assert_eq "find the file → detect" "0" "$?"
 
-# go ahead — unknown command (2 words)
+# go ahead - unknown command (2 words)
 lacy_shell_detect_natural_language "go ahead" "go ahead: unknown command" 2
 assert_eq "go ahead (2 words) → detect" "0" "$?"
 
-# Real command error — no detection
+# Real command error - no detection
 lacy_shell_detect_natural_language "grep -r foo" "grep: warning: recursive search" 1
 assert_eq "real grep error → no detect" "1" "$?"
 
@@ -393,7 +404,7 @@ assert_eq "toggle agent→auto" "auto" "$LACY_SHELL_CURRENT_MODE"
 
 # Mode description
 assert_eq "desc shell" "Normal shell execution" "$(lacy_mode_description 'shell')"
-assert_eq "desc agent" "AI agent assistance via MCP" "$(lacy_mode_description 'agent')"
+assert_eq "desc agent" "All input goes to the AI agent" "$(lacy_mode_description 'agent')"
 
 # Cleanup
 rm -f "$LACY_SHELL_MODE_FILE"
@@ -459,13 +470,13 @@ _str_not_contains() { [[ "$1" != *"$2"* ]]; }
 # Reset to known state
 _lacy_ctx_reset
 
-# First query — should include cwd (differs from empty string)
+# First query - should include cwd (differs from empty string)
 _lacy_build_query_context "hello"
 result="$_LACY_CTX_RESULT"
 assert_true "first query includes cwd" _str_contains "$result" "[cwd: "
 assert_true "first query includes query" _str_contains "$result" "hello"
 
-# Second query, nothing changed — bare query
+# Second query, nothing changed - bare query
 _lacy_build_query_context "hello again"
 result="$_LACY_CTX_RESULT"
 assert_eq "no-change → bare query" "hello again" "$result"
@@ -481,7 +492,7 @@ assert_true "exit code included" _str_contains "$result" "[exit: 1]"
 assert_true "recent cmd included" _str_contains "$result" "[recent: npm test]"
 assert_true "query at end" _str_contains "$result" "why did that fail"
 
-# After building context, counters reset — next query should be bare
+# After building context, counters reset - next query should be bare
 _lacy_build_query_context "explain more"
 result="$_LACY_CTX_RESULT"
 assert_eq "after reset → bare query" "explain more" "$result"
@@ -500,7 +511,7 @@ assert_true "multiple cmds use pipe separator" _str_contains "$result" "ls -la |
 # Exit code 0 should NOT be included
 assert_true "exit 0 not included" _str_not_contains "$result" "[exit:"
 
-# Reset clears state — forces full context on next query
+# Reset clears state - forces full context on next query
 _lacy_ctx_reset
 _lacy_build_query_context "hello after reset"
 result="$_LACY_CTX_RESULT"
@@ -530,7 +541,7 @@ result="$_LACY_CTX_RESULT"
 assert_true "old cmds trimmed (cmd5)" _str_not_contains "$result" "cmd5 |"
 assert_true "recent cmds kept" _str_contains "$result" "cmd15"
 
-# Detached HEAD — should show short hash, not literal "HEAD"
+# Detached HEAD - should show short hash, not literal "HEAD"
 _lacy_ctx_reset
 # Burn first-query delta
 _lacy_build_query_context "burn"
@@ -538,7 +549,7 @@ _lacy_build_query_context "burn"
 # (Can't easily detach HEAD in test, but verify the branch name is never "HEAD")
 _current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 if [[ "$_current_branch" != "HEAD" ]]; then
-    # Normal branch — git context should contain branch name
+    # Normal branch - git context should contain branch name
     _lacy_ctx_reset
     _lacy_build_query_context "test git"
     result="$_LACY_CTX_RESULT"
@@ -617,6 +628,15 @@ _saved_TERM_PROGRAM="${TERM_PROGRAM:-}"
 # Clean slate for detection tests
 unset TMUX STY TERM_PROGRAM 2>/dev/null
 
+# Detection requires the tmux and screen binaries; CI runners may lack them.
+_saved_PATH="$PATH"
+_stub_bin=$(mktemp -d "${TMPDIR:-/tmp}/lacy-test-stubs.XXXXXX")
+printf '#!/bin/sh\nexit 0\n' > "$_stub_bin/tmux"
+printf '#!/bin/sh\nexit 0\n' > "$_stub_bin/screen"
+chmod +x "$_stub_bin/tmux" "$_stub_bin/screen"
+PATH="$_stub_bin:$PATH"
+[[ -n "${ZSH_VERSION:-}" ]] && rehash
+
 # tmux detection: set TMUX, verify capture command
 TMUX="/tmp/tmux-test/default,12345,0"
 _lacy_ctx_detect_terminal
@@ -635,6 +655,10 @@ STY="12345.pts-0.host"
 _lacy_ctx_detect_terminal
 assert_eq "tmux beats screen" "tmux capture-pane -p" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
 unset TMUX STY
+
+PATH="$_saved_PATH"
+[[ -n "${ZSH_VERSION:-}" ]] && rehash
+command rm -rf "$_stub_bin"
 
 # No env vars set -> no capture (in test env without real terminals)
 _lacy_ctx_detect_terminal

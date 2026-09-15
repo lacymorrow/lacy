@@ -25,7 +25,7 @@ _lacy_complete() {
     )
 
     local -a tool_names
-    tool_names=(lash claude opencode gemini codex custom auto)
+    tool_names=(lash claude opencode gemini codex hermes copilot goose amp aider custom auto)
 
     case "${words[2]}" in
         config)

@@ -9,7 +9,8 @@ setopt NO_MONITOR  # suppress job control messages
 # Test configuration
 # ============================================================================
 
-TEST_PORT=14096
+# Free ephemeral port so parallel runs (CI legs, worktrees) never collide.
+TEST_PORT="${LACY_TEST_PORT:-$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}"
 TEST_TMPDIR=$(mktemp -d)
 SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h}"
@@ -19,13 +20,13 @@ export LACY_SHELL_HOME="$TEST_TMPDIR"
 export LACY_PREHEAT_SERVER_PORT="$TEST_PORT"
 
 # ============================================================================
-# Source modules (minimal chain — no ZLE/prompt deps)
+# Source modules (minimal chain - no ZLE/prompt deps)
 # ============================================================================
 
-source "$REPO_ROOT/lib/constants.zsh"
-source "$REPO_ROOT/lib/spinner.zsh"
-source "$REPO_ROOT/lib/mcp.zsh"
-source "$REPO_ROOT/lib/preheat.zsh"
+source "$REPO_ROOT/lib/core/constants.sh"
+source "$REPO_ROOT/lib/core/spinner.sh"
+source "$REPO_ROOT/lib/core/mcp.sh"
+source "$REPO_ROOT/lib/core/preheat.sh"
 source "$REPO_ROOT/lib/core/context.sh"
 
 # ============================================================================
@@ -366,7 +367,7 @@ run_tests_for_tool() {
     # ------------------------------------------------------------------
     # Test 5: Stale session reset
     # ------------------------------------------------------------------
-    # Set a fake session ID and try to query — should fail and clear it.
+    # Set a fake session ID and try to query - should fail and clear it.
     # Redirect to file instead of $() to preserve global state changes.
     LACY_PREHEAT_SERVER_SESSION_ID="fake-session-id-that-does-not-exist"
 

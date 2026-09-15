@@ -7,14 +7,13 @@
 
 # === State ===
 LACY_PREHEAT_SERVER_PID=""
-LACY_PREHEAT_SERVER_PASSWORD=""
 LACY_PREHEAT_SERVER_PID_FILE="$LACY_SHELL_HOME/.server.pid"
 LACY_PREHEAT_SERVER_SESSION_ID=""
 # Per-shell session files (using PID to ensure fresh session per window/tab)
 LACY_PREHEAT_SERVER_SESSION_FILE="$LACY_SHELL_HOME/.server_session_id_$$"
 LACY_PREHEAT_CLAUDE_SESSION_ID=""
 LACY_PREHEAT_SESSION_FILE="$LACY_SHELL_HOME/.claude_session_id_$$"
-# Global last-session file (not PID-specific) — enables cross-shell resume
+# Global last-session file (not PID-specific): enables cross-shell resume
 LACY_LAST_SESSION_FILE="$LACY_SHELL_HOME/.last_session"
 
 # ============================================================================
@@ -95,9 +94,6 @@ lacy_preheat_server_start() {
         # Clean up stale PID from previous session
         lacy_preheat_server_stop 2>/dev/null
 
-        # Generate random password for this session
-        LACY_PREHEAT_SERVER_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || date +%s%N)
-
         # Start server in background (suppress all job notifications)
         # Redirect stdin from /dev/null so the background server doesn't compete
         # with foreground processes (lash, vim, etc.) for terminal input.
@@ -132,48 +128,8 @@ lacy_preheat_server_start() {
     return 1
 }
 
-# Start async health check in background
-lacy_preheat_server_check_async() {
-    # Cancel any existing check
-    [[ -n "$LACY_PREHEAT_HEALTH_CHECK_PID" ]] && kill "$LACY_PREHEAT_HEALTH_CHECK_PID" 2>/dev/null
-
-    # Skip if we already have a fresh cache
-    if [[ "$LACY_PREHEAT_HEALTH_CACHE" == true ]] && [[ -f "$LACY_SHELL_HEALTH_CACHE_FILE" ]] && \
-       [[ $(find "$LACY_SHELL_HEALTH_CACHE_FILE" -mmin -1 2>/dev/null) ]]; then
-        return 0
-    fi
-
-    {
-        local pid="$LACY_PREHEAT_SERVER_PID"
-        if [[ -z "$pid" ]]; then
-            if [[ -f "$LACY_PREHEAT_SERVER_PID_FILE" ]]; then
-                pid=$(cat "$LACY_PREHEAT_SERVER_PID_FILE" 2>/dev/null)
-            fi
-            [[ -z "$pid" ]] && echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE" && return
-        fi
-
-        kill -0 "$pid" 2>/dev/null || { echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE" && return; }
-
-        if curl -sf --max-time "$LACY_HEALTH_CHECK_TIMEOUT_ASYNC" "http://localhost:${LACY_PREHEAT_SERVER_PORT}/global/health" >/dev/null 2>&1; then
-            echo "0" > "$LACY_SHELL_HEALTH_CACHE_FILE"
-        else
-            echo "1" > "$LACY_SHELL_HEALTH_CACHE_FILE"
-        fi
-    } &
-    LACY_PREHEAT_HEALTH_CHECK_PID=$!
-    LACY_PREHEAT_HEALTH_CACHE=true
-}
-
 # Check if server is alive and responding
 lacy_preheat_server_is_healthy() {
-    # First check cache for instant response
-    if [[ "$LACY_PREHEAT_HEALTH_CACHE" == true ]] && [[ -f "$LACY_SHELL_HEALTH_CACHE_FILE" ]]; then
-        local result
-        result=$(cat "$LACY_SHELL_HEALTH_CACHE_FILE" 2>/dev/null || echo "1")
-        [[ "$result" == "0" ]] && return 0
-    fi
-
-    # Fallback: synchronous check
     if [[ -z "$LACY_PREHEAT_SERVER_PID" ]]; then
         if [[ -f "$LACY_PREHEAT_SERVER_PID_FILE" ]]; then
             LACY_PREHEAT_SERVER_PID=$(cat "$LACY_PREHEAT_SERVER_PID_FILE" 2>/dev/null)
@@ -209,20 +165,24 @@ _lacy_preheat_server_create_session() {
     return 1
 }
 
-# Return codes from lacy_preheat_server_query. Only UNREACHABLE means the
-# prompt never left this machine; every other failure must not be re-sent.
+# Return codes from _lacy_preheat_server_query_into. Only UNREACHABLE means
+# the prompt never left this machine; every other failure must not be re-sent.
 LACY_SERVER_QUERY_OK=0
 LACY_SERVER_QUERY_UNREACHABLE=1   # curl 7 or no session: safe to retry single-shot
-LACY_SERVER_QUERY_HTTP_ERROR=2    # server answered with an error; body on stdout
+LACY_SERVER_QUERY_HTTP_ERROR=2    # server answered with an error; body in _LACY_SERVER_RESULT
 LACY_SERVER_QUERY_TIMEOUT=3       # curl 28: request still running on the server
 LACY_SERVER_QUERY_LOST=4          # other curl failure mid-request
 LACY_SERVER_QUERY_SESSION_GONE=5  # HTTP 404: the session no longer exists
 
 # Send query to background server via REST API.
-# Prints the assistant text on success. See the return codes above; the caller
-# (usually inside $(...)) resets the session on codes that invalidate it.
-lacy_preheat_server_query() {
+# Puts the assistant text (or, on an HTTP error, the response body) in
+# _LACY_SERVER_RESULT and returns one of the codes above. Call it directly,
+# not inside $(...), so session changes (a new session, or a reset after a
+# 404) stick in the calling shell.
+_LACY_SERVER_RESULT=""
+_lacy_preheat_server_query_into() {
     local query="$1"
+    _LACY_SERVER_RESULT=""
 
     if [[ -z "$LACY_PREHEAT_SERVER_SESSION_ID" ]]; then
         _lacy_preheat_server_create_session || return "$LACY_SERVER_QUERY_UNREACHABLE"
@@ -259,10 +219,8 @@ lacy_preheat_server_query() {
     esac
 
     if [[ ! "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-        printf '%s' "$response"
-        # 404 means the session is gone: drop it so the next query starts fresh.
-        # This reset is visible only when called directly; a $(...) caller
-        # must mirror it from the return code.
+        _LACY_SERVER_RESULT="$response"
+        # 404 means the session is gone: drop it so the next query starts fresh
         if [[ "$http_code" == "404" ]]; then
             LACY_PREHEAT_SERVER_SESSION_ID=""
             : > "$LACY_PREHEAT_SERVER_SESSION_FILE"
@@ -271,6 +229,21 @@ lacy_preheat_server_query() {
         return "$LACY_SERVER_QUERY_HTTP_ERROR"
     fi
 
+    _LACY_SERVER_RESULT=$(_lacy_server_extract_text "$response")
+    return "$LACY_SERVER_QUERY_OK"
+}
+
+# Same as _lacy_preheat_server_query_into, and prints the result.
+lacy_preheat_server_query() {
+    _lacy_preheat_server_query_into "$1"
+    local rc=$?
+    [[ -n "$_LACY_SERVER_RESULT" ]] && printf '%s\n' "$_LACY_SERVER_RESULT"
+    return $rc
+}
+
+# Print the assistant text from a lash/opencode message response.
+_lacy_server_extract_text() {
+    local response="$1"
     if command -v jq >/dev/null 2>&1; then
         printf '%s\n' "$response" | jq -r '
             if type == "array" then
@@ -359,9 +332,7 @@ lacy_preheat_server_stop() {
 
     LACY_PREHEAT_SERVER_PID=""
     command rm -f "$LACY_PREHEAT_SERVER_PID_FILE"
-    command rm -f "$LACY_SHELL_HEALTH_CACHE_FILE"
 
-    LACY_PREHEAT_SERVER_PASSWORD=""
     LACY_PREHEAT_SERVER_SESSION_ID=""
     # Keep the marker file (other shells use it to see we are alive), drop its contents
     [[ -f "$LACY_PREHEAT_SERVER_SESSION_FILE" ]] && : > "$LACY_PREHEAT_SERVER_SESSION_FILE" 2>/dev/null
@@ -507,7 +478,7 @@ _lacy_get_current_tool() {
 }
 
 # Persist current session state to global file for cross-shell resume.
-# Called after each successful agent query via _lacy_print_resume_hint.
+# Called after each successful agent query.
 _lacy_save_last_session() {
     local tool
     tool=$(_lacy_get_current_tool)
@@ -525,7 +496,9 @@ _lacy_save_last_session() {
 }
 
 # Clear all session state and start a fresh context.
-# For server-based tools (lash/opencode), eagerly creates a new session (blocking).
+# Server tools (lash/opencode): when the server is up, the new session is
+# opened now and a failure is reported. When the server is not running yet,
+# the next query starts both, and that is what the message says.
 lacy_session_new() {
     # Persist current session before clearing (enables cross-shell resume)
     _lacy_save_last_session
@@ -539,14 +512,28 @@ lacy_session_new() {
     # Reset terminal context so the next query sends full context
     _lacy_ctx_reset
 
-    # For server-based tools, pre-create a new session now (blocking)
     local tool
     tool=$(_lacy_get_current_tool)
 
     if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
+        if ! lacy_preheat_server_is_healthy; then
+            echo ""
+            lacy_print_color 34 "  Session cleared"
+            lacy_print_color 238 "  Your next question starts a new ${tool} session."
+            echo ""
+            return 0
+        fi
+        local created=true
         lacy_start_spinner
-        _lacy_preheat_server_create_session
+        _lacy_preheat_server_create_session || created=false
         lacy_stop_spinner
+        if [[ "$created" != true ]]; then
+            echo ""
+            lacy_print_color 196 "  Could not open a new ${tool} session."
+            lacy_print_color 238 "  The old session is cleared. Your next question will try again."
+            echo ""
+            return 1
+        fi
     fi
 
     echo ""
@@ -555,7 +542,7 @@ lacy_session_new() {
 }
 
 # Resume the last saved session in the current shell.
-# Reads from LACY_LAST_SESSION_FILE — written after every successful query.
+# Reads from LACY_LAST_SESSION_FILE: written after every successful query.
 lacy_session_resume() {
     local saved_tool="" saved_id=""
     if [[ -f "$LACY_LAST_SESSION_FILE" ]]; then

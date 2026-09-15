@@ -63,7 +63,7 @@ lacy_shell_is_valid_command() {
 
 # Check if input starting with a valid command has natural language markers.
 # Returns 0 (true) if at least one bare word after the first word is a strong
-# NL marker. Used to flag reroute candidates — the reroute only fires when
+# NL marker. Used to flag reroute candidates: the reroute only fires when
 # the command also fails, so this can be fairly aggressive.
 lacy_shell_has_nl_markers() {
     local input="$1"
@@ -71,7 +71,7 @@ lacy_shell_has_nl_markers() {
     # Bail if single word (no spaces)
     [[ "$input" != *" "* ]] && return 1
 
-    # Bail if input contains shell operators — clearly shell syntax
+    # Bail if input contains shell operators: clearly shell syntax
     local op
     for op in "${LACY_SHELL_OPERATORS[@]}"; do
         [[ "$input" == *"$op"* ]] && return 1
@@ -354,19 +354,19 @@ _lacy_classify_impl() {
     # Single word that's not a command = probably a typo, shell
     # Multiple words with non-command first word = natural language, agent
     if [[ -z "$_rest" ]]; then
-        _LACY_CLASSIFY_RESULT="shell"
+        # One word with an odd apostrophe is speech, not a typo: what's,
+        # don't, let's. The shell can only answer it with a continuation
+        # prompt, so send it to the agent. A double quote is left alone:
+        # that is usually deliberate shell quoting.
+        local _sq
+        _sq="${first_word_cmd//[^\']/}"
+        if (( ${#_sq} % 2 == 1 )); then
+            _LACY_CLASSIFY_RESULT="agent"
+        else
+            _LACY_CLASSIFY_RESULT="shell"
+        fi
     else
         _LACY_CLASSIFY_RESULT="agent"
-    fi
-}
-
-# Backward-compatible wrapper: returns 0 (agent) or 1 (shell/neutral)
-lacy_shell_should_use_agent() {
-    lacy_shell_classify_input "$1" >/dev/null
-    if [[ "$_LACY_CLASSIFY_RESULT" == "agent" ]]; then
-        return 0
-    else
-        return 1
     fi
 }
 
@@ -457,7 +457,7 @@ lacy_shell_test_detection() {
         "RUST_LOG=debug cargo run"
         "FOO=bar BAZ=qux node index.js"
         "CC=gcc make -j4"
-        # Agent words that are also valid commands — should use heuristics
+        # Agent words that are also valid commands: should use heuristics
         "which python"
         "which -a git"
         "which version should I install"

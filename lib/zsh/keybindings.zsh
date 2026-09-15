@@ -1,550 +1,312 @@
 #!/usr/bin/env zsh
 
-# Keybinding setup for Lacy Shell
+# Keybinding and line editor integration for Lacy Shell
 #
 # ============================================================================
-# Plugin Coexistence: region_highlight & POSTDISPLAY
+# Plugin Coexistence: hooks, PREDISPLAY, region_highlight, POSTDISPLAY
 # ============================================================================
 #
-# This file manages two ZLE features that are shared with other plugins
-# (notably zsh-autosuggestions): `region_highlight` and `POSTDISPLAY`.
+# This file shares ZLE resources with other plugins (notably
+# zsh-syntax-highlighting, zsh-autosuggestions, powerlevel10k, starship).
+#
+# Hooks
+# -----
+# Lacy registers zle-line-init and zle-line-pre-redraw through
+# add-zle-hook-widget. `zle -N zle-line-pre-redraw ...` would replace the
+# dispatcher that zsh-syntax-highlighting registered, silently killing it.
+# add-zle-hook-widget stops calling later hooks when one returns non-zero, so
+# every Lacy hook ends with `return 0`.
+#
+# PREDISPLAY (live indicator)
+# ---------------------------
+# The shell/agent indicator is rendered in PREDISPLAY (text drawn between the
+# prompt and the buffer), never by rewriting PS1. PS1 belongs to the user's
+# prompt system. Rewriting it and calling reset-prompt re-ran starship on every
+# transition and fought p10k over who owns PS1. Lacy only writes PREDISPLAY
+# when it is empty or still holds Lacy's last value, so widgets that use it
+# (narrow-to-region, read-from-minibuffer) are left alone.
 #
 # region_highlight
 # ----------------
-# An array of highlight specs applied to the input buffer + POSTDISPLAY.
-# Multiple plugins write to it (autosuggestions for gray suggestion text,
-# syntax-highlighting for colorized input, etc.).
+# Multiple plugins write highlight specs to region_highlight. Lacy tags its
+# entries with `memo=lacy` and removes only those on each redraw:
 #
-# Problem:  Lacy needs to highlight the first word (green/magenta) on every
-#           keystroke, which requires removing the previous first-word
-#           highlight. Naively resetting `region_highlight=()` destroys
-#           highlights from other plugins — causing autosuggestion text to
-#           turn white (default fg) instead of staying gray.
+#     region_highlight=("${(@)region_highlight:#*memo=lacy*}")
 #
-# Solution: Tag every Lacy highlight entry with `memo=lacy` (a ZSH 5.8+
-#           region_highlight feature that is ignored by the renderer but lets
-#           plugins identify their own entries). On each pre-redraw, strip
-#           only memo=lacy entries:
+# memo= needs zsh 5.9. On older zsh the tag is dropped when the array is read
+# back, so Lacy entries could never be filtered out again and would pile up.
+# There Lacy skips its highlights entirely (the indicator glyph still shows).
+# With NO_COLOR set, Lacy adds no colour highlights either.
 #
-#               region_highlight=("${(@)region_highlight:#*memo=lacy*}")
+# POSTDISPLAY (ghost text)
+# ------------------------
+# Text rendered after BUFFER. Lacy (ghost text after a failed reroute
+# candidate, and the one-time first-run hint) and zsh-autosuggestions both
+# write it. When Lacy's ghost text is active, call _zsh_autosuggest_clear
+# (if available) before setting POSTDISPLAY. When the user starts typing,
+# Lacy clears its ghost text and autosuggestions resumes normally.
 #
-#           This preserves highlights from autosuggestions, syntax-highlighting,
-#           and any other plugin.
-#
-# POSTDISPLAY
-# -----------
-# Text rendered after BUFFER (the user's input). Both Lacy (ghost text
-# suggestions after a reroute candidate fails) and zsh-autosuggestions
-# (history-based suggestions) write to POSTDISPLAY.
-#
-# Problem:  When both plugins set POSTDISPLAY in the same redraw cycle, the
-#           last writer wins. If autosuggestions runs after Lacy's pre-redraw
-#           hook (via add-zle-hook-widget, which coexists with our zle -N
-#           registration), it overwrites Lacy's ghost text with an empty
-#           string (no history match for an empty buffer).
-#
-# Solution: When Lacy's ghost text is active, call _zsh_autosuggest_clear
-#           (if available) before setting POSTDISPLAY. This tells
-#           autosuggestions to stop managing POSTDISPLAY for this cycle.
-#           When the user starts typing (BUFFER becomes non-empty), Lacy
-#           clears its ghost text and autosuggestions resumes normally.
-#
-# Right Arrow / Tab (suggestion accept)
-# --------------------------------------
-# Both Lacy and autosuggestions use right arrow / tab to accept suggestions.
-# Lacy's widgets (_lacy_forward_char_or_accept, _lacy_expand_or_accept)
-# check for Lacy ghost text first. If present, they accept it into BUFFER.
-# If not, they fall through to `forward-char` / `expand-or-complete`
-# (WITHOUT the dot prefix) so that autosuggestions' widget wrappers still
-# fire and can accept their own suggestions.
-#
-# Key detail: `zle .forward-char` (dot prefix) calls the raw ZSH builtin,
-# bypassing any widget wrapping. `zle forward-char` (no dot) calls the
-# named widget, which autosuggestions may have replaced with its wrapper.
-# We use the no-dot form so autosuggestions works when Lacy has no ghost text.
+# Keys
+# ----
+# Lacy binds Ctrl+Space (mode toggle) plus Right arrow and Tab (accept ghost
+# text). Each key's previous binding is saved with `bindkey -L` and restored
+# verbatim on cleanup. When there is no ghost text, Right arrow and Tab call
+# the widget that was bound before Lacy loaded (fzf-completion, autosuggest
+# wrappers, ...), by name and without the dot prefix, so wrappers still fire.
 #
 # ============================================================================
 
-# Interrupt state and input type are initialized in constants.sh
+autoload -Uz add-zle-hook-widget is-at-least
+zmodload zsh/langinfo 2>/dev/null
 
-# Ghost text suggestion (shown as POSTDISPLAY after a reroute candidate fails)
-LACY_SHELL_SUGGESTION=""
+if is-at-least 5.9; then
+    _LACY_ZLE_HL=1
+else
+    _LACY_ZLE_HL=0
+fi
+
+# Ghost text suggestion (shown as POSTDISPLAY while the buffer is empty)
+LACY_SHELL_SUGGESTION=""          # text accepted into BUFFER
+LACY_SHELL_SUGGESTION_DISPLAY=""  # text shown, when it differs (first-run hint)
+LACY_SHELL_HINT_ACTIVE=false      # true while the first-run hint is showing
 LACY_SHELL_OWN_POSTDISPLAY=false  # true when Lacy is managing POSTDISPLAY
+_LACY_PREDISPLAY=""               # last indicator string Lacy wrote
+
+# Keys Lacy binds, their saved `bindkey -L` lines, and the widget each was
+# bound to before Lacy loaded
+_LACY_BOUND_KEYS=('^@' '^[[C' '^[OC' '^I')
+typeset -gA _LACY_SAVED_BINDINGS _LACY_PREV_WIDGET
 
 # ============================================================================
 # Real-time Shell/Agent Indicator
 # ============================================================================
 
-# Check if input will go to shell or agent
-# Delegates to centralized detection in lib/core/detection.sh.
-# Prints the result; hot paths below read _LACY_CLASSIFY_RESULT instead.
-lacy_shell_detect_input_type() {
-    lacy_shell_classify_input "$1"
+# First word bounds of $1 as 0-based [start, end) in _LACY_FW_START and
+# _LACY_FW_END. Parameter expansion only: a per-character loop took ~90ms on
+# a 5000-char paste.
+_lacy_first_word_bounds() {
+    local lead="${1#"${1%%[^[:space:]]*}"}"
+    local fw="${lead%%[[:space:]]*}"
+    _LACY_FW_START=$(( ${#1} - ${#lead} ))
+    _LACY_FW_END=$(( _LACY_FW_START + ${#fw} ))
 }
 
-# Update the indicator based on current input (called on every keystroke)
-lacy_shell_update_input_indicator() {
-    [[ "$LACY_SHELL_ENABLED" != true ]] && return
-    [[ "$LACY_SHELL_PROMPT_INITIALIZED" != true ]] && return
-    [[ -z "$LACY_SHELL_BASE_PS1" ]] && return
+# Write the indicator for an input type into PREDISPLAY (if Lacy owns it).
+# Sets _LACY_INDICATOR_COLOR; returns 0 when PREDISPLAY was written.
+_lacy_set_indicator() {
+    local glyph
+    case "$1" in
+        "shell") glyph='$'; _LACY_INDICATOR_COLOR="$LACY_COLOR_SHELL" ;;
+        "agent") glyph='?'; _LACY_INDICATOR_COLOR="$LACY_COLOR_AGENT" ;;
+        *)       glyph="$LACY_INDICATOR_CHAR"; _LACY_INDICATOR_COLOR="$LACY_COLOR_NEUTRAL" ;;
+    esac
+    # Outside a UTF-8 locale ZLE draws the multibyte bar as escaped bytes
+    [[ "${langinfo[CODESET]-}" == (UTF-8|utf8) ]] || [[ "$glyph" == [\$?] ]] || glyph='|'
+    [[ -n "$PREDISPLAY" && "$PREDISPLAY" != "$_LACY_PREDISPLAY" ]] && return 1
+    _LACY_PREDISPLAY="$glyph "
+    PREDISPLAY="$_LACY_PREDISPLAY"
+    return 0
+}
 
-    # No $( ): a subshell fork per keystroke is the single biggest cost here.
+# Show Lacy's ghost text in POSTDISPLAY (buffer must be empty)
+_lacy_show_ghost_text() {
+    # Clear autosuggestions' POSTDISPLAY before writing ours, otherwise it
+    # overwrites the ghost text with "" (no history match for empty input).
+    (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
+    POSTDISPLAY="${LACY_SHELL_SUGGESTION_DISPLAY:-$LACY_SHELL_SUGGESTION}"
+    LACY_SHELL_OWN_POSTDISPLAY=true
+    if (( _LACY_ZLE_HL )) && [[ -z ${NO_COLOR-} ]]; then
+        region_highlight+=("${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=${LACY_COLOR_NEUTRAL} memo=lacy")
+    fi
+}
+
+# Forget the ghost text suggestion. Clears POSTDISPLAY only if it still shows
+# Lacy's text, so an autosuggestion written this cycle survives.
+_lacy_clear_suggestion() {
+    local shown="${LACY_SHELL_SUGGESTION_DISPLAY:-$LACY_SHELL_SUGGESTION}"
+    if [[ "$LACY_SHELL_OWN_POSTDISPLAY" == true ]]; then
+        [[ "$POSTDISPLAY" == "$shown" ]] && POSTDISPLAY=""
+        LACY_SHELL_OWN_POSTDISPLAY=false
+    fi
+    LACY_SHELL_SUGGESTION=""
+    LACY_SHELL_SUGGESTION_DISPLAY=""
+    LACY_SHELL_HINT_ACTIVE=false
+}
+
+# Update the indicator based on current input (called on every redraw).
+# No forks and no reset-prompt: the prompt is never re-rendered here.
+lacy_shell_update_input_indicator() {
+    [[ "$LACY_SHELL_ENABLED" != true ]] && return 0
+
     lacy_shell_classify_input "$BUFFER" >/dev/null
     local input_type="$_LACY_CLASSIFY_RESULT"
+    LACY_SHELL_INPUT_TYPE="$input_type"
 
-    # Only update prompt if type changed (avoids flickering)
-    if [[ "$input_type" != "$LACY_SHELL_INPUT_TYPE" ]]; then
-        LACY_SHELL_INPUT_TYPE="$input_type"
+    local own_pre=0
+    _lacy_set_indicator "$input_type" && own_pre=1
 
-        # Build new PS1 with colored indicator
-        # Colors chosen for maximum distinction (see constants.zsh)
-        local indicator
-        case "$input_type" in
-            "shell")
-                indicator="%F{${LACY_COLOR_SHELL}}${LACY_INDICATOR_CHAR}%f"
-                ;;
-            "agent")
-                indicator="%F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f"
-                ;;
-            *)
-                indicator="%F{${LACY_COLOR_NEUTRAL}}${LACY_INDICATOR_CHAR}%f"
-                ;;
-        esac
-
-        # Update prompt with indicator (appended after prompt, before cursor)
-        PS1="${LACY_SHELL_BASE_PS1}${indicator} "
-        local _lacy_need_reset=true
-    fi
-
-    # Highlight the first word in the buffer based on classification.
-    # Runs on every pre-redraw (not just type changes) because the
-    # first word boundaries shift as the user types.
-    # Remove only our previous highlight (tagged with "memo=lacy") —
-    # preserve highlights from zsh-autosuggestions and other plugins.
-    region_highlight=("${(@)region_highlight:#*memo=lacy*}")
-    if [[ -n "$BUFFER" ]]; then
-        # First word bounds via parameter expansion (no per-character loop,
-        # which took ~90ms on a 5000-char paste). No extendedglob needed.
-        local _lacy_lead="${BUFFER#"${BUFFER%%[^[:space:]]*}"}"   # minus leading whitespace
-        local _lacy_fw="${_lacy_lead%%[[:space:]]*}"              # first word
-        local i=$(( ${#BUFFER} - ${#_lacy_lead} ))
-        local j=$(( i + ${#_lacy_fw} ))
-        if (( j > i )); then
-            case "$input_type" in
-                "shell")
-                    region_highlight+=("$i $j fg=${LACY_COLOR_SHELL},bold memo=lacy")
-                    ;;
-                "agent")
-                    region_highlight+=("$i $j fg=${LACY_COLOR_AGENT},bold memo=lacy")
-                    ;;
-            esac
+    if (( _LACY_ZLE_HL )); then
+        # Remove only our previous highlights; keep other plugins' entries
+        region_highlight=("${(@)region_highlight:#*memo=lacy*}")
+        if [[ -z ${NO_COLOR-} ]]; then
+            (( own_pre )) && region_highlight+=("P0 1 fg=${_LACY_INDICATOR_COLOR} memo=lacy")
+            # First word follows the classification colour
+            if [[ -n "$BUFFER" && "$input_type" != "neutral" ]]; then
+                _lacy_first_word_bounds "$BUFFER"
+                if (( _LACY_FW_END > _LACY_FW_START )); then
+                    region_highlight+=("$_LACY_FW_START $_LACY_FW_END fg=${_LACY_INDICATOR_COLOR},bold memo=lacy")
+                fi
+            fi
         fi
     fi
 
-    # Ghost text suggestion — show inline placeholder when buffer is empty.
-    # See file header for POSTDISPLAY coexistence design with zsh-autosuggestions.
     if [[ -n "$LACY_SHELL_SUGGESTION" ]]; then
         if [[ -z "$BUFFER" ]]; then
-            # Clear autosuggestions' POSTDISPLAY before writing ours.
-            # Without this, autosuggestions' pre-redraw hook (registered via
-            # add-zle-hook-widget) runs after ours and overwrites POSTDISPLAY
-            # with "" (no history match for empty input), making ghost text
-            # invisible. _zsh_autosuggest_clear tells it to stop for this cycle.
-            (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
-            POSTDISPLAY="$LACY_SHELL_SUGGESTION"
-            LACY_SHELL_OWN_POSTDISPLAY=true
-            region_highlight+=("${#BUFFER} $((${#BUFFER} + ${#POSTDISPLAY})) fg=${LACY_COLOR_NEUTRAL} memo=lacy")
+            _lacy_show_ghost_text
         else
-            # User started typing — clear ghost text, autosuggestions resumes
-            LACY_SHELL_SUGGESTION=""
-            POSTDISPLAY=""
-            LACY_SHELL_OWN_POSTDISPLAY=false
+            # User started typing: ghost text goes, autosuggestions resumes
+            _lacy_clear_suggestion
         fi
     elif [[ "$LACY_SHELL_OWN_POSTDISPLAY" == true ]]; then
-        # Suggestion was cleared externally (precmd) — clean up POSTDISPLAY
+        # Suggestion was cleared externally (precmd): clean up POSTDISPLAY
         POSTDISPLAY=""
         LACY_SHELL_OWN_POSTDISPLAY=false
     fi
-
-    # Defer reset-prompt to AFTER all highlights and POSTDISPLAY are set,
-    # since reset-prompt triggers an immediate render.
-    if [[ "$_lacy_need_reset" == true ]]; then
-        zle && zle reset-prompt
-    fi
+    return 0
 }
 
-# ZLE widget that runs before each redraw
+# zle-line-pre-redraw hook
 lacy_shell_line_pre_redraw() {
     lacy_shell_update_input_indicator
+    return 0
 }
 
-# ZLE widget that runs when a new line of input starts — set up ghost text
-# before the first pre-redraw so it's visible on the very first render.
-# Same POSTDISPLAY coexistence pattern as in lacy_shell_update_input_indicator.
+# zle-line-init hook: draw the indicator and ghost text before the first
+# redraw so they are visible on the very first render
 lacy_shell_line_init() {
-    if [[ -n "$LACY_SHELL_SUGGESTION" && -z "$BUFFER" ]]; then
-        # Suppress autosuggestions before claiming POSTDISPLAY (see file header)
-        (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
-        POSTDISPLAY="$LACY_SHELL_SUGGESTION"
-        LACY_SHELL_OWN_POSTDISPLAY=true
-        region_highlight+=("${#BUFFER} $((${#BUFFER} + ${#POSTDISPLAY})) fg=${LACY_COLOR_NEUTRAL} memo=lacy")
-    fi
+    lacy_shell_update_input_indicator
+    return 0
 }
 
-# Register hooks
-zle -N zle-line-pre-redraw lacy_shell_line_pre_redraw
-zle -N zle-line-init lacy_shell_line_init
+# ============================================================================
+# Keybindings
+# ============================================================================
 
-# Set up all keybindings
 lacy_shell_setup_keybindings() {
-    # Only add our custom bindings - don't touch existing terminal shortcuts
+    local key line
+    for key in "${_LACY_BOUND_KEYS[@]}"; do
+        line=$(bindkey -L "$key" 2>/dev/null)
+        # Never save our own binding (plugin sourced again without cleanup)
+        if [[ "$line" != *" lacy_shell_"* && "$line" != *" _lacy_"* ]]; then
+            _LACY_SAVED_BINDINGS[$key]="$line"
+            _LACY_PREV_WIDGET[$key]="${${(z)line}[-1]}"
+        fi
+    done
 
-    # Primary mode toggle - Ctrl+Space (most universal)
-    bindkey '^@' lacy_shell_toggle_mode_widget      # Ctrl+Space: Toggle mode
-
-    # Alternative keybindings
-    bindkey '^T' lacy_shell_toggle_mode_widget      # Ctrl+T: Toggle mode (backup)
-
-    # Direct mode switches (Ctrl+X prefix)
-    # bindkey '^X^A' lacy_shell_agent_mode_widget     # Ctrl+X Ctrl+A: Agent mode
-    # bindkey '^X^S' lacy_shell_shell_mode_widget     # Ctrl+X Ctrl+S: Shell mode
-    # bindkey '^X^U' lacy_shell_auto_mode_widget      # Ctrl+X Ctrl+U: Auto mode
-    # bindkey '^X^H' lacy_shell_help_widget           # Ctrl+X Ctrl+H: Help
-
-    # Terminal scrolling keybindings
-    # bindkey '^[[5~' lacy_shell_scroll_up_widget     # Page Up: Scroll up
-    # bindkey '^[[6~' lacy_shell_scroll_down_widget   # Page Down: Scroll down
-    # bindkey '^Y' lacy_shell_scroll_up_line_widget   # Ctrl+Y: Scroll up one line
-    # bindkey '^E' lacy_shell_scroll_down_line_widget # Ctrl+E: Scroll down one line
-
-    # Override Ctrl+D behavior
-    bindkey '^D' lacy_shell_delete_char_or_quit_widget  # Ctrl+D: Quit if buffer empty
-
-    # Fix Command+Delete on macOS: send ^U, which ZSH defaults to kill-whole-line.
-    # Rebind to backward-kill-line so only text before the cursor is deleted.
-    bindkey '^U' backward-kill-line
-
-    # Ghost text suggestion accept (right arrow, tab)
+    bindkey '^@' lacy_shell_toggle_mode_widget    # Ctrl+Space: toggle mode
     bindkey '^[[C' _lacy_forward_char_or_accept   # Right arrow
     bindkey '^[OC' _lacy_forward_char_or_accept   # Right arrow (alt sequence)
     bindkey '^I' _lacy_expand_or_accept           # Tab
+
+    if [[ -o zle ]]; then
+        add-zle-hook-widget line-pre-redraw lacy_shell_line_pre_redraw
+        add-zle-hook-widget line-init lacy_shell_line_init
+    fi
 }
 
-# Widget to toggle mode
+lacy_shell_cleanup_keybindings() {
+    local key
+    for key in "${(@k)_LACY_SAVED_BINDINGS}"; do
+        [[ -n "${_LACY_SAVED_BINDINGS[$key]}" ]] && eval "${_LACY_SAVED_BINDINGS[$key]}"
+    done
+    _LACY_SAVED_BINDINGS=()
+    _LACY_PREV_WIDGET=()
+
+    if [[ -o zle ]]; then
+        add-zle-hook-widget -d line-pre-redraw lacy_shell_line_pre_redraw 2>/dev/null
+        add-zle-hook-widget -d line-init lacy_shell_line_init 2>/dev/null
+    fi
+}
+
+# Widget to toggle mode (the pre-redraw hook updates the indicator)
 lacy_shell_toggle_mode_widget() {
     lacy_shell_toggle_mode
     zle reset-prompt
-}
-
-# Widget to switch to agent mode
-lacy_shell_agent_mode_widget() {
-    lacy_shell_set_mode "agent"
-    zle reset-prompt
-}
-
-# Widget to switch to shell mode
-lacy_shell_shell_mode_widget() {
-    lacy_shell_set_mode "shell"
-    zle reset-prompt
-}
-
-# Widget to switch to auto mode
-lacy_shell_auto_mode_widget() {
-    lacy_shell_set_mode "auto"
-    zle reset-prompt
-}
-
-# Widget to show help
-lacy_shell_help_widget() {
-    echo ""
-    echo "Lacy Shell"
-    echo ""
-    echo "Modes:"
-    echo "  Shell  Normal shell execution"
-    echo "  Agent  AI-powered assistance"
-    echo "  Auto   Smart detection"
-    echo ""
-    echo "Keys:"
-    echo "  Ctrl+Space     Toggle mode"
-    echo "  Ctrl+D         Quit"
-    echo "  Ctrl+C (2x)    Quit"
-    echo ""
-    echo "Commands:"
-    echo "  ask \"text\"     Query AI"
-    echo "  quit_lacy      Exit"
-    echo ""
-    zle reset-prompt
-}
-
-# Widget to clear/cancel current input (was quit)
-lacy_shell_quit_widget() {
-    # Clear the current line buffer
-    BUFFER=""
-    # Reset the prompt
-    zle reset-prompt
-}
-
-# Widget for Ctrl+D - quit if buffer empty, else delete char
-lacy_shell_delete_char_or_quit_widget() {
-    if [[ -z "$BUFFER" ]]; then
-        # Buffer is empty - request deferred quit and consume Ctrl-D safely
-        LACY_SHELL_DEFER_QUIT=true
-        BUFFER=" :"
-        zle .accept-line
-    else
-        # Buffer has content - normal delete char behavior
-        zle delete-char-or-list
-    fi
-}
-
-
-# Scrolling widgets
-lacy_shell_scroll_up_widget() {
-    # Scroll terminal buffer up (page)
-    zle -I
-    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
-        printf '\e]1337;ScrollPageUp\a'
-    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
-        # Send shift+page up for terminal scrollback
-        printf '\e[5;2~'
-    else
-        # Generic terminal: try to scroll with tput
-        tput rin 5 2>/dev/null || printf '\e[5S'
-    fi
-}
-
-lacy_shell_scroll_down_widget() {
-    # Scroll terminal buffer down (page)
-    zle -I
-    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
-        printf '\e]1337;ScrollPageDown\a'
-    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
-        # Send shift+page down for terminal scrollback
-        printf '\e[6;2~'
-    else
-        # Generic terminal: try to scroll with tput
-        tput ri 5 2>/dev/null || printf '\e[5T'
-    fi
-}
-
-lacy_shell_scroll_up_line_widget() {
-    # Scroll terminal buffer up (single line)
-    zle -I
-    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
-        printf '\e]1337;ScrollLineUp\a'
-    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
-        printf '\eOA'
-    else
-        # Generic terminal: scroll one line
-        tput rin 1 2>/dev/null || printf '\e[S'
-    fi
-}
-
-lacy_shell_scroll_down_line_widget() {
-    # Scroll terminal buffer down (single line)
-    zle -I
-    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
-        printf '\e]1337;ScrollLineDown\a'
-    elif [[ "$TERM" == "xterm"* ]] || [[ "$TERM" == "screen"* ]]; then
-        printf '\eOB'
-    else
-        # Generic terminal: scroll one line
-        tput ri 1 2>/dev/null || printf '\e[T'
-    fi
-}
-
-# Enhanced execute line widget that shows mode info
-lacy_shell_execute_line_widget() {
-    local input="$BUFFER"
-
-    # If buffer is empty, just accept line normally
-    if [[ -z "$input" ]]; then
-        zle accept-line
-        return
-    fi
-
-    # Silent execution - mode shows in prompt
-
-    # Accept the line for normal processing
-    zle accept-line
-}
-
-# Interrupt handler for double Ctrl-C quit
-lacy_shell_interrupt_handler() {
-    # Don't handle if disabled
-    if [[ "$LACY_SHELL_ENABLED" != true ]]; then
-        return 130
-    fi
-
-    # Get current time in milliseconds (portable method)
-    local current_time
-    if command -v gdate >/dev/null 2>&1; then
-        # macOS with GNU date installed
-        current_time=$(gdate +%s%3N)
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS without GNU date - use python for milliseconds
-        current_time=$(python3 -c 'import time; print(int(time.time() * 1000))')
-    else
-        # Linux and other systems with GNU date
-        current_time=$(date +%s%3N)
-    fi
-
-    local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
-
-    # Check if this is a double Ctrl+C within threshold
-    if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
-        # Double Ctrl+C detected - quit Lacy Shell
-        LACY_SHELL_QUITTING=true
-
-        # Remove precmd hooks IMMEDIATELY to prevent redraw
-        precmd_functions=(${precmd_functions:#lacy_shell_precmd})
-        precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
-
-        echo ""
-        lacy_shell_quit
-        return 130
-    else
-        # Single Ctrl+C - show hint
-        LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
-        echo ""
-        lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_CTRL_C_HINT"
-        return 130
-    fi
-}
-
-# Set up the interrupt handler
-lacy_shell_setup_interrupt_handler() {
-    TRAPINT() {
-        # CRITICAL: Only intercept SIGINT when ZLE (the line editor) is active,
-        # i.e., the user is at the prompt. When a foreground child process is
-        # running (e.g., `lash`, `vim`, `python`), we must NOT intercept SIGINT
-        # — let it propagate to the child's process group normally. Without this
-        # guard, Ctrl+C, paste, and other keyboard shortcuts break in child
-        # processes because SIGINT never reaches them.
-        if [[ -z "$ZLE_STATE" ]]; then
-            # No ZLE active — a child process is running. Use default behavior.
-            return $(( 128 + $1 ))
-        fi
-
-        # Don't handle if already disabled
-        if [[ "$LACY_SHELL_ENABLED" != true ]]; then
-            return $(( 128 + $1 ))
-        fi
-
-        # Get current time
-        local current_time
-        if command -v gdate >/dev/null 2>&1; then
-            current_time=$(gdate +%s%3N)
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            current_time=$(python3 -c 'import time; print(int(time.time() * 1000))')
-        else
-            current_time=$(date +%s%3N)
-        fi
-
-        local time_diff=$(( current_time - LACY_SHELL_LAST_INTERRUPT_TIME ))
-
-        if [[ $time_diff -lt $LACY_SHELL_EXIT_TIMEOUT_MS ]]; then
-            # Double Ctrl+C - quit
-            lacy_shell_quit
-            # After quitting, force prompt redraw (best-effort)
-            zle -I 2>/dev/null
-            zle -R 2>/dev/null
-            zle reset-prompt 2>/dev/null
-            # Remove this trap itself after quit
-            unfunction TRAPINT 2>/dev/null
-            return 130
-        else
-            # Single Ctrl+C
-            LACY_SHELL_LAST_INTERRUPT_TIME=$current_time
-            echo ""
-            lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_CTRL_C_HINT"
-            return 130
-        fi
-    }
-}
-
-# EOF handler setup for Ctrl-D
-lacy_shell_setup_eof_handler() {
-    # Prevent Ctrl-D from exiting the shell at all
-    # The widget will handle quitting lacy shell
-    setopt IGNORE_EOF
-    # Note: we intentionally do NOT export IGNOREEOF to the environment.
-    # Exporting it would leak into child processes (lash, vim, python, etc.)
-    # and alter their EOF handling behavior. The ZSH setopt above is sufficient
-    # for the interactive shell itself.
-    IGNOREEOF=1000
-}
-
-# Cleanup all keybindings
-lacy_shell_cleanup_keybindings() {
-    # Restore keybindings we override
-    bindkey '^D' delete-char-or-list
-    bindkey '^@' set-mark-command
-    bindkey '^T' transpose-chars
-    bindkey '^U' kill-whole-line
-
-    # Restore suggestion accept bindings
-    bindkey '^[[C' forward-char
-    bindkey '^[OC' forward-char
-    bindkey '^I' expand-or-complete
-
-    # Remove hooks
-    zle -D zle-line-pre-redraw 2>/dev/null
-    zle -D zle-line-init 2>/dev/null
-
-    # Remove custom widgets
-    zle -D lacy_shell_toggle_mode_widget 2>/dev/null
-    zle -D lacy_shell_delete_char_or_quit_widget 2>/dev/null
-    zle -D _lacy_forward_char_or_accept 2>/dev/null
-    zle -D _lacy_expand_or_accept 2>/dev/null
 }
 
 # Accept ghost text suggestion into buffer.
 # Called by right arrow and tab widgets below.
 _lacy_try_accept_suggestion() {
     if [[ -n "$LACY_SHELL_SUGGESTION" && -z "$BUFFER" ]]; then
-        BUFFER="$LACY_SHELL_SUGGESTION"
-        CURSOR=${#BUFFER}
-        LACY_SHELL_SUGGESTION=""
+        local text="$LACY_SHELL_SUGGESTION"
+        _lacy_clear_suggestion
         POSTDISPLAY=""
-        LACY_SHELL_OWN_POSTDISPLAY=false
-        return 0  # consumed — caller should NOT fall through
+        BUFFER="$text"
+        CURSOR=${#BUFFER}
+        return 0  # consumed: caller should NOT fall through
     fi
-    return 1  # no ghost text — caller should fall through to default widget
+    return 1  # no ghost text: caller should fall through to default widget
 }
 
-# Right arrow: accept Lacy ghost text if present, otherwise delegate to
-# forward-char (no dot prefix — lets autosuggestions' wrapper accept its
-# own suggestion). See file header for why the dot prefix matters.
+# Call the widget a key was bound to before Lacy loaded, else a default
+_lacy_call_prev_widget() {
+    local key="$1" fallback="$2"
+    local w="${_LACY_PREV_WIDGET[$key]}"
+    [[ -z "$w" || "$w" == undefined-key ]] && w="$fallback"
+    zle "$w"
+}
+
+# Right arrow: accept Lacy ghost text if present, otherwise the previous widget
 _lacy_forward_char_or_accept() {
-    _lacy_try_accept_suggestion || zle forward-char
+    _lacy_try_accept_suggestion && return
+    if [[ "$KEYS" == $'\eOC' ]]; then
+        _lacy_call_prev_widget '^[OC' forward-char
+    else
+        _lacy_call_prev_widget '^[[C' forward-char
+    fi
 }
 
-# Tab: accept Lacy ghost text if present, otherwise delegate to
-# expand-or-complete (no dot prefix — same reason as above).
+# Tab: accept Lacy ghost text if present, otherwise the previous widget
 _lacy_expand_or_accept() {
-    _lacy_try_accept_suggestion || zle expand-or-complete
+    _lacy_try_accept_suggestion && return
+    _lacy_call_prev_widget '^I' expand-or-complete
+}
+
+# ============================================================================
+# Ctrl+C
+# ============================================================================
+
+# Ctrl+C is left entirely to the shell: Lacy defines no TRAPINT, so at the
+# prompt it clears the line (a TRAPINT function changes that default), and
+# during a query it interrupts the running function. Queries run inside
+# `{ ... } always { _lacy_query_interrupt_cleanup }` so an interrupted query
+# still stops the spinner and restores MONITOR and NOTIFY. After a query that
+# finished normally the spinner state is already clear and this does nothing.
+# The spinner is reaped with `wait` before MONITOR comes back on, otherwise
+# zsh prints a "[N] + terminated { trap ... }" job notice. wait is safe in an
+# always block; it would deadlock in a trap, which is one reason Lacy has none.
+_lacy_query_interrupt_cleanup() {
+    if [[ -n "$LACY_SPINNER_PID" ]]; then
+        kill "$LACY_SPINNER_PID" 2>/dev/null
+        wait "$LACY_SPINNER_PID" 2>/dev/null
+        LACY_SPINNER_PID=""
+        printf '\e[?25h\e[2K\r' >&2
+    fi
+    LACY_SHELL_AGENT_RUNNING=false
+    if [[ -n "$LACY_SPINNER_MONITOR_WAS_SET" ]]; then
+        setopt MONITOR
+        LACY_SPINNER_MONITOR_WAS_SET=""
+    fi
+    if [[ -n "$LACY_SPINNER_NOTIFY_WAS_SET" ]]; then
+        setopt NOTIFY
+        LACY_SPINNER_NOTIFY_WAS_SET=""
+    fi
+    return 0
 }
 
 # Register widgets
 zle -N lacy_shell_toggle_mode_widget
-zle -N lacy_shell_delete_char_or_quit_widget
 zle -N _lacy_forward_char_or_accept
 zle -N _lacy_expand_or_accept
-
-# Alternative keybindings that don't conflict with system shortcuts
-lacy_shell_setup_safe_keybindings() {
-    # Use Alt-based bindings that are less likely to conflict
-    bindkey '^[^M' lacy_shell_toggle_mode_widget    # Alt+Enter
-    bindkey '^[1' lacy_shell_shell_mode_widget      # Alt+1
-    bindkey '^[2' lacy_shell_agent_mode_widget      # Alt+2
-    bindkey '^[3' lacy_shell_auto_mode_widget       # Alt+3
-    bindkey '^[h' lacy_shell_help_widget            # Alt+H
-
-    echo "Using safe keybindings:"
-    echo "  Alt+Enter: Toggle mode"
-    echo "  Alt+1:     Shell mode"
-    echo "  Alt+2:     Agent mode"
-    echo "  Alt+3:     Auto mode"
-    echo "  Alt+H:     Help"
-}
+zle -N lacy_shell_line_pre_redraw
+zle -N lacy_shell_line_init

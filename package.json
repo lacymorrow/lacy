@@ -3,12 +3,11 @@
   "version": "1.8.23",
   "private": true,
   "type": "module",
-  "description": "Talk to your terminal — AI agent routing for your shell",
+  "description": "Talk to your shell. Commands run, questions go to your AI coding tool.",
   "main": "lacy.plugin.zsh",
   "scripts": {
-    "test": "bash tests/test_core.sh && zsh tests/test_core.sh && bash tests/test_query_agent.sh && zsh tests/test_query_agent.sh && zsh tests/test_preheat_server.zsh",
+    "test": "script/test.sh",
     "release": "shipx",
-    "release:beta": "shipx --beta",
     "setup:local": "./install.sh"
   },
   "keywords": [

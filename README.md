@@ -7,39 +7,14 @@
   </a>
 </p>
 
-<p align="center"><strong>Talk to your shell.</strong> Commands run. Questions go to AI. No prefixes. No context switching. You just type.</p>
+Talk to your shell. Commands run in your shell, and questions go to the AI coding tool you already use.
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/lacy"><img alt="npm version" src="https://img.shields.io/npm/v/lacy?style=flat"></a>
-  <a href="https://www.npmjs.com/package/lacy"><img alt="npm downloads" src="https://img.shields.io/npm/dm/lacy?style=flat"></a>
-  <a href="https://github.com/lacymorrow/lacy/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/lacymorrow/lacy/ci.yml?style=flat&label=CI"></a>
-  <a href="https://github.com/lacymorrow/lacy/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/lacymorrow/lacy?style=flat"></a>
-  <a href="https://fsl.software"><img alt="License: FSL-1.1-MIT" src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue?style=flat"></a>
-</p>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/docs/demo-full.gif" alt="Lacy Shell demo — commands run in shell, questions go to AI" width="680" />
-</p>
-
-## Why Lacy?
-
-- **No new tools to learn** — Lacy works with your existing AI CLI (Claude Code, Gemini, OpenCode, Codex, Lash). It's a complement, not a replacement.
-- **Zero friction** — No slash commands, no hotkeys, no separate terminal. Type naturally and Lacy routes it. A real-time color indicator shows you what will happen before you press enter.
-- **Smart detection** — Lacy classifies input using word analysis, not AI. It's instant. Commands like `ls -la` stay green (shell). Questions like `what files are here` turn magenta (AI). If a command fails with natural language patterns, it silently reroutes to AI.
-
-> *Works with ZSH and Bash 4+ on macOS, Linux, and WSL.*
-
-## Install
-
-> Supported installation methods: `npm`, `curl`, `homebrew`, `git`
-
-#### Install using `npx`
-
-```bash
-npx lacy
+```
+? what files are here      answered by your AI tool
+$ ls -la                   runs in your shell
 ```
 
-#### Install using `curl`
+## Install
 
 ```bash
 curl -fsSL https://lacy.sh/install | bash
@@ -49,168 +24,82 @@ curl -fsSL https://lacy.sh/install | bash
 <summary>Other methods</summary>
 
 ```bash
-# Homebrew
-brew tap lacymorrow/tap
-brew install lacy
-
-# Manual
-git clone https://github.com/lacymorrow/lacy.git ~/.lacy
-echo 'source ~/.lacy/lacy.plugin.zsh' >> ~/.zshrc
+npx lacy
+brew install lacymorrow/tap/lacy
 ```
 
 </details>
 
-## How It Works
+The installer fetches the latest release and asks at most one question. With one AI tool installed it asks nothing. It asks which to use if you have several, and offers to install [lash](https://lash.lacy.sh) if you have none. Open a new terminal when it's done.
 
-Real-time visual feedback shows what will happen before you hit enter:
+Lacy runs in zsh, Bash 4+ and fish on macOS, Linux and WSL. It works with lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, or a command you choose.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/docs/demo-indicator.gif" alt="Green indicator for shell commands, magenta for AI" width="680" />
-</p>
+## How it works
 
-Commands execute in your shell. Natural language goes to your AI agent. No prefixes, no context switching — you just type.
+Lacy picks a destination when you press Enter. That step doesn't use AI: it checks word lists and whether the first word is a command.
 
-| Input                          | Routes to  | Why                                         |
-| ------------------------------ | ---------- | ------------------------------------------- |
-| `ls -la`                       | Shell      | Valid command                               |
-| `what files are here`          | AI         | Natural language                            |
-| `git status`                   | Shell      | Valid command                               |
-| `do we have a way to install?` | AI         | Reserved word — never a real command        |
-| `fix the bug`                  | AI         | Multi-word, not a command                   |
-| `kill the process on 3000`     | Shell → AI | Valid command, but fails — rerouted         |
-| `go ahead and fix it`          | Shell → AI | "go" is valid, but "ahead" triggers reroute |
-| `!rm -rf *`                    | Shell      | `!` prefix forces shell                     |
+| Input                            | Goes to | Why                                     |
+| -------------------------------- | ------- | --------------------------------------- |
+| `ls -la`                         | shell   | `ls` is a command                       |
+| `what files are here`            | agent   | starts with a question word             |
+| `fix the bug`                    | agent   | several words, and `fix` is not a command |
+| `do we have a way to uninstall?` | agent   | `do` is never a command on its own      |
+| `!rm -rf node_modules`           | shell   | `!` sends the line to the shell         |
+| `@ make sure the tests pass`     | agent   | `@` sends the line to the agent         |
 
-The first word of your input is also syntax-highlighted in real-time: **green** for shell commands, **magenta** for AI queries.
+In zsh, a mark after your prompt shows where the line will go as you type: `$` for the shell, `?` for the agent. In Bash and fish the prompt shows the current mode.
 
-**Smart rerouting** (auto mode): When a valid command contains natural language patterns (3+ bare words with articles, pronouns, etc.) and fails, lacy shows a hint and automatically re-sends it to the AI agent. Shell reserved words like `do`, `then`, `in`, `else` are routed directly to the agent — they pass `command -v` but are never standalone commands.
+Sometimes a real command gets a sentence for arguments, like `make sure the tests pass`. It runs in the shell, and if it fails, Lacy suggests `@ make sure the tests pass` as your next line. zsh shows that as gray text (Right arrow or Tab takes it, Enter sends it). Bash prints it above the prompt. Nothing goes to the agent until you send it.
 
-**Terminal context**: When you ask the AI a question, lacy automatically includes your current directory, git branch, recent commands, and exit codes, but only what changed since your last query. In supported terminals (tmux, screen, iTerm2, Terminal.app), it also captures the visible screen output so the agent can see error messages and stack traces.
-
-## Modes
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/assets/mode-indicators.jpeg" alt="Shell and Agent mode indicators" width="480" />
-</p>
-
-| Mode      | Behavior                | Activate                     |
-| --------- | ----------------------- | ---------------------------- |
-| **Auto**  | Smart routing (default) | `mode auto`                  |
-| **Shell** | Everything to shell     | `mode shell` or `Ctrl+Space` |
-| **Agent** | Everything to AI        | `mode agent` or `Ctrl+Space` |
-
-## Supported Tools
-
-Lacy auto-detects your installed AI CLI. All tools handle their own auth — no API keys needed.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/lacymorrow/lacy/HEAD/assets/supported-tools.jpeg" alt="Supported AI CLI tools" width="680" />
-</p>
-
-```bash
-tool set claude    # Use Claude Code
-tool set lash      # Use Lash
-tool set auto      # Auto-detect (first available)
-```
-
-Or edit `~/.lacy/config.yaml`:
-
-```yaml
-agent_tools:
-  active: claude # lash, claude, opencode, gemini, codex, custom, or empty for auto
-```
+Questions asked from zsh or Bash carry what changed since your last one: directory, git branch, recent commands, the last exit code, and the visible terminal output in tmux, screen, iTerm2 and Terminal.app.
 
 ## Commands
 
-| Command                     | Description          |
-| --------------------------- | -------------------- |
-| `mode`                      | Show current mode    |
-| `mode [shell\|agent\|auto]` | Switch mode          |
-| `tool`                      | Show active AI tool  |
-| `tool set <name>`           | Set AI tool          |
-| `ask "query"`               | Direct query to AI   |
-| `Ctrl+Space`                | Toggle between modes |
+| Command                  | What it does                                        |
+| ------------------------ | --------------------------------------------------- |
+| `mode shell\|agent\|auto` | Send everything to the shell, to the agent, or decide per line (default) |
+| `Ctrl+Space`             | Switch mode                                         |
+| `tool set <name>`        | Pick the AI tool and save it to the config          |
+| `ask "question"`         | Send a question to the agent                        |
+| `/new`, `/resume`        | Start a new conversation, or resume the last one    |
+| `quit`                   | Turn Lacy off. The shell keeps running              |
+| `exit`                   | Exit the shell, as usual                            |
 
-## CLI
+Fish supports `mode`, `ask`, `quit` and `Ctrl+Space`.
 
-After installation, the `lacy` command is available (no Node required):
+Outside the shell, the `lacy` command handles setup and maintenance: `lacy doctor`, `lacy update`, `lacy setup`, `lacy logs`. Run `lacy help` for the full list.
 
-```bash
-lacy setup        # Interactive settings (tool, mode, config)
-lacy status       # Show installation status
-lacy doctor       # Diagnose common issues
-lacy update       # Pull latest changes
-lacy config edit  # Open config in $EDITOR
-lacy uninstall    # Remove Lacy Shell
-lacy help         # Show all commands
+## Configuration
+
+Settings live in `~/.lacy/config.yaml`:
+
+```yaml
+agent_tools:
+  active: claude   # leave empty to use the first tool found
+
+modes:
+  default: auto    # shell, agent, or auto
 ```
+
+The full reference, including the query log, spinner style, terminal context, environment variables and `NO_COLOR`, is in [docs/DOCS.md](docs/DOCS.md).
+
+Lacy sends anonymous events on install, update, uninstall and first load (install method, OS, architecture, shell, version). Set `DO_NOT_TRACK=1` to turn them off.
 
 ## Uninstall
 
 ```bash
 lacy uninstall
-# or
-npx lacy --uninstall
-# or
-curl -fsSL https://lacy.sh/install | bash -s -- --uninstall
 ```
 
-## Configuration
-
-Config file: `~/.lacy/config.yaml`
-
-```yaml
-agent_tools:
-  active: claude # lash, claude, opencode, gemini, codex, or empty for auto
-
-modes:
-  default: auto # shell, agent, auto
-
-api_keys:
-  openai: "sk-..." # Only needed if no CLI tool installed
-  anthropic: "sk-ant-..."
-```
+Or `npx lacy --uninstall`, or `curl -fsSL https://lacy.sh/install | bash -s -- --uninstall`.
 
 ## Troubleshooting
 
-**No AI response** — Check `tool` to see if a tool is detected. Install one: `npm i -g lashcode` or `brew install claude`.
+Start with `lacy doctor`. It checks the install, your shell config and the AI tool, and exits 1 if something is wrong.
 
-**Colors not showing** — Ensure your terminal supports 256 colors (green=34, magenta=200, blue=75).
-
-**Command rerouted unexpectedly** — In auto mode, commands with natural language patterns that fail are re-sent to the AI. Switch to `mode shell` to disable this, or prefix with `!`.
-
-**Emergency bypass** — Prefix any command with `!` to force shell execution: `!rm -rf node_modules`
-
-## Releasing
-
-Maintainers: see [RELEASING.md](RELEASING.md).
-
-## Support This Project
-
-Lacy Shell is free and open source. If it saves you time, consider sponsoring the project:
-
-[![Sponsor](https://img.shields.io/badge/Sponsor-❤-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/lacymorrow)
-
-Your support keeps development active and helps cover infrastructure costs.
-
-## Contributors Welcome
-
-Lacy is open source and contributions are welcome! Whether you're fixing a typo, adding a feature, or improving docs, we'd love your help.
-
-- **[Good First Issues](https://github.com/lacymorrow/lacy/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** -- great starting points for new contributors
-- **[Contributing Guide](CONTRIBUTING.md)** -- dev setup, code style, and PR process
-- **[Discussions](https://github.com/lacymorrow/lacy/discussions)** -- questions, ideas, and general chat
-
-## Star History
-
-<a href="https://star-history.com/#lacymorrow/lacy&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=lacymorrow/lacy&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=lacymorrow/lacy&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=lacymorrow/lacy&type=Date" />
- </picture>
-</a>
+- A command went to the agent: start the line with `!`, or run `mode shell`.
+- A question went to the shell: start the line with `@`.
 
 ## License
 
-[FSL-1.1-MIT](LICENSE) — Functional Source License v1.1 with MIT Future License (converts to MIT after 2 years). See [fsl.software](https://fsl.software) for the full text.
+[FSL-1.1-MIT](LICENSE). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).

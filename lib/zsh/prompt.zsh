@@ -1,90 +1,51 @@
 #!/usr/bin/env zsh
 
 # Prompt handling for Lacy Shell
-# - Real-time colored indicator: green (shell) vs magenta (agent)
-# - Mode indicator in right prompt
+# - PS1 is never touched. The live shell/agent indicator is drawn in
+#   PREDISPLAY by keybindings.zsh, so p10k, starship and friends keep PS1.
+# - The mode badge is appended to the user's RPS1 and removed again on quit.
 
-# Store original prompts (captured later, after user's profile loads)
-LACY_SHELL_ORIGINAL_PS1=""
-LACY_SHELL_ORIGINAL_RPS1=""
-LACY_SHELL_BASE_PS1=""
-LACY_SHELL_PROMPT_INITIALIZED=false
+# Exact suffix Lacy appended to RPS1 (empty when none)
+_LACY_RPS1_BADGE=""
 
-# Setup prompt integration (called during init, but defers actual setup)
+# Setup prompt integration (called during init)
 lacy_shell_setup_prompt() {
-    # Don't capture PS1 yet - wait for first precmd when user's prompt is ready
-    LACY_SHELL_PROMPT_INITIALIZED=false
+    _LACY_RPS1_BADGE=""
 }
 
-# Actually initialize the prompt (called on first precmd)
-lacy_shell_init_prompt_once() {
-    [[ "$LACY_SHELL_PROMPT_INITIALIZED" == true ]] && return
-
-    # Now capture the user's fully-loaded prompt
-    LACY_SHELL_ORIGINAL_PS1="$PS1"
-    LACY_SHELL_ORIGINAL_RPS1="$RPS1"
-    LACY_SHELL_BASE_PS1="$PS1"
-
-    # Initialize with neutral indicator (appended after prompt, before cursor)
-    LACY_SHELL_INPUT_TYPE="neutral"
-    PS1="${LACY_SHELL_BASE_PS1}%F{${LACY_COLOR_NEUTRAL}}${LACY_INDICATOR_CHAR}%f "
-
-    # Set right prompt with mode indicator
-    lacy_shell_update_rprompt
-
-    LACY_SHELL_PROMPT_INITIALIZED=true
-}
-
-# Update right prompt with mode indicator
+# Append the mode badge to RPS1, replacing Lacy's previous badge if present.
+# If a prompt system rebuilt RPS1 since, the old suffix is already gone.
 lacy_shell_update_rprompt() {
     local mode_text mode_color
     case "$LACY_SHELL_CURRENT_MODE" in
-        "shell")
-            mode_text="SHELL"
-            mode_color="$LACY_COLOR_SHELL"
-            ;;
-        "agent")
-            mode_text="AGENT"
-            mode_color="$LACY_COLOR_AGENT"
-            ;;
-        "auto")
-            mode_text="AUTO"
-            mode_color="$LACY_COLOR_AUTO"
-            ;;
-        *)
-            mode_text="?"
-            mode_color="$LACY_COLOR_NEUTRAL"
-            ;;
+        "shell") mode_text="SHELL"; mode_color="$LACY_COLOR_SHELL" ;;
+        "agent") mode_text="AGENT"; mode_color="$LACY_COLOR_AGENT" ;;
+        "auto")  mode_text="AUTO";  mode_color="$LACY_COLOR_AUTO" ;;
+        *)       mode_text="?";     mode_color="$LACY_COLOR_NEUTRAL" ;;
     esac
 
-    RPS1="%F{${mode_color}}${mode_text}%f %F{${LACY_COLOR_NEUTRAL}}[Ctrl+Space]%f"
+    local badge="$mode_text"
+    [[ -z ${NO_COLOR-} ]] && badge="%F{${mode_color}}${mode_text}%f"
+
+    local base="$RPS1"
+    [[ -n "$_LACY_RPS1_BADGE" ]] && base="${base%"$_LACY_RPS1_BADGE"}"
+    if [[ -n "$base" ]]; then
+        _LACY_RPS1_BADGE=" $badge"
+    else
+        _LACY_RPS1_BADGE="$badge"
+    fi
+    RPS1="${base}${_LACY_RPS1_BADGE}"
 }
 
-# Update prompt (called by precmd)
+# Update prompt (called by precmd and on mode change)
 lacy_shell_update_prompt() {
-    # Initialize on first call
-    lacy_shell_init_prompt_once
-
-    # Reset to neutral indicator (appended after prompt, before cursor)
-    LACY_SHELL_INPUT_TYPE="neutral"
-    PS1="${LACY_SHELL_BASE_PS1}%F{${LACY_COLOR_NEUTRAL}}${LACY_INDICATOR_CHAR}%f "
-
-    # Update mode in right prompt
     lacy_shell_update_rprompt
 }
 
-# Restore original prompt
+# Remove the mode badge, leaving the user's RPS1 as it is now
 lacy_shell_restore_prompt() {
-    if [[ -n "$LACY_SHELL_ORIGINAL_PS1" ]]; then
-        PS1="$LACY_SHELL_ORIGINAL_PS1"
+    if [[ -n "$_LACY_RPS1_BADGE" ]]; then
+        RPS1="${RPS1%"$_LACY_RPS1_BADGE"}"
     fi
-    if [[ -n "$LACY_SHELL_ORIGINAL_RPS1" ]]; then
-        RPS1="$LACY_SHELL_ORIGINAL_RPS1"
-    else
-        RPS1=""
-    fi
+    _LACY_RPS1_BADGE=""
 }
-
-# Stubs for removed features
-lacy_shell_remove_top_bar() { :; }
-lacy_shell_show_top_bar_message() { :; }

@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 
-# ZSH adapter init — sources shared core + ZSH-specific modules
+# ZSH adapter init: sources shared core + ZSH-specific modules
 
 # Shell type is already set by lacy.plugin.zsh before sourcing this file.
 # LACY_SHELL_TYPE="zsh"

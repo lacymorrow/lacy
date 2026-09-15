@@ -1,340 +1,432 @@
 #!/usr/bin/env bash
 
-# Configuration management for Lacy Shell
+# Configuration for Lacy Shell
 # Shared across Bash 4+ and ZSH
-
-# Default configuration
-declare -A LACY_SHELL_CONFIG 2>/dev/null || true
-# LACY_SHELL_CONFIG_FILE is defined in constants.sh
+#
+# config.yaml is read as a small, flat YAML subset:
+#
+#   section:
+#     key: value   # comment
+#
+# Only direct children of a known top-level section are read. Deeper nesting,
+# lists, and unknown keys are ignored. Values lose one matching pair of outer
+# quotes. `#` starts a comment only at the start of a value or after
+# whitespace, and never inside quotes. Nothing in a value is ever executed.
+#
+# LACY_SHELL_CONFIG_FILE is defined in constants.sh.
 
 # ============================================================================
-# Config Parsing Helpers (reduces code duplication)
+# Default config (canonical copy; install.sh and packages/lacy/index.mjs
+# carry the same text)
 # ============================================================================
 
-# Simple YAML parser for shell (handles basic key: value)
-lacy_shell_parse_yaml_value() {
-    local file="$1"
-    local key="$2"
+_lacy_default_config_text() {
+    cat <<'EOF'
+# Lacy Shell configuration
+agent_tools:
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # Leave empty to auto-detect.
+  active:
+  # custom_command: "your-command --flags"
 
-    grep "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'"
+modes:
+  default: auto  # shell, agent, or auto
+
+# preheat:
+#   eager: false
+#   server_port: 4096
+
+# logging:
+#   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+EOF
 }
 
-# Clean a config value (remove quotes, comments, whitespace)
-lacy_shell_clean_config_value() {
-    local value="$1"
-    echo "$value" | sed 's/#.*//' | tr -d '"' | tr -d "'" | xargs
-}
-
-# Parse a key-value line from config and export if valid
-# Usage: lacy_shell_export_config_value <key> <value> <key_map>
-# key_map format: "config_key1:ENV_VAR1,config_key2:ENV_VAR2"
-lacy_shell_export_config_value() {
-    local key="$1"
-    local value="$2"
-    local key_map="$3"
-
-    # Clean the value
-    value=$(lacy_shell_clean_config_value "$value")
-
-    # Skip empty or null values
-    if [[ -z "$value" ]] || [[ "$value" == "null" ]]; then
+# Create the default configuration file. Refuses to touch anything that
+# already exists, and says so when it cannot write.
+lacy_shell_create_default_config() {
+    local cfg="$LACY_SHELL_CONFIG_FILE"
+    if [[ -d "$cfg" ]]; then
+        printf 'lacy: %s is a directory, not a config file.\n' "$cfg" >&2
         return 1
     fi
-
-    # Split key_map by comma and iterate
-    local IFS_save="$IFS"
-    IFS=','
-    local -a mappings
-    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-        mappings=( ${(s:,:)key_map} )
-    else
-        read -ra mappings <<< "$key_map"
+    if [[ -e "$cfg" ]]; then
+        return 0
     fi
-    IFS="$IFS_save"
+    mkdir -p "${cfg%/*}" 2>/dev/null
+    if ! _lacy_default_config_text > "$cfg" 2>/dev/null; then
+        printf 'lacy: could not create %s\n' "$cfg" >&2
+        return 1
+    fi
+    echo "Created default configuration at: $cfg"
+}
 
-    local mapping config_key env_var
-    for mapping in "${mappings[@]}"; do
-        config_key="${mapping%%:*}"
-        env_var="${mapping#*:}"
-        if [[ "$key" == "$config_key" ]]; then
-            export "$env_var"="$value"
+# ============================================================================
+# Known settings
+# ============================================================================
+
+# Map "section.key" to the variable it sets. Result in _LACY_CFG_VAR.
+_lacy_config_var_for() {
+    case "$1" in
+        agent_tools.active)         _LACY_CFG_VAR="LACY_ACTIVE_TOOL" ;;
+        agent_tools.custom_command) _LACY_CFG_VAR="LACY_CUSTOM_TOOL_CMD" ;;
+        modes.default)              _LACY_CFG_VAR="LACY_CONFIG_DEFAULT_MODE" ;;
+        preheat.eager)              _LACY_CFG_VAR="LACY_PREHEAT_EAGER" ;;
+        preheat.server_port)        _LACY_CFG_VAR="LACY_PREHEAT_SERVER_PORT" ;;
+        context.output)             _LACY_CFG_VAR="_LACY_CTX_OUTPUT_ENABLED" ;;
+        context.output_lines)       _LACY_CFG_VAR="_LACY_CTX_OUTPUT_MAX_LINES" ;;
+        spinner.style)              _LACY_CFG_VAR="LACY_SPINNER_STYLE" ;;
+        logging.queries)            _LACY_CFG_VAR="LACY_LOG_QUERIES" ;;
+        *)                          _LACY_CFG_VAR="" ;;
+    esac
+}
+
+# Reset every config-backed variable to its default. Runs before each parse so
+# values inherited from a parent shell's environment never survive a reload.
+_lacy_config_reset_vars() {
+    LACY_ACTIVE_TOOL=""
+    LACY_CUSTOM_TOOL_CMD=""
+    LACY_CONFIG_DEFAULT_MODE=""
+    LACY_PREHEAT_EAGER="false"
+    LACY_PREHEAT_SERVER_PORT="4096"
+    _LACY_CTX_OUTPUT_ENABLED=true
+    _LACY_CTX_OUTPUT_MAX_LINES=50
+    LACY_SPINNER_STYLE="braille"
+    LACY_LOG_QUERIES="false"
+}
+
+# Normalize a YAML-ish boolean into "true" or "false"
+_lacy_config_bool() {
+    case "$1" in
+        true|True|TRUE|yes|Yes|YES|on|On|ON) printf -v "$2" '%s' "true" ;;
+        *)                                    printf -v "$2" '%s' "false" ;;
+    esac
+}
+
+# ============================================================================
+# Line parsing
+# ============================================================================
+
+# Parse a scalar that follows "key:". Sets:
+#   _LACY_CFG_VALUE    the value (comment removed, trimmed, one outer quote pair gone)
+#   _LACY_CFG_COMMENT  the raw comment including the whitespace before it, or empty
+#
+# Quoted value ('...' or "..."): it ends at the first matching quote that is
+# followed only by whitespace, or by whitespace and a comment. Nothing inside
+# is unescaped. Plain value: "#" after whitespace starts a comment unless it
+# sits inside quotes; "null" and "~" mean empty.
+_lacy_config_scalar() {
+    local raw="$1" s c i n tail rest
+    s="${raw#"${raw%%[![:space:]]*}"}"
+    n=${#s}
+    c="${s:0:1}"
+
+    if [[ "$c" == '"' || "$c" == "'" ]]; then
+        for (( i = 1; i < n; i++ )); do
+            [[ "${s:$i:1}" == "$c" ]] || continue
+            tail="${s:$(( i + 1 ))}"
+            rest="${tail#"${tail%%[![:space:]]*}"}"
+            if [[ -z "$rest" ]] || [[ "$rest" == "#"* && "$rest" != "$tail" ]]; then
+                _LACY_CFG_VALUE="${s:1:$(( i - 1 ))}"
+                if [[ -n "$rest" ]]; then
+                    _LACY_CFG_COMMENT="$tail"
+                else
+                    _LACY_CFG_COMMENT=""
+                fi
+                return 0
+            fi
+        done
+        # No closing quote: read it as a plain value below
+    fi
+
+    local out="" prev=" " q="" comment=""
+    n=${#raw}
+    for (( i = 0; i < n; i++ )); do
+        c="${raw:$i:1}"
+        if [[ -n "$q" ]]; then
+            [[ "$c" == "$q" ]] && q=""
+        elif [[ "$c" == '"' || "$c" == "'" ]]; then
+            q="$c"
+        elif [[ "$c" == "#" && ( "$prev" == " " || "$prev" == $'\t' ) ]]; then
+            comment="${raw:$i}"
+            break
+        fi
+        out+="$c"
+        prev="$c"
+    done
+
+    # Whitespace between the value and the comment belongs to the comment.
+    # Take the trailing run first so an all-blank value keeps its spacing.
+    local trail="${out##*[![:space:]]}"
+    out="${out%"$trail"}"
+    out="${out#"${out%%[![:space:]]*}"}"
+    [[ -n "$comment" ]] && comment="${trail}${comment}"
+
+    if [[ "$out" == "null" || "$out" == "~" ]]; then
+        out=""
+    fi
+
+    _LACY_CFG_VALUE="$out"
+    _LACY_CFG_COMMENT="$comment"
+}
+
+# Split "key: value" (leading whitespace already removed). Sets _LACY_CFG_KEY
+# plus the scalar results. Returns 1 when the line is not a simple mapping.
+_lacy_config_split_key() {
+    local s="$1"
+    local key="${s%%:*}"
+    [[ "$key" != "$s" ]] || return 1
+    [[ -n "$key" && "$key" != *[!A-Za-z0-9_.-]* ]] || return 1
+    local rest="${s#*:}"
+    # "key:value" without a space is a plain string in YAML, not a mapping
+    if [[ -n "$rest" && "$rest" != [[:space:]]* ]]; then
+        return 1
+    fi
+    _LACY_CFG_KEY="$key"
+    _lacy_config_scalar "$rest"
+}
+
+# Read a config file and set the variable for each known, non-empty setting.
+_lacy_config_parse_file() {
+    local file="$1"
+    local line trimmed section="" indent child_indent=-1 ln=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        (( ln++ ))
+        line="${line%$'\r'}"
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+        indent=$(( ${#line} - ${#trimmed} ))
+
+        if (( indent == 0 )); then
+            section=""
+            child_indent=-1
+            _lacy_config_split_key "$trimmed" || continue
+            # A top-level key with no value opens a section
+            [[ -z "$_LACY_CFG_VALUE" ]] && section="$_LACY_CFG_KEY"
+            continue
+        fi
+
+        [[ -n "$section" ]] || continue
+        (( child_indent < 0 )) && child_indent=$indent
+        # Only direct children; nested maps under a section are ignored
+        (( indent == child_indent )) || continue
+        _lacy_config_split_key "$trimmed" || continue
+
+        _lacy_config_var_for "${section}.${_LACY_CFG_KEY}"
+        [[ -n "$_LACY_CFG_VAR" ]] || continue
+        # Empty means "use the default", which the reset already applied
+        [[ -n "$_LACY_CFG_VALUE" ]] || continue
+        printf -v "$_LACY_CFG_VAR" '%s' "$_LACY_CFG_VALUE"
+    done < "$file"
+}
+
+# ============================================================================
+# Load
+# ============================================================================
+
+# Load configuration from $LACY_SHELL_CONFIG_FILE into shell variables.
+# Returns 1 (and keeps defaults) when the file cannot be read.
+lacy_shell_load_config() {
+    _lacy_config_reset_vars
+    local rc=0
+    local cfg="$LACY_SHELL_CONFIG_FILE"
+
+    mkdir -p "$LACY_SHELL_HOME" 2>/dev/null
+
+    # Older versions cached parsed config (API keys included) in a
+    # world-readable file that nothing reads any more.
+    [[ -f "$LACY_SHELL_HOME/.config_cache" ]] && command rm -f "$LACY_SHELL_HOME/.config_cache"
+    # Older versions wrote the query log world-readable
+    [[ -f "$LACY_SHELL_HOME/logs/queries.log" ]] && chmod 600 "$LACY_SHELL_HOME/logs/queries.log" 2>/dev/null
+
+    if [[ -d "$cfg" ]]; then
+        printf 'lacy: %s is a directory, not a config file. Using defaults.\n' "$cfg" >&2
+        rc=1
+    elif [[ ! -e "$cfg" ]]; then
+        lacy_shell_create_default_config || rc=1
+    fi
+
+    if (( rc == 0 )); then
+        if [[ -r "$cfg" ]]; then
+            _lacy_config_parse_file "$cfg"
+        else
+            printf 'lacy: cannot read %s. Using defaults.\n' "$cfg" >&2
+            rc=1
+        fi
+    fi
+
+    _lacy_config_bool "$LACY_PREHEAT_EAGER" LACY_PREHEAT_EAGER
+    _lacy_config_bool "$LACY_LOG_QUERIES" LACY_LOG_QUERIES
+    _lacy_config_bool "$_LACY_CTX_OUTPUT_ENABLED" _LACY_CTX_OUTPUT_ENABLED
+    [[ "$LACY_PREHEAT_SERVER_PORT" == *[!0-9]* ]] && LACY_PREHEAT_SERVER_PORT="4096"
+    [[ "$_LACY_CTX_OUTPUT_MAX_LINES" == *[!0-9]* ]] && _LACY_CTX_OUTPUT_MAX_LINES=50
+
+    case "$LACY_CONFIG_DEFAULT_MODE" in
+        ""|shell|agent|auto) ;;
+        *)
+            printf "lacy: modes.default '%s' is not shell, agent, or auto. Using auto.\n" "$LACY_CONFIG_DEFAULT_MODE" >&2
+            LACY_CONFIG_DEFAULT_MODE=""
+            ;;
+    esac
+
+    if [[ -n "$LACY_ACTIVE_TOOL" && "$LACY_ACTIVE_TOOL" != "custom" ]] &&
+       ! _lacy_in_list "$LACY_ACTIVE_TOOL" "${LACY_TOOL_LIST[@]}"; then
+        printf "lacy: agent_tools.active '%s' is not a known tool. Using auto-detect.\n" "$LACY_ACTIVE_TOOL" >&2
+        LACY_ACTIVE_TOOL=""
+    fi
+
+    LACY_SHELL_CURRENT_MODE="${LACY_CONFIG_DEFAULT_MODE:-${LACY_SHELL_DEFAULT_MODE:-auto}}"
+    return $rc
+}
+
+# ============================================================================
+# Write
+# ============================================================================
+
+# Render a value for writing so the parser reads back exactly the same string.
+# Tries plain (simple values only), then '...', then "...", and keeps the first
+# form that parses back to the value. Sets _LACY_CFG_RENDERED. Returns 1 when
+# no form round-trips (for example a value containing a newline).
+_lacy_config_render_value() {
+    local v="$1" cand
+    _LACY_CFG_RENDERED=""
+    [[ -z "$v" ]] && return 0
+    [[ "$v" == *$'\n'* || "$v" == *$'\r'* ]] && return 1
+    for cand in "$v" "'${v}'" "\"${v}\""; do
+        if [[ "$cand" == "$v" ]]; then
+            # Plain only for simple values that are valid YAML as-is
+            [[ "$v" != *[!A-Za-z0-9_./@+=,-]* && "$v" != -* ]] || continue
+        fi
+        _lacy_config_scalar " $cand"
+        if [[ "$_LACY_CFG_VALUE" == "$v" ]]; then
+            _LACY_CFG_RENDERED="$cand"
             return 0
         fi
     done
     return 1
 }
 
-# Load configuration from file
-lacy_shell_load_config() {
-    # Set defaults from constants
-    LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
+# Set section.key in config.yaml, keeping comments, order, and other keys.
+# The file is rewritten through a temp file with `cat tmp > file`, so a
+# symlinked config.yaml stays a symlink.
+# Usage: lacy_config_set <section> <key> <value>
+# On failure returns 1 and puts a reason in _LACY_CONFIG_SET_ERROR.
+lacy_config_set() {
+    local section="$1" key="$2" value="$3"
+    local cfg="$LACY_SHELL_CONFIG_FILE"
+    _LACY_CONFIG_SET_ERROR=""
 
-    # Ensure config directory exists
-    mkdir -p "$LACY_SHELL_HOME"
-
-    # Create default config if it doesn't exist
-    if [[ ! -f "$LACY_SHELL_CONFIG_FILE" ]]; then
-        lacy_shell_create_default_config
-        LACY_CONFIG_CACHE_VALID=false
-    fi
-
-    # Check if we can use cached config (cache must be newer than config)
-    if [[ "$LACY_CONFIG_CACHE_VALID" == true ]] && \
-       [[ -f "$LACY_SHELL_CONFIG_CACHE_FILE" ]] && \
-       [[ ! "$LACY_SHELL_CONFIG_FILE" -nt "$LACY_SHELL_CONFIG_CACHE_FILE" ]]; then
-        # Use cached config - much faster
-        source "$LACY_SHELL_CONFIG_CACHE_FILE"
-        return
-    fi
-
-    # Parse configuration using optimized single-pass parsing
-    if [[ -f "$LACY_SHELL_CONFIG_FILE" ]]; then
-        # Define key mappings for each section
-        local api_keys_map="openai:LACY_SHELL_API_OPENAI,anthropic:LACY_SHELL_API_ANTHROPIC"
-        local model_map="provider:LACY_SHELL_PROVIDER,name:LACY_SHELL_MODEL_NAME"
-        local agent_map="command:LACY_SHELL_AGENT_COMMAND,context_mode:LACY_SHELL_AGENT_CONTEXT_MODE,needs_api_keys:LACY_SHELL_AGENT_NEEDS_API_KEYS"
-        local agent_tools_map="active:LACY_ACTIVE_TOOL,custom_command:LACY_CUSTOM_TOOL_CMD"
-        local preheat_map="eager:LACY_PREHEAT_EAGER,server_port:LACY_PREHEAT_SERVER_PORT"
-        local context_map="output:_LACY_CTX_OUTPUT_ENABLED,output_lines:_LACY_CTX_OUTPUT_MAX_LINES"
-        local spinner_map="style:LACY_SPINNER_STYLE"
-
-        # Track current section
-        local current_section=""
-
-        local line key value
-        while IFS= read -r line; do
-            # Detect section headers
-            if [[ "$line" =~ ^api_keys: ]]; then
-                current_section="api_keys"
-                continue
-            elif [[ "$line" =~ ^model: ]]; then
-                current_section="model"
-                continue
-            elif [[ "$line" =~ ^agent_tools: ]]; then
-                current_section="agent_tools"
-                continue
-            elif [[ "$line" =~ ^preheat: ]]; then
-                current_section="preheat"
-                continue
-            elif [[ "$line" =~ ^context: ]]; then
-                current_section="context"
-                continue
-            elif [[ "$line" =~ ^spinner: ]]; then
-                current_section="spinner"
-                continue
-            elif [[ "$line" =~ ^agent: ]]; then
-                current_section="agent"
-                continue
-            elif [[ "$line" =~ ^[^[:space:]] ]] && [[ ! "$line" =~ ^# ]]; then
-                # New section started (not indented, not a comment)
-                current_section=""
-            fi
-
-            # Parse key-value pairs within sections
-            if [[ -n "$current_section" ]] && [[ "$line" =~ ^[[:space:]]+([^:]+):[[:space:]]*(.+) ]]; then
-                if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-                    key="${match[1]}"
-                    value="${match[2]}"
-                else
-                    key="${BASH_REMATCH[1]}"
-                    value="${BASH_REMATCH[2]}"
-                fi
-
-                # Use appropriate key map based on section
-                case "$current_section" in
-                    "api_keys")
-                        lacy_shell_export_config_value "$key" "$value" "$api_keys_map"
-                        ;;
-                    "model")
-                        lacy_shell_export_config_value "$key" "$value" "$model_map"
-                        ;;
-                    "agent")
-                        lacy_shell_export_config_value "$key" "$value" "$agent_map"
-                        ;;
-                    "agent_tools")
-                        lacy_shell_export_config_value "$key" "$value" "$agent_tools_map"
-                        ;;
-                    "preheat")
-                        lacy_shell_export_config_value "$key" "$value" "$preheat_map"
-                        ;;
-                    "context")
-                        lacy_shell_export_config_value "$key" "$value" "$context_map"
-                        ;;
-                    "spinner")
-                        lacy_shell_export_config_value "$key" "$value" "$spinner_map"
-                        ;;
-                esac
-            fi
-        done < "$LACY_SHELL_CONFIG_FILE"
-
-        # Check for MCP configuration (simplified)
-        local mcp_line servers_line
-        mcp_line=$(grep "^mcp:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null || true)
-        servers_line=$(grep "^[[:space:]]*servers:" "$LACY_SHELL_CONFIG_FILE" 2>/dev/null || true)
-        if [[ -n "$mcp_line" ]] && [[ -n "$servers_line" ]]; then
-            LACY_SHELL_MCP_SERVERS="configured"
-            LACY_SHELL_MCP_SERVERS_JSON='[{"name":"filesystem","command":"npx","args":["@modelcontextprotocol/server-filesystem"]}]'
-        else
-            LACY_SHELL_MCP_SERVERS=""
-            LACY_SHELL_MCP_SERVERS_JSON=""
-        fi
-
-        # Cache the parsed configuration for fast future loads
-        # Use printf %q to safely escape values (prevents injection when sourced)
-        {
-            echo "# Generated config cache - do not edit"
-            printf 'LACY_SHELL_CURRENT_MODE=%q\n' "$LACY_SHELL_CURRENT_MODE"
-            printf 'LACY_SHELL_API_OPENAI=%q\n' "$LACY_SHELL_API_OPENAI"
-            printf 'LACY_SHELL_API_ANTHROPIC=%q\n' "$LACY_SHELL_API_ANTHROPIC"
-            printf 'LACY_SHELL_PROVIDER=%q\n' "$LACY_SHELL_PROVIDER"
-            printf 'LACY_SHELL_MODEL_NAME=%q\n' "$LACY_SHELL_MODEL_NAME"
-            printf 'LACY_ACTIVE_TOOL=%q\n' "$LACY_ACTIVE_TOOL"
-            printf 'LACY_CUSTOM_TOOL_CMD=%q\n' "$LACY_CUSTOM_TOOL_CMD"
-            printf 'LACY_SHELL_MCP_SERVERS=%q\n' "$LACY_SHELL_MCP_SERVERS"
-            printf 'LACY_SHELL_MCP_SERVERS_JSON=%q\n' "$LACY_SHELL_MCP_SERVERS_JSON"
-            printf '_LACY_CTX_OUTPUT_ENABLED=%q\n' "${_LACY_CTX_OUTPUT_ENABLED:-true}"
-            printf '_LACY_CTX_OUTPUT_MAX_LINES=%q\n' "${_LACY_CTX_OUTPUT_MAX_LINES:-50}"
-            printf 'LACY_SPINNER_STYLE=%q\n' "${LACY_SPINNER_STYLE:-random}"
-        } > "$LACY_SHELL_CONFIG_CACHE_FILE"
-
-        LACY_CONFIG_CACHE_VALID=true
-
-        # Export variables for global access
-        export LACY_SHELL_MCP_SERVERS
-        export LACY_SHELL_MCP_SERVERS_JSON
-    fi
-
-    # Also check environment variables as fallback
-    if [[ -z "$LACY_SHELL_API_OPENAI" ]] && [[ -n "$OPENAI_API_KEY" ]]; then
-        export LACY_SHELL_API_OPENAI="$OPENAI_API_KEY"
-    fi
-    if [[ -z "$LACY_SHELL_API_ANTHROPIC" ]] && [[ -n "$ANTHROPIC_API_KEY" ]]; then
-        export LACY_SHELL_API_ANTHROPIC="$ANTHROPIC_API_KEY"
-    fi
-
-    # Provider/model overrides via env
-    if [[ -z "$LACY_SHELL_PROVIDER" ]] && [[ -n "$LACY_SHELL_DEFAULT_PROVIDER" ]]; then
-        export LACY_SHELL_PROVIDER="$LACY_SHELL_DEFAULT_PROVIDER"
-    fi
-    if [[ -z "$LACY_SHELL_MODEL_NAME" ]] && [[ -n "$LACY_SHELL_DEFAULT_MODEL" ]]; then
-        export LACY_SHELL_MODEL_NAME="$LACY_SHELL_DEFAULT_MODEL"
-    fi
-
-    # Agent CLI defaults (if not configured, use defaults from constants)
-    : "${LACY_SHELL_AGENT_COMMAND:="$LACY_SHELL_DEFAULT_AGENT_COMMAND"}"
-    : "${LACY_SHELL_AGENT_CONTEXT_MODE:="$LACY_SHELL_DEFAULT_AGENT_CONTEXT_MODE"}"
-    : "${LACY_SHELL_AGENT_NEEDS_API_KEYS:="$LACY_SHELL_DEFAULT_AGENT_NEEDS_API_KEYS"}"
-    export LACY_SHELL_AGENT_COMMAND LACY_SHELL_AGENT_CONTEXT_MODE LACY_SHELL_AGENT_NEEDS_API_KEYS
-
-    # Active AI tool (empty = auto-detect)
-    export LACY_ACTIVE_TOOL
-    export LACY_CUSTOM_TOOL_CMD
-
-    # Initialize current mode from default
-    LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
-
-    # Export configuration
-    export LACY_SHELL_CURRENT_MODE
-}
-
-# Create default configuration file
-lacy_shell_create_default_config() {
-    cat > "$LACY_SHELL_CONFIG_FILE" << 'EOF'
-# Lacy Shell Configuration
-# Edit this file to customize your settings
-
-# API Keys for AI providers
-api_keys:
-  openai: # Add your OpenAI API key here
-  anthropic: # Add your Anthropic API key here
-
-# Operating modes
-modes:
-  default: auto  # Options: shell, agent, auto
-
-# Smart auto-detection settings
-auto_detection:
-  enabled: true
-  confidence_threshold: 0.7
-
-# MCP (Model Context Protocol) configuration
-mcp:
-  enabled: false
-  servers:
-    - name: filesystem
-      command: npx
-      args: ["@modelcontextprotocol/server-filesystem", "/"]
-    - name: web
-      command: npx
-      args: ["@modelcontextprotocol/server-web"]
-
-# Appearance
-appearance:
-  show_mode_indicator: true
-  mode_colors:
-    shell: green
-    agent: blue
-    auto: yellow
-
-# Model selection (used when agent CLI is not installed)
-
-
-# AI CLI tool selection
-# Lacy auto-detects installed tools, or you can set one explicitly
-agent_tools:
-  # Options: lash, claude, opencode, gemini, codex, hermes, copilot, amp, custom, or empty for auto-detect
-  active:
-  # Custom command (used when active: custom)
-  # custom_command: "your-command -flags"
-
-# Preheat: keep agents warm between queries (lash, opencode)
-# preheat:
-#   eager: false          # Start background server on plugin load
-#   server_port: 4096     # Port for background server
-
-# Terminal context: output capture (tmux, screen, iTerm2, Terminal.app)
-# context:
-#   output: true          # Capture terminal screen at query time
-#   output_lines: 50      # Max lines to include (truncates from top)
-
-# Spinner animation style
-# Options: braille (default), dots, ascii (no Unicode), braillewave, dna, scan,
-#          rain, scanline, pulse, snake, sparkle, cascade, columns, orbit, breathe,
-#          waverows, checkerboard, helix, fillsweep, diagswipe,
-#          random (picks a different one each query)
-# spinner:
-#   style: random
-
-# Agent CLI configuration (legacy)
-# Configure which CLI tool to use for AI queries
-agent:
-  # Command to run. Variables: {query}, {context_file}
-  command: "lash run --prompt {query}"
-  # How to pass context: stdin or file
-  context_mode: stdin
-  # Set to true if the CLI needs API keys from lacy
-  needs_api_keys: false
-EOF
-
-    echo "Created default configuration at: $LACY_SHELL_CONFIG_FILE"
-}
-
-# Check if API keys are available
-lacy_shell_check_api_keys() {
-    if [[ -n "$LACY_SHELL_API_OPENAI" ]] || [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
-        return 0
-    else
+    if [[ -d "$cfg" ]]; then
+        _LACY_CONFIG_SET_ERROR="$cfg is a directory"
         return 1
     fi
-}
-
-# Get active API provider
-lacy_shell_get_api_provider() {
-    if [[ -n "$LACY_SHELL_API_OPENAI" ]]; then
-        echo "openai"
-    elif [[ -n "$LACY_SHELL_API_ANTHROPIC" ]]; then
-        echo "anthropic"
-    else
-        echo "none"
+    if [[ ! -e "$cfg" ]]; then
+        lacy_shell_create_default_config >/dev/null || {
+            _LACY_CONFIG_SET_ERROR="could not create $cfg"
+            return 1
+        }
     fi
+    if [[ ! -r "$cfg" || ! -w "$cfg" ]]; then
+        _LACY_CONFIG_SET_ERROR="$cfg is not writable"
+        return 1
+    fi
+    if ! _lacy_config_render_value "$value"; then
+        _LACY_CONFIG_SET_ERROR="the value cannot be written safely"
+        return 1
+    fi
+    local rendered="$_LACY_CFG_RENDERED"
+
+    # Pass 1: find the section header and whether the key already exists
+    local line trimmed indent cur="" child_indent=-1 ln=0
+    local header_ln=0 found=false insert_indent="  "
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        (( ln++ ))
+        line="${line%$'\r'}"
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+        indent=$(( ${#line} - ${#trimmed} ))
+        if (( indent == 0 )); then
+            cur=""
+            child_indent=-1
+            if _lacy_config_split_key "$trimmed" && [[ -z "$_LACY_CFG_VALUE" && "$_LACY_CFG_KEY" == "$section" ]]; then
+                cur="$section"
+                (( header_ln == 0 )) && header_ln=$ln
+            fi
+            continue
+        fi
+        [[ -n "$cur" ]] || continue
+        if (( child_indent < 0 )); then
+            child_indent=$indent
+            (( ln > header_ln )) && [[ "$insert_indent" == "  " ]] && insert_indent="${line%%[![:space:]]*}"
+        fi
+        (( indent == child_indent )) || continue
+        _lacy_config_split_key "$trimmed" || continue
+        [[ "$_LACY_CFG_KEY" == "$key" ]] && found=true
+    done < "$cfg"
+
+    local tmp
+    tmp=$(mktemp "${TMPDIR:-/tmp}/lacy-config.XXXXXX" 2>/dev/null) || {
+        _LACY_CONFIG_SET_ERROR="could not create a temp file"
+        return 1
+    }
+
+    # Pass 2: write everything back, replacing or inserting the one line
+    local cr lead newline body
+    cur=""
+    child_indent=-1
+    ln=0
+    {
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            (( ln++ ))
+            cr=""
+            [[ "$line" == *$'\r' ]] && cr=$'\r'
+            body="${line%$'\r'}"
+            trimmed="${body#"${body%%[![:space:]]*}"}"
+            if [[ -n "$trimmed" && "$trimmed" != "#"* ]]; then
+                indent=$(( ${#body} - ${#trimmed} ))
+                if (( indent == 0 )); then
+                    cur=""
+                    child_indent=-1
+                    if _lacy_config_split_key "$trimmed" && [[ -z "$_LACY_CFG_VALUE" && "$_LACY_CFG_KEY" == "$section" ]]; then
+                        cur="$section"
+                    fi
+                elif [[ -n "$cur" ]]; then
+                    (( child_indent < 0 )) && child_indent=$indent
+                    if (( indent == child_indent )) && _lacy_config_split_key "$trimmed" && [[ "$_LACY_CFG_KEY" == "$key" ]]; then
+                        lead="${body%%[![:space:]]*}"
+                        if [[ -n "$rendered" ]]; then
+                            newline="${lead}${key}: ${rendered}"
+                        else
+                            newline="${lead}${key}:"
+                        fi
+                        printf '%s%s%s\n' "$newline" "$_LACY_CFG_COMMENT" "$cr"
+                        continue
+                    fi
+                fi
+            fi
+            printf '%s\n' "$line"
+            if [[ "$found" == false ]] && (( ln == header_ln )); then
+                if [[ -n "$rendered" ]]; then
+                    printf '%s%s: %s%s\n' "$insert_indent" "$key" "$rendered" "$cr"
+                else
+                    printf '%s%s:%s\n' "$insert_indent" "$key" "$cr"
+                fi
+            fi
+        done < "$cfg"
+        if (( header_ln == 0 )); then
+            printf '\n%s:\n' "$section"
+            if [[ -n "$rendered" ]]; then
+                printf '  %s: %s\n' "$key" "$rendered"
+            else
+                printf '  %s:\n' "$key"
+            fi
+        fi
+    } > "$tmp" 2>/dev/null
+
+    if ! cat "$tmp" > "$cfg" 2>/dev/null; then
+        command rm -f "$tmp"
+        _LACY_CONFIG_SET_ERROR="could not write $cfg"
+        return 1
+    fi
+    command rm -f "$tmp"
+    return 0
 }

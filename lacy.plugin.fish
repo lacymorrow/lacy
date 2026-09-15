@@ -1,4 +1,4 @@
-# Lacy Shell — Fish plugin entry point
+# Lacy Shell: Fish plugin entry point
 # Source this file in ~/.config/fish/conf.d/lacy.fish:
 #   source ~/.lacy/lacy.plugin.fish
 #
@@ -8,23 +8,33 @@
 # Guards
 # ============================================================================
 
-# Require Fish 3.1+ for bind --sets-mode and commandline -f
-set -l _lacy_fish_major (string match -r 'fish, version (\d+)' -- (fish --version 2>&1) | tail -1)
-if test -z "$_lacy_fish_major"; or test "$_lacy_fish_major" -lt 3
-    echo "Lacy Shell: Fish 3.1+ is required. You have: "(fish --version 2>&1)"." >&2
-    set --erase _lacy_fish_major
+# Key bindings and prompts only matter in an interactive shell
+status is-interactive; or return
+
+# Load once per session (`quit` clears this so `lacy` can load it again)
+if set -q _LACY_FISH_LOADED
     return
 end
-set --erase _lacy_fish_major
+
+# Require Fish 3.1+ for bind -M and commandline -f
+set -l _lacy_fish_v (string match -r -- '^(\d+)\.(\d+)' $version)
+if not set -q _lacy_fish_v[3]; or test $_lacy_fish_v[2] -lt 3; or test $_lacy_fish_v[2] -eq 3 -a $_lacy_fish_v[3] -lt 1
+    echo "Lacy Shell: Fish 3.1+ is required. You have: $version." >&2
+    return
+end
+set -g _LACY_FISH_MAJOR $_lacy_fish_v[2]
+set -g _LACY_FISH_LOADED 1
 
 # ============================================================================
 # Paths
 # ============================================================================
 
-set -gx LACY_SHELL_HOME "$HOME/.lacy"
+set -q LACY_SHELL_HOME; or set -gx LACY_SHELL_HOME "$HOME/.lacy"
 set -gx LACY_SHELL_TYPE "fish"
 set -gx LACY_SHELL_ACTIVE 1
-set -gx LACY_SHELL_DIR (dirname (realpath (status filename) 2>/dev/null; or echo "$HOME/.lacy"))
+set -l _lacy_plugin (realpath (status filename) 2>/dev/null)
+or set _lacy_plugin "$LACY_SHELL_HOME/lacy.plugin.fish"
+set -g LACY_SHELL_DIR (dirname $_lacy_plugin)
 
 # ============================================================================
 # Source Fish modules
@@ -40,4 +50,5 @@ if test -d "$_lacy_fish_dir"
     source "$_lacy_fish_dir/prompt.fish"
 else
     echo "Lacy Shell: lib/fish not found at $_lacy_fish_dir" >&2
+    set -e _LACY_FISH_LOADED
 end

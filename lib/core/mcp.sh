@@ -27,7 +27,7 @@ try:
         print(v if isinstance(v, str) else json.dumps(v))
 except: pass" 2>/dev/null
     else
-        # Grep fallback — handles simple "key": "value" and "key": true/false/number
+        # Grep fallback: handles simple "key": "value" and "key": true/false/number
         local val
         val=$(printf '%s' "$json" | grep -o "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed "s/\"${field}\"[[:space:]]*:[[:space:]]*\"//" | sed 's/"$//')
         if [[ -n "$val" ]]; then
@@ -67,7 +67,7 @@ try:
         print(obj if isinstance(obj, str) else json.dumps(obj))
 except: pass" 2>/dev/null
     else
-        # No structured parser available — return empty
+        # No structured parser available: return empty
         return 1
     fi
 }
@@ -96,12 +96,12 @@ _lacy_render_markdown() {
     fi
 
     case "$_LACY_MD_RENDERER" in
-        glow)  printf '%s\n' "$text" | glow -s dark ;;
+        glow)  printf '%s\n' "$text" | glow ;;
         basic) _lacy_render_markdown_basic "$text" ;;
     esac
 }
 
-# Minimal markdown rendering via sed — bold, headers, inline code, rules.
+# Minimal markdown rendering via sed: bold, headers, inline code, rules.
 # Uses literal escape chars (via $'') for BSD/GNU sed portability.
 _lacy_render_markdown_basic() {
     local bold=$'\e[1m' nobold=$'\e[22m'
@@ -122,7 +122,74 @@ _lacy_render_markdown_basic() {
 # Tool Command Execution
 # ============================================================================
 
-# Run a tool command safely — splits command string into array to avoid eval.
+# Split a command string into words, honoring quotes but nothing else:
+# '...' is literal, "..." allows \" \\ \$ \` escapes, a backslash outside
+# quotes escapes the next character, and unquoted blanks separate words.
+# Nothing is expanded or executed: $VAR, $(...), backticks, ~, globs, and
+# ; | & all stay literal text.
+# Sets _LACY_CMD_ARGV. Returns 1 on an unbalanced quote or an empty command.
+_LACY_CMD_ARGV=()
+_lacy_split_cmd() {
+    local s="$1" word="" c="" next="" q="" have=false
+    local i=0 n=${#1}
+    _LACY_CMD_ARGV=()
+    while (( i < n )); do
+        c="${s:$i:1}"
+        if [[ "$q" == "'" ]]; then
+            if [[ "$c" == "'" ]]; then
+                q=""
+            else
+                word+="$c"
+            fi
+        elif [[ "$q" == '"' ]]; then
+            if [[ "$c" == '"' ]]; then
+                q=""
+            elif [[ "$c" == "\\" ]] && (( i + 1 < n )); then
+                next="${s:$(( i + 1 )):1}"
+                if [[ "$next" == '"' || "$next" == "\\" || "$next" == '$' || "$next" == '`' ]]; then
+                    word+="$next"
+                    i=$(( i + 1 ))
+                else
+                    word+="$c"
+                fi
+            else
+                word+="$c"
+            fi
+        else
+            case "$c" in
+                " "|$'\t'|$'\n')
+                    if [[ "$have" == true ]]; then
+                        _LACY_CMD_ARGV+=("$word")
+                        word=""
+                        have=false
+                    fi
+                    ;;
+                "'"|'"')
+                    q="$c"
+                    have=true
+                    ;;
+                "\\")
+                    if (( i + 1 < n )); then
+                        i=$(( i + 1 ))
+                        word+="${s:$i:1}"
+                        have=true
+                    fi
+                    ;;
+                *)
+                    word+="$c"
+                    have=true
+                    ;;
+            esac
+        fi
+        i=$(( i + 1 ))
+    done
+    [[ -z "$q" ]] || return 1
+    [[ "$have" == true ]] && _LACY_CMD_ARGV+=("$word")
+    (( ${#_LACY_CMD_ARGV[@]} > 0 ))
+}
+
+# Run a tool command without eval. The command string is split with
+# _lacy_split_cmd, and the query is always passed as one final argument.
 # Usage: _lacy_run_tool_cmd "cmd string" "query"
 _lacy_run_tool_cmd() {
     local cmd_str="$1"
@@ -131,12 +198,12 @@ _lacy_run_tool_cmd() {
         echo "  No tool command configured." >&2
         return 127
     fi
-    local -a cmd_parts
-    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-        cmd_parts=( ${=cmd_str} )
-    else
-        read -ra cmd_parts <<< "$cmd_str"
+    if ! _lacy_split_cmd "$cmd_str"; then
+        echo "  Could not read the tool command (unbalanced quotes): ${cmd_str}" >&2
+        return 127
     fi
+    local -a cmd_parts
+    cmd_parts=("${_LACY_CMD_ARGV[@]}")
     "${cmd_parts[@]}" "$query"
 }
 
@@ -190,7 +257,7 @@ _lacy_tool_list_joined() {
     printf '%s' "${joined%, }"
 }
 
-# Tool registry — function-based for maximum portability
+# Tool registry: function-based for maximum portability
 # Usage: cmd=$(lacy_tool_cmd <tool_name>)
 lacy_tool_cmd() {
     case "$1" in
@@ -211,10 +278,7 @@ lacy_tool_cmd() {
 # Active tool (set during install or via config)
 : "${LACY_ACTIVE_TOOL:=""}"
 
-# Last resume command (set after each successful agent query)
-LACY_LAST_RESUME_CMD=""
-
-# Resume command registry — returns the command to resume a conversation
+# Resume command registry: returns the command to resume a conversation
 # Usage: cmd=$(lacy_resume_cmd <tool_name>)
 lacy_resume_cmd() {
     case "$1" in
@@ -242,22 +306,26 @@ lacy_resume_cmd() {
     esac
 }
 
-# Print resume hint after successful agent query
+# Resume hint for a failed query: the command that reopens the conversation.
 # Usage: _lacy_print_resume_hint <tool_name>
 _lacy_print_resume_hint() {
-    local tool="$1"
     local resume_cmd
-    resume_cmd=$(lacy_resume_cmd "$tool")
-
-    if [[ -n "$resume_cmd" ]]; then
-        LACY_LAST_RESUME_CMD="$resume_cmd"
-        lacy_print_color 238 "$resume_cmd"
-        # Persist for cross-shell resume (lacy /resume in a new shell)
-        _lacy_save_last_session
-    fi
+    resume_cmd=$(lacy_resume_cmd "$1")
+    [[ -n "$resume_cmd" ]] && lacy_print_color 238 "  Resume: ${resume_cmd}"
+    return 0
 }
 
-# Format tool error output — detects JSON error blobs and prints a clean message.
+# Guidance after a failed query: the resume command when there is one, then
+# where to look next. Marks the failure as explained so callers stay quiet.
+# Usage: _lacy_print_failure_hints <tool_name>
+_lacy_print_failure_hints() {
+    _lacy_print_resume_hint "$1"
+    lacy_print_color 238 "  Check your setup: lacy doctor"
+    lacy_print_color 238 "  Switch tools:     tool set <name>"
+    _LACY_QUERY_GUIDED=true
+}
+
+# Format tool error output: detects JSON error blobs and prints a clean message.
 # Returns 0 if an error was detected and formatted, 1 if output is not a tool error.
 # Usage: lacy_format_tool_error "$output" "$tool_name"
 lacy_format_tool_error() {
@@ -273,7 +341,7 @@ lacy_format_tool_error() {
 
     [[ "$is_error" == "true" ]] || return 1
 
-    # We have an error — format it nicely
+    # We have an error: format it nicely
     local red=196
     local dim=238
     local yellow=220
@@ -319,7 +387,7 @@ _lacy_strip_leading_noise() {
     printf '%s' "$output"
 }
 
-# Normalize claude JSON output — handles startup noise, JSON arrays, and NDJSON.
+# Normalize claude JSON output: handles startup noise, JSON arrays, and NDJSON.
 # Claude --output-format json wraps all events in a JSON array: [{init},{assistant},{result}]
 # This extracts the last element (the result object) so downstream parsing works.
 _lacy_claude_normalize_output() {
@@ -334,7 +402,7 @@ _lacy_claude_normalize_output() {
     done
     [[ -z "$stripped" ]] && stripped="$output"
 
-    # JSON array — extract the last element (the result object)
+    # JSON array: extract the last element (the result object)
     if [[ "$stripped" == "["* ]]; then
         local last_obj=""
         if command -v jq >/dev/null 2>&1; then
@@ -353,159 +421,95 @@ except: pass" 2>/dev/null)
     printf '%s' "$stripped"
 }
 
-# Append a query entry to the query log (rotates at ~1000 lines or ~1 MB).
+# Append the raw query to ~/.lacy/logs/queries.log. Off unless
+# logging.queries is true in config.yaml. Only the question as typed is
+# written (no terminal context, no cwd). The file is owner-only (0600) and
+# rotates to its last 1000 lines past ~1 MB.
 # Usage: _lacy_log_query "tool_name" "query_text"
 _lacy_log_query() {
+    [[ "${LACY_LOG_QUERIES:-false}" == "true" ]] || return 0
     local tool="$1"
     local query="$2"
     local log_dir="${LACY_SHELL_HOME}/logs"
     local log_file="${log_dir}/queries.log"
-
-    mkdir -p "$log_dir" 2>/dev/null || return 0
-
     local ts
     ts=$(date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo "unknown")
-    local escaped_query="${query//$'\n'/\\n}"
-    printf '%s\t%s\t%s\n' "$ts" "$tool" "$escaped_query" >> "$log_file" 2>/dev/null || true
-
-    # Rotate: keep last 1000 lines if file is large
-    local size
-    if [[ -f "$log_file" ]]; then
+    query="${query//$'\n'/\\n}"
+    query="${query//$'\t'/\\t}"
+    (
+        umask 077
+        mkdir -p "$log_dir" 2>/dev/null || exit 0
+        chmod 700 "$log_dir" 2>/dev/null
+        printf '%s\t%s\t%s\n' "$ts" "$tool" "$query" >> "$log_file" 2>/dev/null || exit 0
+        chmod 600 "$log_file" 2>/dev/null
         size=$(wc -c < "$log_file" 2>/dev/null || echo 0)
         if (( size > 1048576 )); then
-            local tmp
-            tmp=$(mktemp) && tail -n 1000 "$log_file" > "$tmp" && mv "$tmp" "$log_file" 2>/dev/null || true
+            tmp=$(mktemp "${log_dir}/.queries.XXXXXX" 2>/dev/null) || exit 0
+            tail -n 1000 "$log_file" > "$tmp" 2>/dev/null && cat "$tmp" > "$log_file"
+            command rm -f "$tmp"
         fi
-    fi
+    )
 }
 
-# Send query to AI agent (configurable tool or fallback)
+# Print the one "no AI tool" message, with an install line for every tool.
+_lacy_print_no_tool() {
+    local t hint row
+    echo ""
+    lacy_print_color 196 "  No AI tool found. Lacy needs one to answer questions."
+    echo ""
+    for t in "${LACY_TOOL_LIST[@]}"; do
+        hint=$(lacy_tool_install_cmd "$t")
+        if [[ "$t" == "lash" ]]; then
+            printf -v row '    %-10s %s   (recommended)' "$t" "$hint"
+            lacy_print_color 34 "$row"
+        else
+            printf -v row '    %-10s %s' "$t" "$hint"
+            lacy_print_color 238 "$row"
+        fi
+    done
+    echo ""
+    lacy_print_color 75 "  Then run: lacy setup"
+    lacy_print_color 75 "  Docs:     ${LACY_DOCS_URL}"
+    echo ""
+}
+
+# Send a query to the AI agent.
+# Returns 0 on success, the tool's exit code on failure (>= 128 for signals).
+# Sets _LACY_QUERY_GUIDED=true when it already told the user what to do next.
 lacy_shell_query_agent() {
     local query="$1"
+    local raw_query="$1"
     local tool="${LACY_ACTIVE_TOOL}"
     # Declared once. A second `local exit_code` in the same scope prints
     # "exit_code=N" in zsh and clobbers pipestatus.
     local exit_code=0
-
-    # Prepend delta-based terminal context (cwd, git, exit code, recent commands).
-    # Only includes what changed since the last query — zero overhead when idle.
-    # Uses result variable (not subshell) so state resets propagate.
-    _lacy_build_query_context "$query"
-    query="$_LACY_CTX_RESULT"
+    _LACY_QUERY_GUIDED=false
 
     # Auto-detect if not set
-    local _auto_detected=false
     if [[ -z "$tool" ]]; then
         local t
         for t in "${LACY_TOOL_LIST[@]}"; do
             if command -v "$t" >/dev/null 2>&1; then
                 tool="$t"
-                _auto_detected=true
                 break
             fi
         done
     fi
 
-    # If still no tool, try API fallback
     if [[ -z "$tool" ]]; then
-        if lacy_shell_check_api_keys; then
-            local temp_file
-            temp_file=$(mktemp)
-            cat > "$temp_file" << EOF
-Query: $query
-EOF
-            echo ""
-            lacy_start_spinner
-            lacy_shell_send_to_ai_streaming "$temp_file" "$query"
-            exit_code=$?
-            lacy_stop_spinner
-            command rm -f "$temp_file"
-            echo ""
-            return $exit_code
-        fi
-
-        echo ""
-        printf '\e[38;5;196m  No AI tool detected.\e[0m Lacy needs an AI CLI to handle queries.\n'
-        echo ""
-        printf '\e[1m  Supported tools:\e[0m\n'
-        echo ""
-        printf '    \e[38;5;34m%-12s\e[0m %s\n' "lash" "$(lacy_tool_install_cmd lash)        (recommended)"
-        local _t
-        for _t in "${LACY_TOOL_LIST[@]}"; do
-            [[ "$_t" == "lash" ]] && continue
-            printf '    \e[38;5;238m%-12s\e[0m %s\n' "$_t" "$(lacy_tool_install_cmd "$_t")"
-        done
-        echo ""
-        printf '  \e[38;5;75mThen run:\e[0m  lacy setup\n'
-        printf '  \e[38;5;75mDocs:\e[0m      %s\n' "$LACY_DOCS_URL"
-        echo ""
-
-        # Offer to install lash interactively if terminal is available
-        local can_prompt=false
-        if [[ -t 0 ]]; then
-            can_prompt=true
-        elif [[ -c /dev/tty ]]; then
-            can_prompt=true
-        fi
-
-        if [[ "$can_prompt" == true ]]; then
-            local install_now=""
-            printf '  Install \e[38;5;34mlash\e[0m now? (AI coding agent — lash.lacy.sh)\n'
-            echo ""
-            if [[ -t 0 ]]; then
-                read -p "  [Y/n]: " install_now
-            else
-                read -p "  [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
-            fi
-
-            if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
-                echo ""
-                if command -v npm >/dev/null 2>&1; then
-                    echo "  Installing lash..."
-                    if npm install -g lashcode; then
-                        echo ""
-                        printf '  \e[38;5;34m✓\e[0m lash installed! Re-running your query...\n'
-                        echo ""
-                        tool="lash"
-                    else
-                        echo ""
-                        printf '  \e[38;5;196m✗\e[0m Installation failed. Try manually: npm install -g lashcode\n'
-                        return 1
-                    fi
-                elif command -v brew >/dev/null 2>&1; then
-                    echo "  Installing lash..."
-                    if brew tap lacymorrow/tap && brew install lash; then
-                        echo ""
-                        printf '  \e[38;5;34m✓\e[0m lash installed! Re-running your query...\n'
-                        echo ""
-                        tool="lash"
-                    else
-                        echo ""
-                        printf '  \e[38;5;196m✗\e[0m Installation failed. Try manually: brew install lacymorrow/tap/lash\n'
-                        return 1
-                    fi
-                else
-                    printf '  \e[38;5;196m✗\e[0m Neither npm nor brew found. Install one, then run:\n'
-                    echo "    npm install -g lashcode"
-                    return 1
-                fi
-            else
-                return 1
-            fi
-        else
-            return 1
-        fi
+        _lacy_print_no_tool
+        _LACY_QUERY_GUIDED=true
+        return 1
     fi
 
     local cmd
     if [[ "$tool" == "custom" ]]; then
-        if [[ -z "$LACY_CUSTOM_TOOL_CMD" ]]; then
-            echo "Error: custom tool selected but no command configured."
-            echo "Set one with: tool set custom \"your-command -flags\""
-            echo "Or add to ~/.lacy/config.yaml:"
-            echo "  agent_tools:"
-            echo "    active: custom"
-            echo "    custom_command: \"your-command -flags\""
+        if [[ -z "${LACY_CUSTOM_TOOL_CMD//[[:space:]]/}" ]]; then
+            echo ""
+            lacy_print_color 196 "  The custom tool is selected but has no command."
+            lacy_print_color 238 "  Set one with: tool set custom \"your-command --flags\""
+            echo ""
+            _LACY_QUERY_GUIDED=true
             return 1
         fi
         cmd="$LACY_CUSTOM_TOOL_CMD"
@@ -516,12 +520,22 @@ EOF
             lacy_print_color 196 "  Unknown tool '${tool}'. Known: $(_lacy_tool_list_joined)"
             lacy_print_color 238 "  Pick one with: tool set <name>"
             echo ""
+            _LACY_QUERY_GUIDED=true
             return 1
         fi
     fi
 
     # The tool binary must exist before anything is sent
-    local _tool_bin="${cmd%% *}"
+    local _tool_bin=""
+    if ! _lacy_split_cmd "$cmd"; then
+        echo ""
+        lacy_print_color 196 "  Could not read the custom command (unbalanced quotes): ${cmd}"
+        lacy_print_color 238 "  Fix it with: tool set custom \"your-command --flags\""
+        echo ""
+        _LACY_QUERY_GUIDED=true
+        return 1
+    fi
+    for _tool_bin in "${_LACY_CMD_ARGV[@]}"; do break; done
     if ! command -v "$_tool_bin" >/dev/null 2>&1; then
         echo ""
         if [[ "$tool" == "custom" ]]; then
@@ -534,16 +548,18 @@ EOF
         fi
         lacy_print_color 238 "  Or switch: tool set <name>"
         echo ""
+        _LACY_QUERY_GUIDED=true
         return 1
     fi
 
-    # Log the query (tool name + input text, not the AI response)
-    _lacy_log_query "$tool" "$query"
+    # Opt-in query log (logging.queries): the question as typed, nothing else
+    _lacy_log_query "$tool" "$raw_query"
 
-    # Show which tool was auto-detected
-    if [[ "$_auto_detected" == true ]]; then
-        lacy_print_color 238 "  Using $tool (auto-detected)"
-    fi
+    # Prepend delta-based terminal context (cwd, git, exit code, recent commands).
+    # Only includes what changed since the last query. Uses a result variable
+    # (not a subshell) so state resets propagate.
+    _lacy_build_query_context "$query"
+    query="$_LACY_CTX_RESULT"
 
     # === Preheat: lash/opencode background server ===
     local _blank_printed=false
@@ -552,12 +568,12 @@ EOF
         _blank_printed=true
         lacy_start_spinner
         if lacy_preheat_server_is_healthy || lacy_preheat_server_start "$tool"; then
-            local server_result
-            server_result=$(lacy_preheat_server_query "$query")
+            # Called directly, not inside $(...): a session created or reset
+            # during the request stays visible to this shell afterwards.
+            _lacy_preheat_server_query_into "$query"
             exit_code=$?
             lacy_stop_spinner
-            # Restore session ID from file (lost in subshell)
-            lacy_preheat_server_restore_session
+            local server_result="$_LACY_SERVER_RESULT"
             case "$exit_code" in
                 "$LACY_SERVER_QUERY_OK")
                     while [[ "$server_result" == $'\n'* ]]; do server_result="${server_result#$'\n'}"; done
@@ -566,7 +582,7 @@ EOF
                     else
                         lacy_print_color 238 "  (no text response)"
                     fi
-                    _lacy_print_resume_hint "$tool"
+                    _lacy_save_last_session
                     echo ""
                     return 0
                     ;;
@@ -578,21 +594,21 @@ EOF
                     ;;
                 "$LACY_SERVER_QUERY_LOST")
                     lacy_print_color 196 "  Lost the connection to ${tool} mid-request."
-                    [[ -n "$LACY_PREHEAT_SERVER_SESSION_ID" ]] && \
-                        lacy_print_color 238 "  Check on it: ${tool} --session ${LACY_PREHEAT_SERVER_SESSION_ID}"
+                    _lacy_print_failure_hints "$tool"
                     echo ""
                     return 1
                     ;;
                 "$LACY_SERVER_QUERY_HTTP_ERROR")
                     _lacy_print_server_error "$tool" "$server_result"
+                    _lacy_print_failure_hints "$tool"
+                    echo ""
                     return 1
                     ;;
                 "$LACY_SERVER_QUERY_SESSION_GONE")
-                    # The subshell already reset its copy; mirror it here
-                    LACY_PREHEAT_SERVER_SESSION_ID=""
-                    : > "$LACY_PREHEAT_SERVER_SESSION_FILE"
+                    # The query function already dropped the session in this shell
                     lacy_print_color 196 "  That session is gone. Send it again to start a new one."
                     echo ""
+                    _LACY_QUERY_GUIDED=true
                     return 1
                     ;;
             esac
@@ -606,24 +622,49 @@ EOF
 
     # === Preheat: claude session reuse ===
     if [[ "$tool" == "claude" ]]; then
-        local claude_cmd
+        local claude_cmd json_output result_text
+        # Claude may prompt on the terminal; without one (CI, tests) use /dev/null
+        local _claude_stdin=/dev/null
+        ( : </dev/tty ) 2>/dev/null && _claude_stdin=/dev/tty
         claude_cmd=$(lacy_preheat_claude_build_cmd)
         echo ""
         lacy_start_spinner
-        local json_output
-        json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
+        json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" <"$_claude_stdin" 2>&1)
         exit_code=$?
         lacy_stop_spinner
+
+        # Ctrl+C or another signal: stop. Keep the session and never re-run.
+        if (( exit_code >= LACY_SIGNAL_EXIT_THRESHOLD )); then
+            echo ""
+            return "$exit_code"
+        fi
+
+        # A failed --resume (expired or missing session) gets one fresh retry
+        if (( exit_code != 0 )) && [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]]; then
+            lacy_preheat_claude_reset_session
+            claude_cmd=$(lacy_preheat_claude_build_cmd)
+            lacy_start_spinner
+            json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" <"$_claude_stdin" 2>&1)
+            exit_code=$?
+            lacy_stop_spinner
+            if (( exit_code >= LACY_SIGNAL_EXIT_THRESHOLD )); then
+                echo ""
+                return "$exit_code"
+            fi
+        fi
 
         # Normalize: strip noise, extract last element from JSON array
         json_output=$(_lacy_claude_normalize_output "$json_output")
 
-        if [[ $exit_code -eq 0 ]]; then
-            # Check for structured errors (e.g. invalid API key)
-            if lacy_format_tool_error "$json_output" "$tool"; then
-                return 1
-            fi
-            local result_text
+        # Structured errors (e.g. invalid API key), even with exit code 0
+        if lacy_format_tool_error "$json_output" "$tool"; then
+            _lacy_print_failure_hints "$tool"
+            echo ""
+            (( exit_code == 0 )) && exit_code=1
+            return "$exit_code"
+        fi
+
+        if (( exit_code == 0 )); then
             result_text=$(lacy_preheat_claude_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
             if [[ -n "$result_text" ]]; then
@@ -632,53 +673,21 @@ EOF
                 printf '%s\n' "$json_output"
             fi
             lacy_preheat_claude_capture_session "$json_output"
-            _lacy_print_resume_hint "$tool"
+            _lacy_save_last_session
             echo ""
             return 0
-        elif [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]]; then
-            lacy_preheat_claude_reset_session
-            claude_cmd=$(lacy_preheat_claude_build_cmd)
-            lacy_start_spinner
-            json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" </dev/tty 2>&1)
-            exit_code=$?
-            lacy_stop_spinner
-
-            # Normalize: strip noise, extract last element from JSON array
-            json_output=$(_lacy_claude_normalize_output "$json_output")
-
-            # Check for structured errors before processing
-            if lacy_format_tool_error "$json_output" "$tool"; then
-                return 1
-            fi
-
-            if [[ $exit_code -eq 0 ]]; then
-                local result_text
-                result_text=$(lacy_preheat_claude_extract_result "$json_output")
-                while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
-                if [[ -n "$result_text" ]]; then
-                    _lacy_render_markdown "$result_text"
-                else
-                    printf '%s\n' "$json_output"
-                fi
-                lacy_preheat_claude_capture_session "$json_output"
-                _lacy_print_resume_hint "$tool"
-                echo ""
-                return 0
-            fi
-            lacy_format_tool_error "$json_output" "$tool" || printf '%s\n' "$json_output"
-            echo ""
-            return $exit_code
-        else
-            lacy_format_tool_error "$json_output" "$tool" || printf '%s\n' "$json_output"
-            echo ""
-            return $exit_code
         fi
+
+        printf '%s\n' "$json_output"
+        _lacy_print_failure_hints "$tool"
+        echo ""
+        return "$exit_code"
     fi
 
     # === Gemini session reuse ===
     if [[ "$tool" == "gemini" ]]; then
         echo ""
-        local json_output
+        local json_output result_text
         lacy_start_spinner
         json_output=$(_lacy_gemini_query_exec "$query")
         exit_code=$?
@@ -686,17 +695,26 @@ EOF
         # Restore session ID lost in subshell
         lacy_preheat_gemini_restore_session
 
-        if [[ $exit_code -ne 0 && -n "$LACY_GEMINI_SESSION_ID" ]]; then
-            # --resume failed (session expired/missing) — retry without it
+        # Ctrl+C or another signal: stop. Keep the session and never re-run.
+        if (( exit_code >= LACY_SIGNAL_EXIT_THRESHOLD )); then
+            echo ""
+            return "$exit_code"
+        fi
+
+        if (( exit_code != 0 )) && [[ -n "$LACY_GEMINI_SESSION_ID" ]]; then
+            # --resume failed (session expired/missing): one retry without it
             lacy_preheat_gemini_reset_session
             lacy_start_spinner
             json_output=$(_lacy_gemini_query_exec "$query")
             exit_code=$?
             lacy_stop_spinner
+            if (( exit_code >= LACY_SIGNAL_EXIT_THRESHOLD )); then
+                echo ""
+                return "$exit_code"
+            fi
         fi
 
-        if [[ $exit_code -eq 0 ]]; then
-            local result_text
+        if (( exit_code == 0 )); then
             result_text=$(lacy_preheat_gemini_extract_result "$json_output")
             while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
             if [[ -n "$result_text" ]]; then
@@ -705,7 +723,10 @@ EOF
                 printf '%s\n' "$json_output"
             fi
             lacy_preheat_gemini_capture_session "$json_output"
-            _lacy_print_resume_hint "$tool"
+            _lacy_save_last_session
+        else
+            lacy_print_color 196 "  ${tool} exited with code ${exit_code}"
+            _lacy_print_failure_hints "$tool"
         fi
         echo ""
         return $exit_code
@@ -732,7 +753,7 @@ EOF
     lacy_stop_spinner
 
     if [[ "$exit_code" -eq 0 ]]; then
-        _lacy_print_resume_hint "$tool"
+        _lacy_save_last_session
     elif [[ "$exit_code" -ge "$LACY_SIGNAL_EXIT_THRESHOLD" ]]; then
         # Signal (Ctrl+C and friends): nothing to explain
         command rm -f "$_out_file" "$_err_file"
@@ -794,8 +815,7 @@ _lacy_print_tool_failure() {
     IFS= read -r first_line < "$out_file" 2>/dev/null
     if [[ ! -s "$err_file" ]] && [[ "$(wc -l < "$out_file" 2>/dev/null | tr -d ' ')" == "1" ]] && \
        lacy_format_tool_error "$first_line" "$tool" >/dev/null 2>&1; then
-        lacy_print_color 238 "  Check your setup: lacy doctor"
-        lacy_print_color 238 "  Switch tools:     tool set <name>"
+        _lacy_print_failure_hints "$tool"
         return 0
     fi
     echo ""
@@ -809,8 +829,7 @@ _lacy_print_tool_failure() {
         done < <(awk 1 "$out_file" "$err_file" 2>/dev/null | tail -n 10 | sed $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g')
     fi
     echo ""
-    lacy_print_color 238 "  Check your setup: lacy doctor"
-    lacy_print_color 238 "  Switch tools:     tool set <name>"
+    _lacy_print_failure_hints "$tool"
 }
 
 # Pull a readable message out of a lash/opencode error body.
@@ -845,67 +864,3 @@ _lacy_print_server_error() {
     fi
     echo ""
 }
-
-# Check if API keys are configured (used by mcp.sh)
-lacy_shell_check_api_keys() {
-    [[ -n "$LACY_SHELL_API_OPENAI" || -n "$LACY_SHELL_API_ANTHROPIC" || -n "$OPENAI_API_KEY" || -n "$ANTHROPIC_API_KEY" ]]
-}
-
-# ============================================================================
-# Direct API Fallback (when no CLI tool installed)
-# ============================================================================
-
-lacy_shell_send_to_ai_streaming() {
-    local input_file="$1"
-    local query="$2"
-
-    local provider="${LACY_SHELL_PROVIDER:-$LACY_SHELL_DEFAULT_PROVIDER}"
-    local api_key_openai="${LACY_SHELL_API_OPENAI:-$OPENAI_API_KEY}"
-    local api_key_anthropic="${LACY_SHELL_API_ANTHROPIC:-$ANTHROPIC_API_KEY}"
-
-    if [[ "$provider" == "anthropic" && -n "$api_key_anthropic" ]]; then
-        lacy_shell_query_anthropic "$input_file" "$api_key_anthropic"
-    elif [[ -n "$api_key_openai" ]]; then
-        lacy_shell_query_openai "$input_file" "$api_key_openai"
-    elif [[ -n "$api_key_anthropic" ]]; then
-        lacy_shell_query_anthropic "$input_file" "$api_key_anthropic"
-    else
-        echo "Error: No API keys configured"
-        return 1
-    fi
-}
-
-lacy_shell_query_openai() {
-    local input_file="$1"
-    local api_key="$2"
-    local content
-    content=$(_lacy_json_escape_str "$(cat "$input_file")")
-
-    local response
-    response=$(curl -s -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $api_key" \
-        -d "{\"model\":\"${LACY_API_MODEL_OPENAI}\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_tokens\":1500}" \
-        "$LACY_API_URL_OPENAI")
-
-    _lacy_json_query "$response" '.choices[0].message.content'
-}
-
-lacy_shell_query_anthropic() {
-    local input_file="$1"
-    local api_key="$2"
-    local content
-    content=$(_lacy_json_escape_str "$(cat "$input_file")")
-
-    local response
-    response=$(curl -s -H "Content-Type: application/json" \
-        -H "x-api-key: $api_key" \
-        -H "anthropic-version: 2023-06-01" \
-        -d "{\"model\":\"${LACY_API_MODEL_ANTHROPIC}\",\"max_tokens\":1500,\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}]}" \
-        "$LACY_API_URL_ANTHROPIC")
-
-    _lacy_json_query "$response" '.content[0].text'
-}
-
-# Stub for MCP init (no-op, lash handles MCP)
-lacy_shell_init_mcp() { :; }
-lacy_shell_cleanup_mcp() { :; }

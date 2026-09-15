@@ -7,37 +7,84 @@
 #   curl -fsSL https://lacy.sh/install | bash
 #   npx lacy
 #   brew install lacymorrow/tap/lacy
+#
+# Runs on bash 3.2 (macOS /bin/bash) and newer.
+#
+# Environment:
+#   LACY_NO_NODE=1       Skip the Node installer
+#   NO_COLOR=1           Plain output
+#   DO_NOT_TRACK=1       No install analytics
+#   LACY_REPO_URL        Clone from another git URL (tests use file://)
+#   LACY_REF             Install this branch, tag, or commit sha instead of
+#                        the latest release tag (CI installs the PR commit)
+#   LACY_TARBALL_URL     Archive base for the no-git fallback
+#                        (<base>/tags/<tag>.tar.gz or <base>/heads/main.tar.gz)
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m' # No Color
+# A dumb terminal renders escapes as garbage: treat it like NO_COLOR.
+# Not exported, so child processes are unaffected.
+if [[ "${TERM:-}" == "dumb" && -z "${NO_COLOR:-}" ]]; then NO_COLOR=1; fi
+if [[ -n "${NO_COLOR:-}" ]]; then
+    RED="" GREEN="" YELLOW="" BLUE="" MAGENTA="" CYAN="" BOLD="" DIM="" NC=""
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    MAGENTA='\033[0;35m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    DIM='\033[2m'
+    NC='\033[0m'
+fi
 
-# Installation directory
 INSTALL_DIR="${HOME}/.lacy"
-REPO_URL="https://github.com/lacymorrow/lacy.git"
-TARBALL_URL="https://github.com/lacymorrow/lacy/archive/refs/heads"
 CONFIG_FILE="${INSTALL_DIR}/config.yaml"
+DEFAULT_REPO_URL="https://github.com/lacymorrow/lacy.git"
+REPO_URL="${LACY_REPO_URL:-$DEFAULT_REPO_URL}"
+if [[ -n "${LACY_TARBALL_URL:-}" ]]; then
+    TARBALL_BASE="$LACY_TARBALL_URL"
+elif [[ "$REPO_URL" == "$DEFAULT_REPO_URL" ]]; then
+    TARBALL_BASE="https://github.com/lacymorrow/lacy/archive/refs"
+else
+    TARBALL_BASE=""
+fi
 
-# Release channel (set via --beta, --channel, or LACY_CHANNEL env var)
-LACY_CHANNEL="${LACY_CHANNEL:-latest}"
+# Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
+TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose amp aider)
 
-# Analytics — lightweight, anonymous install tracking via Umami
-# No PII collected. Respects DO_NOT_TRACK. See: https://umami.is
+# Never let git stop to ask for credentials (a bad URL on GitHub asks).
+export GIT_TERMINAL_PROMPT=0
+
+SELECTED_TOOL=""
+CUSTOM_COMMAND=""
+DETECTED_SHELL=""
+MODE=""
+LAST_ERROR=""
+STAGE_DIR=""
+
+cleanup() {
+    [[ -n "$STAGE_DIR" && -e "$STAGE_DIR" ]] && command rm -rf "$STAGE_DIR"
+    return 0
+}
+trap cleanup EXIT
+
+info()  { printf "${BLUE}%s${NC}\n" "$1"; }
+ok()    { printf "${GREEN}✓${NC} %s\n" "$1"; }
+warn()  { printf "${YELLOW}%s${NC}\n" "$1"; }
+error() { printf "${RED}%s${NC}\n" "$1" >&2; }
+
+# ============================================================================
+# Analytics: anonymous install counts via Umami. No PII. Respects DO_NOT_TRACK.
+# ============================================================================
+
 UMAMI_URL="${LACY_UMAMI_URL:-https://analytics.lacy.sh}"
 UMAMI_WEBSITE_ID="${LACY_UMAMI_WEBSITE_ID:-577521d7-3db7-4a77-a45c-3c97f21b5322}"
 
 track_event() {
-    [[ "${DO_NOT_TRACK:-}" == "1" ]] && return
-    [[ "${LACY_NO_TELEMETRY:-}" == "1" ]] && return
+    [[ "${DO_NOT_TRACK:-}" == "1" ]] && return 0
+    [[ "${LACY_NO_TELEMETRY:-}" == "1" ]] && return 0
 
     local event_name="${1:-install}"
     local method="${2:-curl}"
@@ -63,58 +110,105 @@ track_event() {
                     \"os\": \"$(uname -s 2>/dev/null || echo unknown)\",
                     \"arch\": \"$(uname -m 2>/dev/null || echo unknown)\",
                     \"shell\": \"${DETECTED_SHELL:-unknown}\",
-                    \"version\": \"${version:-unknown}\",
-                    \"channel\": \"${LACY_CHANNEL}\"
+                    \"version\": \"${version:-unknown}\"
                 }
             }
         }" >/dev/null 2>&1 &)
+    return 0
 }
 
-# Validate channel — alphanumeric, hyphens, dots only
-if [[ ! "$LACY_CHANNEL" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    printf "${RED}Invalid channel: %s${NC}\n" "$LACY_CHANNEL" >&2
-    exit 1
-fi
+# ============================================================================
+# Helpers
+# ============================================================================
 
-# Version — read from installed or repo package.json
 get_installed_version() {
-    local pkg_file="${INSTALL_DIR}/package.json"
+    local pkg_file="${1:-$INSTALL_DIR}/package.json"
     if [[ -f "$pkg_file" ]]; then
         grep '"version"' "$pkg_file" 2>/dev/null | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//'
     fi
 }
 
-# Selected tool (set during installation)
-SELECTED_TOOL=""
-CUSTOM_COMMAND=""
+# A directory only counts as Lacy when the plugin is actually there.
+is_lacy_tree() {
+    [[ -f "$1/lacy.plugin.zsh" && -f "$1/lib/core/constants.sh" ]]
+}
 
-# Detected shell (set during installation)
-DETECTED_SHELL=""
+is_installed() {
+    is_lacy_tree "$INSTALL_DIR"
+}
 
-# Detect user's login shell
+# Can we ask the user anything? True when stdin is a terminal, or when a
+# controlling terminal can actually be opened (curl | bash). A /dev/tty device
+# node existing is not enough: Docker and CI have one but cannot open it.
+_LACY_TTY=""
+can_prompt() {
+    if [[ -z "$_LACY_TTY" ]]; then
+        _LACY_TTY="none"
+        if [[ -t 0 ]]; then
+            _LACY_TTY="stdin"
+        elif ( exec </dev/tty ) 2>/dev/null; then
+            _LACY_TTY="tty"
+        fi
+    fi
+    [[ "$_LACY_TTY" != "none" ]]
+}
+
+# ask VAR "prompt": returns 1 without a terminal or on EOF (Ctrl+D).
+ask() {
+    local __var="$1" __prompt="$2" __reply=""
+    can_prompt || return 1
+    printf "%s" "$__prompt"
+    if [[ "$_LACY_TTY" == "stdin" ]]; then
+        IFS= read -r __reply || { printf "\n"; return 1; }
+    else
+        IFS= read -r __reply </dev/tty || { printf "\n"; return 1; }
+    fi
+    printf -v "$__var" '%s' "$__reply"
+}
+
+# run_with_timeout SECONDS CMD...: output discarded, 124 on timeout.
+run_with_timeout() {
+    local secs="$1" pid ticks=0
+    shift
+    "$@" >/dev/null 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [[ $ticks -ge $((secs * 10)) ]]; then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 124
+        fi
+        sleep 0.1
+        ticks=$((ticks + 1))
+    done
+    wait "$pid"
+}
+
+is_known_tool() {
+    local t
+    for t in "${TOOL_LIST[@]}"; do
+        [[ "$t" == "$1" ]] && return 0
+    done
+    return 1
+}
+
+# ============================================================================
+# Shell detection
+# ============================================================================
+
 detect_user_shell() {
-    if [[ -n "$LACY_FORCE_SHELL" ]]; then
+    if [[ -n "${LACY_FORCE_SHELL:-}" ]]; then
         DETECTED_SHELL="$LACY_FORCE_SHELL"
         return
     fi
 
-    local login_shell
-    login_shell=$(basename "${SHELL:-}")
-
-    case "$login_shell" in
+    case "$(basename "${SHELL:-}")" in
         zsh)  DETECTED_SHELL="zsh" ;;
         bash) DETECTED_SHELL="bash" ;;
         fish) DETECTED_SHELL="fish" ;;
         *)
-            # Detect from running process or what's available
-            if [[ -n "${BASH_VERSION:-}" ]]; then
-                DETECTED_SHELL="bash"
-            elif [[ -n "${ZSH_VERSION:-}" ]]; then
+            if command -v zsh >/dev/null 2>&1; then
                 DETECTED_SHELL="zsh"
-            elif command -v zsh >/dev/null 2>&1; then
-                DETECTED_SHELL="zsh"
-            elif command -v bash >/dev/null 2>&1; then
-                DETECTED_SHELL="bash"
             else
                 DETECTED_SHELL="bash"
             fi
@@ -122,11 +216,10 @@ detect_user_shell() {
     esac
 }
 
-# Get the RC file for the detected shell
 get_rc_file() {
     case "$DETECTED_SHELL" in
         bash)
-            # macOS uses .bash_profile for login shells
+            # macOS terminals start login shells, which read .bash_profile
             if [[ "$OSTYPE" == "darwin"* ]]; then
                 echo "${HOME}/.bash_profile"
             else
@@ -138,7 +231,6 @@ get_rc_file() {
     esac
 }
 
-# Get the plugin file for the detected shell
 get_plugin_file() {
     case "$DETECTED_SHELL" in
         bash) echo "lacy.plugin.bash" ;;
@@ -147,64 +239,48 @@ get_plugin_file() {
     esac
 }
 
-# Get the shell restart command
-get_shell_restart_cmd() {
-    case "$DETECTED_SHELL" in
-        bash) echo "bash -l" ;;
-        fish) echo "fish" ;;
-        *)    echo "zsh -l" ;;
-    esac
+# An uncommented line that sources a lacy plugin
+rc_has_plugin() {
+    [[ -f "$1" ]] && grep -Eq '^[[:space:]]*(source|\.)[[:space:]]+[^#]*lacy\.plugin\.(zsh|bash|fish)' "$1" 2>/dev/null
 }
 
-# Get the source command for the RC file
-get_source_hint() {
-    local rc_file
-    rc_file=$(get_rc_file)
-    echo "source $rc_file"
+# An uncommented line that puts ~/.lacy/bin on PATH
+rc_has_path() {
+    [[ -f "$1" ]] && grep -Eq '^[[:space:]]*[^#[:space:]][^#]*\.lacy/bin' "$1" 2>/dev/null
 }
 
-# Check if we should use Node installer
+# ============================================================================
+# Node installer
+# ============================================================================
+
 use_node_installer() {
-    # Skip Node installer if --bash flag is passed
-    [[ "$LACY_FORCE_BASH" == "1" ]] && return 1
-
-    # Check if npx is available and we have an interactive terminal
-    # Note: when piped (curl | bash), -t 0 is false but /dev/tty is still available
-    if command -v npx >/dev/null 2>&1 && { [[ -t 0 ]] || [[ -c /dev/tty ]]; }; then
-        return 0
-    fi
-    return 1
+    [[ "${LACY_NO_NODE:-}" == "1" || "${LACY_FORCE_BASH:-}" == "1" ]] && return 1
+    [[ -n "$MODE" || -n "$SELECTED_TOOL" ]] && return 1
+    command -v npx >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 || return 1
+    can_prompt
 }
 
-# Run Node installer via npx
+# Exits on success or Ctrl+C. Returns 1 to fall back to the bash installer.
 run_node_installer() {
-    local pkg="lacy@${LACY_CHANNEL}"
+    # Offline or a slow registry must not stall the install for minutes.
+    run_with_timeout 20 npm view lacy version || return 1
 
-    # Quietly check if package exists first
-    if ! npm view "$pkg" version >/dev/null 2>&1; then
-        return 1
+    local rc=0
+    if [[ "$_LACY_TTY" == "tty" ]]; then
+        npx --yes lacy@latest </dev/tty || rc=$?
+        # @clack/prompts puts the tty in raw mode; restore it if Node did not.
+        stty sane </dev/tty 2>/dev/null || true
+    else
+        npx --yes lacy@latest || rc=$?
+        stty sane 2>/dev/null || true
     fi
 
-    if [[ "$LACY_CHANNEL" != "latest" ]]; then
-        printf "${MAGENTA}Channel: ${LACY_CHANNEL}${NC}\n"
-    fi
-    printf "${BLUE}Using interactive installer...${NC}\n"
+    case "$rc" in
+        0)   exit 0 ;;
+        130) exit 130 ;;
+    esac
     printf "\n"
-    # Redirect stdin from /dev/tty so the Node process gets an interactive TTY
-    # even when this script is piped (curl | bash)
-    if npx --yes "$pkg" < /dev/tty; then
-        # Restore terminal state — the Node process uses @clack/prompts which
-        # toggles raw mode on the tty. If Node exits without restoring it
-        # (crash, SIGINT, etc.), the parent shell's tty is left corrupted.
-        stty sane 2>/dev/null
-        exit 0
-    fi
-
-    # npx failed for some reason, fall back
-    # Restore terminal state in case Node corrupted it before failing
-    stty sane 2>/dev/null
-    printf "\n"
-    printf "${YELLOW}Falling back to standard installer...${NC}\n"
+    warn "The interactive installer failed. Continuing with the standard installer."
     printf "\n"
     return 1
 }
@@ -220,389 +296,322 @@ print_banner() {
     printf "                  |___/  \n"
     printf "${NC}"
     printf "${CYAN}Talk directly to your shell${NC}\n"
-    local version
-    version=$(get_installed_version)
-    if [[ -n "$version" ]]; then
-        printf "${DIM}  v${version}${NC}\n"
-    fi
-    if [[ "$LACY_CHANNEL" != "latest" ]]; then
-        printf "${MAGENTA}${BOLD}  [${LACY_CHANNEL}]${NC}\n"
-    fi
     printf "\n"
 }
 
-# Check prerequisites
+# Only failures are printed.
 check_prerequisites() {
-    printf "${BLUE}Checking prerequisites...${NC}\n"
     local missing=0
 
-    # Check for the target shell
     case "$DETECTED_SHELL" in
         zsh)
-            if command -v zsh >/dev/null 2>&1; then
-                printf "  ${GREEN}✓${NC} zsh\n"
-            else
-                printf "  ${RED}✗${NC} zsh (required)\n"
+            if ! command -v zsh >/dev/null 2>&1; then
+                error "zsh is required but was not found."
                 missing=1
             fi
             ;;
         bash)
-            if command -v bash >/dev/null 2>&1; then
-                local bash_version user_bash
-                # Use the user's $SHELL if it's bash — on macOS, plain `bash` resolves
-                # to /bin/bash (3.2) even when the user has a newer bash as their shell
-                case "${SHELL:-}" in
-                    */bash) user_bash="$SHELL" ;;
-                    *)      user_bash="bash" ;;
-                esac
-                bash_version=$("$user_bash" -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || bash -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || echo "0")
-                if [[ "$bash_version" -ge 4 ]]; then
-                    printf "  ${GREEN}✓${NC} bash ${bash_version}+\n"
-                else
-                    printf "  ${RED}✗${NC} bash 4+ required (found bash ${bash_version})\n"
-                    printf "    ${DIM}Install with: brew install bash${NC}\n"
-                    missing=1
-                fi
-            else
-                printf "  ${RED}✗${NC} bash (required)\n"
+            local bash_version user_bash
+            # Plain `bash` on macOS is 3.2 even when $SHELL is a newer bash
+            case "${SHELL:-}" in
+                */bash) user_bash="$SHELL" ;;
+                *)      user_bash="bash" ;;
+            esac
+            bash_version=$("$user_bash" -c 'echo ${BASH_VERSINFO[0]}' 2>/dev/null || echo "0")
+            if [[ "$bash_version" -lt 4 ]]; then
+                error "Lacy needs bash 4 or newer (found bash ${bash_version}). Install it with: brew install bash"
                 missing=1
             fi
             ;;
     esac
 
-    # Check for curl
-    if command -v curl >/dev/null 2>&1; then
-        printf "  ${GREEN}✓${NC} curl\n"
-    else
-        printf "  ${RED}✗${NC} curl (required)\n"
+    if ! command -v git >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+        error "git or curl is required to download Lacy."
         missing=1
     fi
 
-    # Check for git (optional — curl fallback available)
-    if command -v git >/dev/null 2>&1; then
-        printf "  ${GREEN}✓${NC} git\n"
-    else
-        printf "  ${YELLOW}○${NC} git (not found, will use curl fallback)\n"
-    fi
-
-    printf "\n"
-
     if [[ $missing -eq 1 ]]; then
-        printf "${RED}Please install missing prerequisites and try again.${NC}\n"
         exit 1
     fi
 }
 
-# Detect installed AI CLI tools
-detect_tools() {
-    printf "${BLUE}Detecting AI CLI tools...${NC}\n"
-    local found=0
+# ============================================================================
+# AI tool selection
+# ============================================================================
 
-    for tool in lash claude opencode gemini codex hermes copilot amp; do
-        if command -v "$tool" >/dev/null 2>&1; then
-            printf "  ${GREEN}✓${NC} $tool\n"
-            found=1
-        fi
+install_lash() {
+    info "Installing lash..."
+    if command -v npm >/dev/null 2>&1; then
+        npm install -g lashcode && return 0
+    elif command -v brew >/dev/null 2>&1; then
+        brew tap lacymorrow/tap && brew install lash && return 0
+    else
+        error "Could not install lash: npm or Homebrew is needed."
+        return 1
+    fi
+    error "lash did not install. You can retry later with: npm install -g lashcode"
+    return 1
+}
+
+# One tool installed: use it. None: offer lash. Several: ask which.
+# Without a terminal nothing is asked and the default is used.
+choose_tool() {
+    local found=() t reply i
+    for t in "${TOOL_LIST[@]}"; do
+        command -v "$t" >/dev/null 2>&1 && found+=("$t")
     done
 
-    if [[ $found -eq 0 ]]; then
-        printf "  ${YELLOW}○${NC} No AI CLI tools found\n"
-        printf "\n"
-        printf "${YELLOW}Lacy Shell requires an AI CLI tool to work.${NC}\n"
-        printf "Would you like to install ${GREEN}lash${NC}? (AI coding agent — lash.lacy.sh)\n"
-        printf "\n"
-        read -p "Install lash now? [Y/n]: " install_now < /dev/tty 2>/dev/null || install_now="n"
-        if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
-            install_lash
-            printf "\n"
-            # Re-check if lash was installed successfully
-            if command -v lash >/dev/null 2>&1; then
-                printf "  ${GREEN}✓${NC} lash\n"
-            fi
-        fi
+    if [[ ${#found[@]} -eq 1 ]]; then
+        SELECTED_TOOL="${found[0]}"
+        ok "Using ${SELECTED_TOOL}"
+        return 0
     fi
 
-    printf "\n"
-}
-
-# Interactive tool selection (bash fallback)
-select_tool() {
-    printf "${BOLD}Which AI CLI tool do you want to use?${NC}\n"
-    printf "\n"
-    printf "  1) lash       ${DIM}- AI coding agent (recommended) — lash.lacy.sh${NC}\n"
-    printf "  2) claude     ${DIM}- Claude Code CLI${NC}\n"
-    printf "  3) opencode   ${DIM}- OpenCode CLI${NC}\n"
-    printf "  4) gemini     ${DIM}- Google Gemini CLI${NC}\n"
-    printf "  5) codex      ${DIM}- OpenAI Codex CLI${NC}\n"
-    printf "  6) hermes     ${DIM}- Hermes Agent CLI${NC}\n"
-    printf "  7) copilot    ${DIM}- GitHub Copilot CLI${NC}\n"
-    printf "  8) amp        ${DIM}- Sourcegraph Amp CLI${NC}\n"
-    printf "  9) Auto-detect ${DIM}(use first available)${NC}\n"
-    printf " 10) None       ${DIM}- I'll install one later${NC}\n"
-    printf " 11) Custom     ${DIM}- enter your own command${NC}\n"
-    printf "\n"
-
-    local choice
-    read -p "Select [1-11, default=9]: " choice < /dev/tty 2>/dev/null || choice="9"
-
-    case "$choice" in
-        1) SELECTED_TOOL="lash" ;;
-        2) SELECTED_TOOL="claude" ;;
-        3) SELECTED_TOOL="opencode" ;;
-        4) SELECTED_TOOL="gemini" ;;
-        5) SELECTED_TOOL="codex" ;;
-        6) SELECTED_TOOL="hermes" ;;
-        7) SELECTED_TOOL="copilot" ;;
-        8) SELECTED_TOOL="amp" ;;
-        9|"") SELECTED_TOOL="" ;;
-        10) SELECTED_TOOL="none" ;;
-        11)
-            SELECTED_TOOL="custom"
-            printf "\n"
-            read -p "Enter command (e.g. claude --dangerously-skip-permissions -p): " CUSTOM_COMMAND < /dev/tty 2>/dev/null || CUSTOM_COMMAND=""
-            if [[ -z "$CUSTOM_COMMAND" ]]; then
-                printf "${RED}No command entered. Falling back to auto-detect.${NC}\n"
-                SELECTED_TOOL=""
-            fi
-            ;;
-        *) SELECTED_TOOL="" ;;
-    esac
-
-    if [[ -n "$SELECTED_TOOL" && "$SELECTED_TOOL" != "none" && "$SELECTED_TOOL" != "custom" ]]; then
-        printf "\n"
-        printf "Selected: ${GREEN}$SELECTED_TOOL${NC}\n"
-
-        # Check if selected tool is installed
-        if ! command -v "$SELECTED_TOOL" >/dev/null 2>&1; then
-            printf "${YELLOW}Note: $SELECTED_TOOL is not installed.${NC}\n"
-
-            if [[ "$SELECTED_TOOL" == "lash" ]]; then
-                printf "\n"
-                read -p "Would you like to install lash now? [y/N]: " do_install_lash < /dev/tty 2>/dev/null || do_install_lash="n"
-                if [[ "$do_install_lash" =~ ^[Yy]$ ]]; then
-                    install_lash
-                fi
-            else
-                printf "You can install it later with:\n"
-                case "$SELECTED_TOOL" in
-                    claude) printf "  brew install claude\n" ;;
-                    opencode) printf "  brew install opencode\n" ;;
-                    gemini) printf "  brew install gemini\n" ;;
-                    codex) printf "  npm install -g @openai/codex\n" ;;
-                    hermes) printf "  curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash\n" ;;
-                    copilot) printf "  gh extension install github/gh-copilot\n" ;;
-                    amp) printf "  npm install -g @sourcegraph/amp\n" ;;
-                esac
+    if [[ ${#found[@]} -gt 1 ]]; then
+        SELECTED_TOOL="${found[0]}"
+        if can_prompt; then
+            printf "${BOLD}Which AI tool should Lacy use?${NC}\n"
+            i=1
+            for t in "${found[@]}"; do
+                printf "  %d) %s\n" "$i" "$t"
+                i=$((i + 1))
+            done
+            if ask reply "Select [1]: " && [[ "$reply" =~ ^[0-9]+$ ]] \
+                && [[ "$reply" -ge 1 && "$reply" -le ${#found[@]} ]]; then
+                SELECTED_TOOL="${found[$((reply - 1))]}"
             fi
         fi
-    elif [[ "$SELECTED_TOOL" == "custom" ]]; then
-        printf "\n"
-        printf "Selected: ${GREEN}custom${NC} (${CUSTOM_COMMAND})\n"
-    elif [[ "$SELECTED_TOOL" == "none" ]]; then
-        printf "\n"
-        printf "No tool selected. Lacy will prompt you to install one when needed.\n"
+        ok "Using ${SELECTED_TOOL}"
+        return 0
+    fi
+
+    # Nothing installed
+    if can_prompt; then
+        warn "No AI CLI tool found. Lacy needs one to answer questions."
+        if ! ask reply "Install lash (lash.lacy.sh)? [Y/n]: "; then
+            reply="n"
+        fi
+        if [[ ! "$reply" =~ ^[Nn] ]] && install_lash && command -v lash >/dev/null 2>&1; then
+            SELECTED_TOOL="lash"
+            ok "Using lash"
+            return 0
+        fi
     else
-        # Auto-detect: check if any tool is available
-        printf "\n"
-        local first_tool_found=""
-        for t in lash claude opencode gemini codex hermes copilot amp; do
-            if command -v "$t" >/dev/null 2>&1; then
-                first_tool_found="$t"
-                break
-            fi
-        done
-
-        if [[ -z "$first_tool_found" ]]; then
-            printf "${YELLOW}No AI CLI tools are installed.${NC}\n"
-            printf "Would you like to install ${GREEN}lash${NC}? (AI coding agent — lash.lacy.sh)\n"
-            printf "\n"
-            local do_install=""
-            read -p "Install lash now? [Y/n]: " do_install < /dev/tty 2>/dev/null || do_install="n"
-            if [[ ! "$do_install" =~ ^[Nn]$ ]]; then
-                install_lash
-            else
-                printf "\n"
-                printf "Using: ${GREEN}auto-detect${NC} (first available tool)\n"
-                printf "${YELLOW}Note: You'll need to install a tool before using Lacy.${NC}\n"
-            fi
-        else
-            printf "Using: ${GREEN}auto-detect${NC} (currently: ${GREEN}${first_tool_found}${NC})\n"
-        fi
+        warn "No AI CLI tool found."
     fi
-
-    printf "\n"
-}
-
-# Install lash CLI
-install_lash() {
-    printf "${BLUE}Installing lash...${NC}\n"
-
-    if command -v npm >/dev/null 2>&1; then
-        npm install -g lashcode
-        printf "${GREEN}✓ lash installed${NC}\n"
-    elif command -v brew >/dev/null 2>&1; then
-        brew tap lacymorrow/tap
-        brew install lash
-        printf "${GREEN}✓ lash installed${NC}\n"
-    else
-        printf "${RED}Could not install lash. Please install npm or homebrew first.${NC}\n"
-    fi
-}
-
-# Download and extract tarball (curl fallback when git is not available)
-install_via_tarball() {
-    local branch="$1"
-    local tarball_file
-    tarball_file=$(mktemp "${TMPDIR:-/tmp}/lacy-XXXXXX.tar.gz")
-
-    curl -fsSL "${TARBALL_URL}/${branch}.tar.gz" -o "$tarball_file" 2>/dev/null || {
-        rm -f "$tarball_file"
-        return 1
-    }
-
-    mkdir -p "$INSTALL_DIR"
-    tar xzf "$tarball_file" --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
-        rm -f "$tarball_file"
-        return 1
-    }
-
-    rm -f "$tarball_file"
+    printf "Install one later, for example: npm install -g lashcode\n"
     return 0
 }
 
-# Clone or update repository
-install_plugin() {
-    printf "${BLUE}Installing Lacy...${NC}\n"
+# ============================================================================
+# Download
+# ============================================================================
 
-    # Determine git branch: beta channel clones beta branch, otherwise main
-    local branch="main"
-    if [[ "$LACY_CHANNEL" != "latest" ]]; then
-        branch="$LACY_CHANNEL"
-    fi
-
-    local has_git=0
-    command -v git >/dev/null 2>&1 && has_git=1
-
-    if [[ -d "$INSTALL_DIR" ]]; then
-        printf "${YELLOW}Existing installation found. Updating...${NC}\n"
-        if [[ $has_git -eq 1 && -d "$INSTALL_DIR/.git" ]]; then
-            cd "$INSTALL_DIR" || exit 1
-            git pull origin "$branch" 2>/dev/null || git pull origin main 2>/dev/null || git pull 2>/dev/null || {
-                printf "${YELLOW}Could not update, using existing installation${NC}\n"
-            }
-        else
-            install_via_tarball "$branch" || install_via_tarball "main" || {
-                printf "${YELLOW}Could not update, using existing installation${NC}\n"
-            }
-        fi
-    else
-        if [[ $has_git -eq 1 ]]; then
-            git clone --depth 1 -b "$branch" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || \
-            git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
-                # Git failed, try curl fallback
-                install_via_tarball "$branch" || install_via_tarball "main" || {
-                    printf "${RED}Failed to install repository${NC}\n"
-                    exit 1
-                }
-            }
-        else
-            install_via_tarball "$branch" || install_via_tarball "main" || {
-                printf "${RED}Failed to download repository${NC}\n"
-                exit 1
-            }
+# Newest stable release tag (vX.Y.Z), or nothing.
+latest_release_tag() {
+    local url="${1:-$REPO_URL}" refs tag=""
+    if command -v git >/dev/null 2>&1; then
+        refs=$(git ls-remote --tags --refs --sort=-v:refname "$url" 2>/dev/null) \
+            || refs=$(git ls-remote --tags --refs "$url" 2>/dev/null) \
+            || refs=""
+        tag=$(printf '%s\n' "$refs" \
+            | sed -n 's|.*refs/tags/v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$|\1|p' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+        if [[ -n "$tag" ]]; then
+            tag="v${tag}"
         fi
     fi
-
-    local version
-    version=$(get_installed_version)
-    printf "${GREEN}✓ Lacy installed to $INSTALL_DIR${NC}"
-    [[ -n "$version" ]] && printf " ${DIM}(v${version})${NC}"
-    printf "\n\n"
-
-    track_event "install" "curl"
+    if [[ -z "$tag" && -n "$TARBALL_BASE" && "$url" == "$DEFAULT_REPO_URL" ]] && command -v curl >/dev/null 2>&1; then
+        tag=$(curl -fsSL --max-time 10 "https://api.github.com/repos/lacymorrow/lacy/releases/latest" 2>/dev/null \
+            | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' | head -1 || true)
+    fi
+    printf "%s" "$tag"
 }
 
-# Configure shell integration (multi-shell aware)
+fetch_tarball() {
+    local ref="$1" dest="$2" kind="heads" tmp url
+    [[ "$ref" =~ ^v[0-9] ]] && kind="tags"
+    url="${TARBALL_BASE}/${kind}/${ref}.tar.gz"
+
+    # Template must end in X's: BSD mktemp leaves "XXXXXX.tar.gz" literal.
+    tmp=$(mktemp "${TMPDIR:-/tmp}/lacy-XXXXXX") || return 1
+
+    if ! curl -fsSL --max-time 120 "$url" -o "$tmp" 2>/dev/null; then
+        LAST_ERROR="could not download ${url}"
+        command rm -f "$tmp"
+        return 1
+    fi
+    # A captive portal returns HTML with status 200; make sure it is an archive.
+    if ! tar tzf "$tmp" >/dev/null 2>&1; then
+        LAST_ERROR="${url} is not a valid archive (captive portal or proxy?)"
+        command rm -f "$tmp"
+        return 1
+    fi
+    mkdir -p "$dest"
+    if ! tar xzf "$tmp" --strip-components=1 -C "$dest" 2>/dev/null || ! is_lacy_tree "$dest"; then
+        LAST_ERROR="${url} does not contain Lacy"
+        command rm -f "$tmp"
+        command rm -rf "$dest"
+        return 1
+    fi
+    command rm -f "$tmp"
+    return 0
+}
+
+# fetch_release REF DEST: DEST must not exist. Leaves nothing behind on failure.
+fetch_release() {
+    local ref="$1" dest="$2" out
+    LAST_ERROR=""
+    if command -v git >/dev/null 2>&1; then
+        if out=$(git clone --quiet --depth 1 --branch "$ref" "$REPO_URL" "$dest" 2>&1); then
+            is_lacy_tree "$dest" && return 0
+            out="the download does not contain Lacy"
+        elif [[ "$ref" =~ ^[0-9a-f]{7,40}$ ]]; then
+            # A commit sha: clone --branch cannot take one, so fetch it directly
+            command rm -rf "$dest"
+            if out=$(git init --quiet "$dest" 2>&1 \
+                && git -C "$dest" remote add origin "$REPO_URL" 2>&1 \
+                && git -C "$dest" fetch --quiet --depth 1 origin "$ref" 2>&1 \
+                && git -C "$dest" checkout --quiet FETCH_HEAD 2>&1); then
+                is_lacy_tree "$dest" && return 0
+                out="the download does not contain Lacy"
+            fi
+        fi
+        command rm -rf "$dest"
+        LAST_ERROR="git clone ${REPO_URL} (${ref}) failed: ${out}"
+    fi
+    if [[ -n "$TARBALL_BASE" ]] && command -v curl >/dev/null 2>&1; then
+        local git_error="$LAST_ERROR"
+        fetch_tarball "$ref" "$dest" && return 0
+        [[ -n "$git_error" ]] && LAST_ERROR="${git_error}; ${LAST_ERROR}"
+    fi
+    [[ -n "$LAST_ERROR" ]] || LAST_ERROR="git or curl is required"
+    return 1
+}
+
+# Refuse to replace a developer or Homebrew install.
+refuse_unmanaged_install() {
+    local action="$1" target
+    if [[ -L "$INSTALL_DIR" ]]; then
+        target=$(readlink "$INSTALL_DIR" 2>/dev/null || true)
+        error "Not running ${action}: ~/.lacy is a symlink to ${target}."
+        case "$target" in
+            *"/Cellar/"*|*"/homebrew/"*)
+                printf "This is a Homebrew install. Use: brew upgrade lacymorrow/tap/lacy\n" >&2 ;;
+            *)
+                printf "It looks like a developer checkout. Update it with git in that directory.\n" >&2 ;;
+        esac
+        exit 1
+    fi
+    if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
+        if [[ -n "$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+            error "Not running ${action}: ~/.lacy has uncommitted changes."
+            printf "See them with: git -C ~/.lacy status\n" >&2
+            exit 1
+        fi
+    fi
+}
+
+# Download REF into a staging directory, then swap it in. The existing install
+# is only touched after the download is verified.
+install_release() {
+    local ref="$1" old="" f
+    STAGE_DIR="${INSTALL_DIR}.new.$$"
+    command rm -rf "$STAGE_DIR"
+
+    info "Downloading Lacy ${ref}..."
+    if ! fetch_release "$ref" "$STAGE_DIR"; then
+        error "Download failed: ${LAST_ERROR}"
+        error "Nothing was changed."
+        exit 1
+    fi
+
+    if [[ -e "$INSTALL_DIR" || -L "$INSTALL_DIR" ]]; then
+        # Carry user state across
+        for f in config.yaml current_mode logs .last_session .server.pid; do
+            if [[ -e "$INSTALL_DIR/$f" && ! -e "$STAGE_DIR/$f" ]]; then
+                cp -Rp "$INSTALL_DIR/$f" "$STAGE_DIR/$f"
+            fi
+        done
+        old="${INSTALL_DIR}.old.$$"
+        mv "$INSTALL_DIR" "$old"
+    fi
+    mv "$STAGE_DIR" "$INSTALL_DIR"
+    STAGE_DIR=""
+    [[ -n "$old" ]] && command rm -rf "$old"
+    return 0
+}
+
+resolve_ref() {
+    local tag
+    if [[ -n "${LACY_REF:-}" ]]; then
+        printf "%s" "$LACY_REF"
+        return 0
+    fi
+    tag=$(latest_release_tag "${1:-$REPO_URL}")
+    printf "%s" "${tag:-main}"
+}
+
+# ============================================================================
+# Configure
+# ============================================================================
+
 configure_shell() {
-    printf "${BLUE}Configuring ${DETECTED_SHELL} shell...${NC}\n"
-
-    local rc_file plugin_file plugin_line rc_name
-
+    local rc_file plugin_file plugin_line path_line rc_name
     rc_file=$(get_rc_file)
     plugin_file=$(get_plugin_file)
-    rc_name=$(basename "$rc_file")
-
+    rc_name="~${rc_file#"$HOME"}"
     plugin_line="source ${INSTALL_DIR}/${plugin_file}"
 
-    # PATH line for the lacy CLI binary
-    local path_line="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+    mkdir -p "$(dirname "$rc_file")"
 
-    # Check if already configured
-    if [[ -f "$rc_file" ]] && grep -q "lacy.plugin" "$rc_file" 2>/dev/null; then
-        printf "${GREEN}✓ Already configured in ${rc_name}${NC}\n"
-
-        # Add PATH if missing (upgrade from older install)
-        if ! grep -q '\.lacy/bin' "$rc_file" 2>/dev/null; then
-            printf "%s\n" "$path_line" >> "$rc_file"
-            printf "${GREEN}✓ Added lacy CLI to PATH in ${rc_name}${NC}\n"
-        fi
-    else
-        # Ensure parent directory exists
-        mkdir -p "$(dirname "$rc_file")"
-
-        # Create RC file if it doesn't exist
-        [[ ! -f "$rc_file" ]] && touch "$rc_file"
-
-        # Add source line + PATH
+    if [[ "$DETECTED_SHELL" == "fish" ]]; then
+        # conf.d/lacy.fish is Lacy's own file; fish loads it automatically.
+        # `>` writes through a symlink rather than replacing it.
         {
-            printf "\n"
             printf "# Lacy Shell\n"
             printf "%s\n" "$plugin_line"
-            printf "%s\n" "$path_line"
-        } >> "$rc_file"
-
-        printf "${GREEN}✓ Added to ${rc_name}${NC}\n"
+            printf "fish_add_path --path %s/bin\n" "$INSTALL_DIR"
+        } > "$rc_file"
+        ok "Configured ${rc_name}"
+        return 0
     fi
 
-    # For Fish: also ensure the conf.d directory exists and use `source` syntax
-    if [[ "$DETECTED_SHELL" == "fish" ]]; then
-        mkdir -p "${HOME}/.config/fish/conf.d"
-        # Fish sources all *.fish files in conf.d automatically — create a loader
-        local fish_conf="${HOME}/.config/fish/conf.d/lacy.fish"
-        if [[ ! -f "$fish_conf" ]]; then
-            printf "source %s/lacy.plugin.fish\n" "${INSTALL_DIR}" > "$fish_conf"
-            printf "${GREEN}✓ Created %s${NC}\n" "$fish_conf"
+    path_line="export PATH=\"${INSTALL_DIR}/bin:\$PATH\""
+
+    if rc_has_plugin "$rc_file"; then
+        if ! rc_has_path "$rc_file"; then
+            printf "%s\n" "$path_line" >> "$rc_file"
         fi
-        return
+        ok "Already configured in ${rc_name}"
+    else
+        local need_path=1
+        rc_has_path "$rc_file" && need_path=0
+        # Appending writes through a symlinked rc file.
+        {
+            printf "\n# Lacy Shell\n"
+            printf "%s\n" "$plugin_line"
+            if [[ $need_path -eq 1 ]]; then
+                printf "%s\n" "$path_line"
+            fi
+        } >> "$rc_file"
+        ok "Added to ${rc_name}"
     fi
 
-    # For Bash on macOS, also add to .bashrc if it exists (some terminals source it)
+    # Some macOS terminals read .bashrc as well
     if [[ "$DETECTED_SHELL" == "bash" && "$OSTYPE" == "darwin"* ]]; then
         local bashrc="${HOME}/.bashrc"
-        if [[ -f "$bashrc" ]] && ! grep -q "lacy.plugin" "$bashrc" 2>/dev/null; then
+        if [[ -f "$bashrc" ]] && ! rc_has_plugin "$bashrc"; then
             {
-                printf "\n"
-                printf "# Lacy Shell\n"
+                printf "\n# Lacy Shell\n"
                 printf "%s\n" "$plugin_line"
-                printf "%s\n" "$path_line"
+                rc_has_path "$bashrc" || printf "%s\n" "$path_line"
             } >> "$bashrc"
-            printf "${GREEN}✓ Also added to .bashrc${NC}\n"
+            ok "Also added to ~/.bashrc"
         fi
     fi
-
-    printf "\n"
 }
 
-# Backward compat alias
-configure_zsh() { configure_shell; }
-
-# Parse a simple YAML value (strips inline comments and quotes)
-_yaml_value() {
-    local file="$1" key="$2"
-    grep "^[[:space:]]*${key}:" "$file" 2>/dev/null | head -1 | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*#.*//' | tr -d '"' | tr -d "'"
-}
-
-# Write a YAML value in-place
 _yaml_write() {
     local file="$1" key="$2" value="$3"
     local escaped_value="${value//\\/\\\\}"
@@ -610,400 +619,273 @@ _yaml_write() {
     escaped_value="${escaped_value//&/\\&}"
     if grep -q "^[[:space:]]*${key}:" "$file" 2>/dev/null; then
         sed -i.bak "s|^\\([[:space:]]*${key}:\\).*|\\1 ${escaped_value}|" "$file"
-        rm -f "${file}.bak"
+        command rm -f "${file}.bak"
     fi
 }
 
-# Create configuration with selected tool (preserves existing config)
-create_config() {
-    mkdir -p "$INSTALL_DIR"
-
-    # Determine active tool value for config
-    local active_tool_value=""
-    if [[ -n "$SELECTED_TOOL" && "$SELECTED_TOOL" != "none" ]]; then
-        active_tool_value="$SELECTED_TOOL"
+# Canonical default config. Same text in packages/lacy/index.mjs and
+# lib/core/config.sh.
+write_default_config() {
+    local active="$1" custom="$2" active_line custom_line
+    active_line="  active:"
+    [[ -n "$active" ]] && active_line="  active: ${active}"
+    custom_line='  # custom_command: "your-command --flags"'
+    if [[ -n "$custom" ]]; then
+        custom="${custom//\\/\\\\}"
+        custom_line="  custom_command: \"${custom//\"/\\\"}\""
     fi
 
-    # If config already exists, update the tool selection only
+    cat > "$CONFIG_FILE" <<EOF
+# Lacy Shell configuration
+agent_tools:
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # Leave empty to auto-detect.
+${active_line}
+${custom_line}
+
+modes:
+  default: auto  # shell, agent, or auto
+
+# preheat:
+#   eager: false
+#   server_port: 4096
+
+# logging:
+#   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+EOF
+}
+
+# EXPLICIT=1 when the tool came from --tool (overrides an existing config).
+create_config() {
+    local explicit="${1:-0}" active=""
+    mkdir -p "$INSTALL_DIR"
+    [[ "$SELECTED_TOOL" != "auto" ]] && active="$SELECTED_TOOL"
+
     if [[ -f "$CONFIG_FILE" ]]; then
-        printf "${BLUE}Updating configuration...${NC}\n"
-        if [[ -n "$active_tool_value" ]]; then
-            _yaml_write "$CONFIG_FILE" "active" "$active_tool_value"
-            if [[ "$SELECTED_TOOL" == "custom" && -n "$CUSTOM_COMMAND" ]]; then
-                _yaml_write "$CONFIG_FILE" "custom_command" "\"$CUSTOM_COMMAND\""
+        if [[ "$explicit" == "1" ]]; then
+            _yaml_write "$CONFIG_FILE" "active" "$active"
+            if [[ "$SELECTED_TOOL" == "custom" ]]; then
+                if grep -q '^[[:space:]]*custom_command:' "$CONFIG_FILE"; then
+                    _yaml_write "$CONFIG_FILE" "custom_command" "\"${CUSTOM_COMMAND//\"/\\\"}\""
+                else
+                    printf '  custom_command: "%s"\n' "${CUSTOM_COMMAND//\"/\\\"}" > "${CONFIG_FILE}.add"
+                    sed -i.bak "/^[[:space:]]*active:/r ${CONFIG_FILE}.add" "$CONFIG_FILE"
+                    command rm -f "${CONFIG_FILE}.add" "${CONFIG_FILE}.bak"
+                fi
             fi
         fi
-        printf "${GREEN}✓ Configuration preserved at $CONFIG_FILE${NC}\n"
-        printf "\n"
-        return
-    fi
-
-    # Fresh config
-    printf "${BLUE}Creating configuration...${NC}\n"
-
-    # Build custom_command line
-    local custom_command_line="  # custom_command: \"your-command -flags\""
-    if [[ "$SELECTED_TOOL" == "custom" && -n "$CUSTOM_COMMAND" ]]; then
-        custom_command_line="  custom_command: \"$CUSTOM_COMMAND\""
-    fi
-
-    cat > "$CONFIG_FILE" << EOF
-# Lacy Shell Configuration
-# https://github.com/lacymorrow/lacy
-
-# AI CLI tool selection
-# Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
-agent_tools:
-  active: $active_tool_value
-$custom_command_line
-
-# API Keys (optional - only needed if no CLI tool is installed)
-api_keys:
-  # openai: "your-key-here"
-  # anthropic: "your-key-here"
-
-# Operating modes
-modes:
-  default: auto  # Options: shell, agent, auto
-
-# Smart auto-detection settings
-auto_detection:
-  enabled: true
-  confidence_threshold: 0.7
-EOF
-
-    printf "${GREEN}✓ Configuration created at $CONFIG_FILE${NC}\n"
-    printf "\n"
-}
-
-# Show success message
-show_success() {
-    local version
-    version=$(get_installed_version)
-    printf "${GREEN}${BOLD}Installation complete!${NC}"
-    [[ -n "$version" ]] && printf " ${DIM}v${version}${NC}"
-    printf "\n"
-    printf "\n"
-    printf "${BOLD}Try it:${NC}\n"
-    printf "  ${CYAN}what files are here${NC}  ${DIM}→ AI answers${NC}\n"
-    printf "  ${CYAN}ls -la${NC}               ${DIM}→ runs in shell${NC}\n"
-    printf "\n"
-    printf "${BOLD}Commands:${NC}\n"
-    printf "  ${CYAN}mode${NC}          Show/change mode (shell/agent/auto)\n"
-    printf "  ${CYAN}tool${NC}          Show/change AI tool\n"
-    printf "  ${CYAN}ask \"query\"${NC}   Direct query to AI\n"
-    printf "  ${CYAN}Ctrl+Space${NC}    Toggle between modes\n"
-    printf "\n"
-    printf "${BOLD}Visual feedback:${NC}\n"
-    printf "  ${GREEN}▌${NC} Green   = will run in shell\n"
-    printf "  ${MAGENTA}▌${NC} Magenta = will go to AI\n"
-    printf "\n"
-
-    if [[ "$SELECTED_TOOL" == "none" ]] || { [[ -z "$SELECTED_TOOL" ]] && ! command -v lash >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; }; then
-        printf "${YELLOW}Remember to install an AI CLI tool:${NC}\n"
-        printf "  npm install -g lashcode     # or\n"
-        printf "  brew install claude\n"
-        printf "\n"
-    fi
-
-    printf "${DIM}Learn more: https://github.com/lacymorrow/lacy${NC}\n"
-    printf "\n"
-}
-
-# Restart shell to apply changes
-restart_shell() {
-    # Only prompt if /dev/tty is actually usable (not just that it exists)
-    local restart=""
-    if [[ -t 0 ]]; then
-        printf "\n"
-        read -p "Restart shell now to apply changes? [Y/n]: " restart
-    elif { true < /dev/tty; } 2>/dev/null; then
-        printf "\n"
-        read -p "Restart shell now to apply changes? [Y/n]: " restart < /dev/tty
-    else
-        printf "\nRestart your terminal to apply changes.\n"
         return 0
     fi
 
-    if [[ ! "$restart" =~ ^[Nn]$ ]]; then
-        printf "${BLUE}Restarting shell...${NC}\n"
-        local restart_cmd
-        restart_cmd=$(get_shell_restart_cmd)
-        exec $restart_cmd
+    write_default_config "$active" "$([[ "$SELECTED_TOOL" == "custom" ]] && printf '%s' "$CUSTOM_COMMAND")"
+}
+
+show_success() {
+    local verb="$1" version tool_text
+    version=$(get_installed_version)
+    tool_text=$(sed -n 's/^[[:space:]]*active:[[:space:]]*\([^#[:space:]]*\).*/\1/p' "$CONFIG_FILE" 2>/dev/null | head -1)
+    tool_text="${tool_text:-auto-detect}"
+
+    printf "\n${GREEN}${BOLD}Lacy Shell v%s %s${NC} for %s, using %s.\n" "${version:-?}" "$verb" "$DETECTED_SHELL" "$tool_text"
+    printf "Open a new terminal, then type: ${CYAN}what files are here${NC}\n"
+}
+
+# ============================================================================
+# Flows
+# ============================================================================
+
+do_install() {
+    local explicit=0
+    [[ -n "$SELECTED_TOOL" ]] && explicit=1
+    check_prerequisites
+    [[ -z "$SELECTED_TOOL" && ! -f "$CONFIG_FILE" ]] && choose_tool
+    install_release "$(resolve_ref)"
+    configure_shell
+    create_config "$explicit"
+    track_event "install" "curl"
+    show_success "installed"
+}
+
+do_update() {
+    local explicit=0 url="$REPO_URL" ref current=""
+    [[ -n "$SELECTED_TOOL" ]] && explicit=1
+    check_prerequisites
+    refuse_unmanaged_install "update"
+
+    # Follow the remote the install was cloned from
+    if [[ -z "${LACY_REPO_URL:-}" && -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
+        url=$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || printf "%s" "$REPO_URL")
+        REPO_URL="$url"
+    fi
+    ref=$(resolve_ref "$url")
+
+    if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
+        current=$(git -C "$INSTALL_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)
+    elif [[ -n "$(get_installed_version)" ]]; then
+        current="v$(get_installed_version)"
+    fi
+
+    if [[ -z "${LACY_REF:-}" && "$ref" != "main" && "$current" == "$ref" ]]; then
+        ok "Already on the latest release (${ref})"
     else
-        printf "\n"
-        printf "Run ${CYAN}$(get_source_hint)${NC} or restart your terminal to apply changes.\n"
+        install_release "$ref"
+        track_event "update" "curl"
     fi
+    configure_shell
+    create_config "$explicit"
+    show_success "is ready"
 }
 
-# Remove lacy lines from an RC file
-_remove_from_rc() {
-    local rc_file="$1"
-    local rc_name
-    rc_name=$(basename "$rc_file")
-    if [[ -f "$rc_file" ]]; then
-        if grep -q "lacy.plugin" "$rc_file" 2>/dev/null; then
-            printf "${BLUE}Removing from ${rc_name}...${NC}\n"
-            local tmp_file
-            tmp_file=$(mktemp)
-            grep -v "lacy.plugin" "$rc_file" | grep -v "# Lacy Shell" | grep -v '\.lacy/bin' > "$tmp_file" || true
-            mv "$tmp_file" "$rc_file"
-            printf "  ${GREEN}✓${NC} Removed from ${rc_name}\n"
-        fi
-    fi
+do_reinstall() {
+    local explicit=0
+    [[ -n "$SELECTED_TOOL" ]] && explicit=1
+    check_prerequisites
+    refuse_unmanaged_install "reinstall"
+    install_release "$(resolve_ref)"
+    configure_shell
+    create_config "$explicit"
+    show_success "reinstalled"
 }
 
-# Uninstall function
 do_uninstall() {
-    printf "${BLUE}Uninstalling Lacy Shell...${NC}\n"
-    printf "\n"
+    local script="" here tmp rc=0
+    here=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)
 
-    # Check if installed (directory, symlink, or old install path)
-    if [[ ! -d "$INSTALL_DIR" ]] && [[ ! -L "$INSTALL_DIR" ]] && [[ ! -d "${HOME}/.lacy-shell" ]]; then
-        printf "${YELLOW}Lacy Shell is not installed${NC}\n"
-        exit 0
+    if [[ -f "$INSTALL_DIR/uninstall.sh" ]]; then
+        script="$INSTALL_DIR/uninstall.sh"
+    elif [[ -f "${HOME}/.lacy-shell/uninstall.sh" ]]; then
+        script="${HOME}/.lacy-shell/uninstall.sh"
+    elif [[ -n "$here" && -f "$here/uninstall.sh" ]]; then
+        script="$here/uninstall.sh"
     fi
-
-    # Remove from all possible RC files
-    _remove_from_rc "${HOME}/.zshrc"
-    _remove_from_rc "${HOME}/.bashrc"
-    _remove_from_rc "${HOME}/.bash_profile"
-    _remove_from_rc "${HOME}/.config/fish/conf.d/lacy.fish"
-
-    # Detect Homebrew-managed install (symlink to Homebrew prefix)
-    local is_brew=false
-    if [[ -L "$INSTALL_DIR" ]]; then
-        local link_target
-        link_target=$(readlink "$INSTALL_DIR" 2>/dev/null || true)
-        if [[ "$link_target" == *"/Cellar/"* || "$link_target" == *"/homebrew/"* ]]; then
-            is_brew=true
-        fi
-    fi
-
-    # Remove installation directories
-    if [[ -L "$INSTALL_DIR" ]]; then
-        printf "${BLUE}Removing $INSTALL_DIR symlink...${NC}\n"
-        rm -f "$INSTALL_DIR"
-        printf "  ${GREEN}✓${NC} Removed\n"
-    elif [[ -d "$INSTALL_DIR" ]]; then
-        printf "${BLUE}Removing $INSTALL_DIR...${NC}\n"
-        rm -rf "$INSTALL_DIR"
-        printf "  ${GREEN}✓${NC} Removed\n"
-    fi
-    if [[ -d "${HOME}/.lacy-shell" ]]; then
-        printf "${BLUE}Removing ${HOME}/.lacy-shell...${NC}\n"
-        rm -rf "${HOME}/.lacy-shell"
-        printf "  ${GREEN}✓${NC} Removed\n"
-    fi
-
-    # If installed via Homebrew, uninstall the formula too
-    if [[ "$is_brew" == true ]] && command -v brew >/dev/null 2>&1; then
-        printf "${BLUE}Removing Homebrew formula...${NC}\n"
-        brew uninstall lacymorrow/tap/lacy 2>/dev/null && printf "  ${GREEN}✓${NC} Homebrew formula removed\n" || true
-    fi
-
-    printf "\n"
-    printf "${GREEN}Lacy Shell uninstalled${NC}\n"
 
     track_event "uninstall" "curl"
 
-    # Restart shell (reuse the safe TTY-aware function)
-    detect_user_shell
-    restart_shell
-}
-
-# Check if already installed and show menu
-check_existing_installation() {
-    if [[ -d "$INSTALL_DIR" ]]; then
-        print_banner
-        printf "${YELLOW}Lacy Shell is already installed.${NC}\n"
-        printf "\n"
-        printf "What would you like to do?\n"
-        printf "\n"
-        printf "  1) Update      ${DIM}- pull latest changes${NC}\n"
-        printf "  2) Reinstall   ${DIM}- fresh installation${NC}\n"
-        printf "  3) Uninstall   ${DIM}- remove Lacy Shell${NC}\n"
-        printf "  4) Cancel\n"
-        printf "\n"
-
-        local choice
-        read -p "Select [1-4]: " choice < /dev/tty 2>/dev/null || choice="4"
-
-        case "$choice" in
-            1)
-                printf "\n"
-                printf "${BLUE}Updating Lacy...${NC}\n"
-                cd "$INSTALL_DIR" 2>/dev/null || {
-                    printf "${RED}Could not find installation directory${NC}\n"
-                    exit 1
-                }
-                local update_ok=0
-                if command -v git >/dev/null 2>&1 && [[ -d "$INSTALL_DIR/.git" ]]; then
-                    git pull origin main 2>/dev/null || git pull 2>/dev/null && update_ok=1
-                else
-                    install_via_tarball "main" && update_ok=1
-                fi
-                if [[ $update_ok -eq 1 ]]; then
-                    local updated_version
-                    updated_version=$(get_installed_version)
-                    printf "${GREEN}✓ Lacy updated${NC}"
-                    [[ -n "$updated_version" ]] && printf " ${DIM}(v${updated_version})${NC}"
-                    printf "\n"
-                    track_event "update" "curl"
-                    restart_shell
-                else
-                    printf "${RED}Update failed. Try reinstalling.${NC}\n"
-                fi
-                exit 0
-                ;;
-            2)
-                printf "\n"
-                printf "${BLUE}Removing existing installation...${NC}\n"
-                # Backup user config before removing
-                local config_backup=""
-                if [[ -f "$CONFIG_FILE" ]]; then
-                    config_backup=$(mktemp)
-                    cp "$CONFIG_FILE" "$config_backup"
-                fi
-                rm -rf "$INSTALL_DIR" 2>/dev/null
-                # Restore config so create_config() sees it and preserves it
-                if [[ -n "$config_backup" ]]; then
-                    mkdir -p "$INSTALL_DIR"
-                    cp "$config_backup" "$CONFIG_FILE"
-                    rm -f "$config_backup"
-                fi
-                printf "${GREEN}✓ Removed${NC}\n"
-                printf "\n"
-                # Continue with fresh install
-                return 0
-                ;;
-            3)
-                do_uninstall
-                exit 0
-                ;;
-            4|*)
-                printf "\n"
-                printf "Cancelled.\n"
-                exit 0
-                ;;
-        esac
+    # Copy first: the script deletes the directory it lives in.
+    tmp=$(mktemp "${TMPDIR:-/tmp}/lacy-uninstall-XXXXXX")
+    if [[ -n "$script" ]]; then
+        cp "$script" "$tmp"
+    elif ! curl -fsSL --max-time 30 "https://raw.githubusercontent.com/lacymorrow/lacy/main/uninstall.sh" -o "$tmp" 2>/dev/null; then
+        command rm -f "$tmp"
+        error "Could not find or download uninstall.sh."
+        exit 1
     fi
+    bash "$tmp" || rc=$?
+    command rm -f "$tmp"
+    exit "$rc"
 }
 
-# Main installation flow (bash)
-main_bash() {
-    print_banner
-    detect_user_shell
-    printf "${DIM}Detected shell: ${DETECTED_SHELL}${NC}\n\n"
-    check_prerequisites
-    detect_tools
-    select_tool
-    install_plugin
-    configure_shell
-    create_config
-    show_success
-    restart_shell
-}
-
-# Main entry point
 main() {
-    # Try Node installer first (better UX) — it handles existing installations too
-    if use_node_installer && run_node_installer; then
+    detect_user_shell
+
+    if [[ "$MODE" == "uninstall" ]]; then
+        do_uninstall
+    fi
+
+    if use_node_installer; then
+        run_node_installer || true
+    fi
+
+    case "$MODE" in
+        update)    do_update; return ;;
+        reinstall) do_reinstall; return ;;
+    esac
+
+    print_banner
+
+    if is_installed; then
+        local choice=""
+        if can_prompt; then
+            printf "Lacy Shell is already installed.\n\n"
+            printf "  1) Update      ${DIM}move to the latest release${NC}\n"
+            printf "  2) Reinstall   ${DIM}fresh copy, keeps your config${NC}\n"
+            printf "  3) Uninstall\n"
+            printf "  4) Cancel\n\n"
+            ask choice "Select [1]: " || choice="4"
+            printf "\n"
+        fi
+        case "${choice:-1}" in
+            1) do_update ;;
+            2) do_reinstall ;;
+            3) do_uninstall ;;
+            *) printf "Cancelled.\n" ;;
+        esac
         return
     fi
 
-    # Bash installer (fallback)
-    # Check for existing installation first (interactive menu)
-    if [[ -t 0 ]] || [[ -c /dev/tty ]]; then
-        check_existing_installation
-    fi
-
-    main_bash
+    do_install
 }
 
-# Parse flags that can appear anywhere (--beta, --channel)
-_args=()
+usage() {
+    cat <<EOF
+Lacy Shell installer
+
+Usage: install.sh [options]
+
+Options:
+  --help            Show this help
+  --uninstall       Remove Lacy Shell
+  --update          Move an existing install to the latest release
+  --reinstall       Fresh copy of the latest release (keeps config)
+  --bash            Skip the Node installer
+  --shell NAME      Configure zsh, bash, or fish
+  --tool NAME       Use this AI tool: ${TOOL_LIST[*]}, auto
+  --tool custom "CMD"
+                    Use your own command
+
+Examples:
+  curl -fsSL https://lacy.sh/install | bash
+  curl -fsSL https://lacy.sh/install | bash -s -- --tool claude
+  curl -fsSL https://lacy.sh/install | bash -s -- --shell fish
+  curl -fsSL https://lacy.sh/install | bash -s -- --uninstall
+  npx lacy
+EOF
+}
+
+# ============================================================================
+# Arguments (any order)
+# ============================================================================
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --beta)
-            LACY_CHANNEL="beta"
-            shift
+        --help|-h)
+            usage
+            exit 0
             ;;
-        --channel)
-            LACY_CHANNEL="${2:?--channel requires a value}"
+        --uninstall|-u) MODE="uninstall"; shift ;;
+        --update)       MODE="update"; shift ;;
+        --reinstall)    MODE="reinstall"; shift ;;
+        --bash)         LACY_FORCE_BASH=1; shift ;;
+        --shell)
+            case "${2:-}" in
+                zsh|bash|fish) LACY_FORCE_SHELL="$2" ;;
+                *) error "--shell needs zsh, bash, or fish"; exit 1 ;;
+            esac
             shift 2
             ;;
+        --tool)
+            SELECTED_TOOL="${2:-}"
+            if [[ "$SELECTED_TOOL" == "custom" ]]; then
+                CUSTOM_COMMAND="${3:-}"
+                if [[ -z "$CUSTOM_COMMAND" ]]; then
+                    error "--tool custom needs a command, for example: --tool custom \"claude -p\""
+                    exit 1
+                fi
+                shift 3
+            else
+                if [[ "$SELECTED_TOOL" != "auto" ]] && ! is_known_tool "$SELECTED_TOOL"; then
+                    error "Unknown tool: ${SELECTED_TOOL:-(none)}. Choose one of: ${TOOL_LIST[*]}, custom, auto"
+                    exit 1
+                fi
+                shift 2
+            fi
+            ;;
         *)
-            _args+=("$1")
-            shift
+            error "Unknown option: $1"
+            usage >&2
+            exit 1
             ;;
     esac
 done
-set -- "${_args[@]}"
 
-# Handle command line arguments
-case "${1:-}" in
-    "--help"|"-h")
-        printf "Lacy Shell Installation Script\n"
-        printf "\n"
-        printf "Usage: $0 [options]\n"
-        printf "\n"
-        printf "Options:\n"
-        printf "  --help        Show this help message\n"
-        printf "  --uninstall   Uninstall Lacy Shell\n"
-        printf "  --bash        Force bash installer (skip Node)\n"
-        printf "  --shell X     Force shell type (zsh, bash)\n"
-        printf "  --tool X      Pre-select tool (lash, claude, opencode, gemini, codex, custom, auto)\n"
-        printf "  --beta        Use beta release channel\n"
-        printf "  --channel X   Use a named release channel (beta, rc, etc.)\n"
-        printf "\n"
-        printf "Examples:\n"
-        printf "  curl -fsSL https://lacy.sh/install | bash\n"
-        printf "  curl -fsSL https://lacy.sh/install/beta | bash\n"
-        printf "  curl -fsSL https://lacy.sh/install | bash -s -- --beta\n"
-        printf "  curl -fsSL https://lacy.sh/install | bash -s -- --uninstall\n"
-        printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool claude\n"
-        printf "  curl -fsSL https://lacy.sh/install | bash -s -- --tool custom \"claude -p\"\n"
-        printf "  npx lacy\n"
-        printf "  npx lacy --uninstall\n"
-        exit 0
-        ;;
-    "--uninstall"|"-u")
-        do_uninstall
-        ;;
-    "--bash")
-        LACY_FORCE_BASH=1
-        shift
-        main "$@"
-        ;;
-    "--shell")
-        LACY_FORCE_SHELL="$2"
-        shift 2
-        main "$@"
-        ;;
-    "--tool")
-        SELECTED_TOOL="$2"
-        if [[ "$SELECTED_TOOL" == "custom" ]]; then
-            CUSTOM_COMMAND="$3"
-            if [[ -z "$CUSTOM_COMMAND" ]]; then
-                printf "${RED}Error: --tool custom requires a command string.${NC}\n"
-                printf "Usage: $0 --tool custom \"command -flags\"\n"
-                exit 1
-            fi
-            shift 3
-        else
-            shift 2
-        fi
-        print_banner
-        detect_user_shell
-        check_prerequisites
-        install_plugin
-        configure_shell
-        create_config
-        show_success
-        restart_shell
-        ;;
-    *)
-        main "$@"
-        ;;
-esac
+main

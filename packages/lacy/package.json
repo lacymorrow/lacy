@@ -1,18 +1,18 @@
 {
   "name": "lacy",
   "version": "1.8.23",
-  "description": "Install lacy — talk to your terminal",
+  "description": "Installer for lacy. Talk to your shell: commands run, questions go to your AI coding tool.",
   "type": "module",
   "bin": {
     "lacy": "index.mjs"
   },
   "files": [
-    "index.mjs"
+    "index.mjs",
+    "commands/info.sh"
   ],
   "scripts": {
     "start": "node index.mjs",
-    "release": "npm publish",
-    "release:beta": "npm version prerelease --preid=beta && npm publish --tag beta"
+    "release": "npm publish"
   },
   "keywords": [
     "lacy",
@@ -25,7 +25,7 @@
     "natural-language"
   ],
   "author": "Lacy Morrow",
-  "license": "MIT",
+  "license": "FSL-1.1-MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/lacymorrow/lacy.git",

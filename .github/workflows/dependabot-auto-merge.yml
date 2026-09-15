@@ -1,15 +1,29 @@
-name: Dependabot auto-merge
+name: Dependabot triage
+
+# Approves and labels Dependabot patch and minor updates. It does not merge.
+#
+# Why there is no auto-merge: this repo has allow_auto_merge disabled and main
+# has no required status checks (releases are pushed straight to main by shipx,
+# and required checks would block that). In that setup `gh pr merge --auto`
+# either fails outright or merges at once without waiting for CI. So this job
+# only marks the PR; a person merges it after CI is green.
 
 on: pull_request_target
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: write # approve and label
+  issues: write # create the label if it is missing
 
 jobs:
-  auto-merge:
-    if: github.actor == 'dependabot[bot]'
+  triage:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      LABEL: ready-to-merge
     steps:
       - name: Get update metadata
         id: meta
@@ -17,16 +31,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Auto-approve patch and minor updates
+      - name: Approve patch and minor updates
         if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
         run: gh pr review --approve "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable squash auto-merge for patch and minor updates
+      - name: Label patch and minor updates
         if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "$LABEL" --color 0e8a16 \
+            --description "Dependabot patch/minor update, approved. Merge once CI is green." --force
+          gh pr edit "$PR_URL" --add-label "$LABEL"

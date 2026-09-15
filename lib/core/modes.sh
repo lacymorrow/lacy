@@ -11,8 +11,8 @@ LACY_SHELL_CURRENT_MODE="auto"
 lacy_mode_description() {
     case "$1" in
         shell) echo "Normal shell execution" ;;
-        agent) echo "AI agent assistance via MCP" ;;
-        auto)  echo "Try shell commands first, fallback to AI agent" ;;
+        agent) echo "All input goes to the AI agent" ;;
+        auto)  echo "Commands run in the shell, questions go to the AI agent" ;;
         *)     echo "Unknown mode" ;;
     esac
 }
@@ -88,36 +88,47 @@ lacy_shell_save_mode() {
     echo "$1" > "$LACY_SHELL_MODE_FILE"
 }
 
+# Pick the startup mode, in order:
+#   1. $LACY_SHELL_HOME/current_mode (written whenever the mode is changed)
+#   2. modes.default from config.yaml (LACY_CONFIG_DEFAULT_MODE, set by
+#      lacy_shell_load_config)
+#   3. auto
 lacy_shell_init_mode() {
+    local saved_mode=""
     if [[ -f "$LACY_SHELL_MODE_FILE" ]]; then
-        local saved_mode
-        saved_mode=$(cat "$LACY_SHELL_MODE_FILE" 2>/dev/null)
-        if _lacy_in_list "$saved_mode" "${LACY_SHELL_MODES[@]}"; then
-            LACY_SHELL_CURRENT_MODE="$saved_mode"
-        else
-            LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
-        fi
-    else
+        { IFS= read -r saved_mode < "$LACY_SHELL_MODE_FILE"; } 2>/dev/null
+        saved_mode="${saved_mode%$'\r'}"
+    fi
+
+    if [[ -n "$saved_mode" ]] && _lacy_in_list "$saved_mode" "${LACY_SHELL_MODES[@]}"; then
+        LACY_SHELL_CURRENT_MODE="$saved_mode"
+    elif [[ -n "${LACY_CONFIG_DEFAULT_MODE:-}" ]] && _lacy_in_list "$LACY_CONFIG_DEFAULT_MODE" "${LACY_SHELL_MODES[@]}"; then
+        LACY_SHELL_CURRENT_MODE="$LACY_CONFIG_DEFAULT_MODE"
+    elif [[ -n "${LACY_SHELL_DEFAULT_MODE:-}" ]] && _lacy_in_list "$LACY_SHELL_DEFAULT_MODE" "${LACY_SHELL_MODES[@]}"; then
         LACY_SHELL_CURRENT_MODE="$LACY_SHELL_DEFAULT_MODE"
+    else
+        LACY_SHELL_CURRENT_MODE="auto"
     fi
 }
 
 # Show mode status
 lacy_shell_mode_status() {
-    echo ""
-    echo -n "Current mode: "
+    local name color
     case "$LACY_SHELL_CURRENT_MODE" in
-        "shell") lacy_print_color "$LACY_COLOR_SHELL" "SHELL" ;;
-        "agent") lacy_print_color "$LACY_COLOR_AGENT" "AGENT" ;;
-        "auto")  lacy_print_color "$LACY_COLOR_AUTO" "AUTO" ;;
-        *)       lacy_print_color "$LACY_COLOR_NEUTRAL" "unknown" ;;
+        "shell") name="SHELL"; color="$LACY_COLOR_SHELL" ;;
+        "agent") name="AGENT"; color="$LACY_COLOR_AGENT" ;;
+        "auto")  name="AUTO";  color="$LACY_COLOR_AUTO" ;;
+        *)       name="unknown"; color="$LACY_COLOR_NEUTRAL" ;;
     esac
     echo ""
-    echo "Description: $(lacy_mode_description "$LACY_SHELL_CURRENT_MODE")"
+    lacy_print_color_n "$color" "$name"
+    echo "  $(lacy_mode_description "$LACY_SHELL_CURRENT_MODE")"
     echo ""
-    echo "Colors:"
-    lacy_print_color "$LACY_COLOR_SHELL" "  ${LACY_INDICATOR_CHAR} Green   = shell command"
-    lacy_print_color "$LACY_COLOR_AGENT" "  ${LACY_INDICATOR_CHAR} Magenta = agent query"
-    lacy_print_color "$LACY_COLOR_AUTO" "  ${LACY_INDICATOR_CHAR} Blue    = auto mode"
+    lacy_print_color_n "$LACY_COLOR_SHELL" '  $'
+    echo "  runs in the shell"
+    lacy_print_color_n "$LACY_COLOR_AGENT" '  ?'
+    echo "  goes to the AI agent"
+    echo ""
+    echo "Switch with: mode shell | mode agent | mode auto   (or Ctrl+Space)"
     echo ""
 }

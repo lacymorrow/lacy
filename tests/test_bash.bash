@@ -14,7 +14,7 @@ if [[ ${BASH_VERSINFO[0]} -lt 4 ]]; then
     exit 0
 fi
 
-# Note: no set -e — tests use functions that return nonzero intentionally
+# Note: no set -e - tests use functions that return nonzero intentionally
 
 echo "Testing Lacy Shell Bash adapter in: bash ${BASH_VERSION}"
 echo "================================================================"
@@ -36,7 +36,7 @@ source "$REPO_DIR/lib/core/mcp.sh"
 source "$REPO_DIR/lib/core/preheat.sh"
 source "$REPO_DIR/lib/core/detection.sh"
 
-# Source bash-specific modules (skip keybindings — needs interactive shell)
+# Source bash-specific modules (skip keybindings - needs interactive shell)
 source "$REPO_DIR/lib/bash/prompt.bash"
 source "$REPO_DIR/lib/bash/execute.bash"
 
