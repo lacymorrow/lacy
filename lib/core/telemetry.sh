@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-# Lacy Shell Telemetry — lightweight, anonymous usage tracking via Umami
+# Lacy Shell Telemetry: lightweight, anonymous usage tracking via Umami
 # No PII collected. Respects DO_NOT_TRACK and LACY_NO_TELEMETRY.
 # See: https://umami.is
 
-readonly _LACY_UMAMI_URL="${LACY_UMAMI_URL:-https://analytics.lacy.sh}"
-readonly _LACY_UMAMI_WEBSITE_ID="${LACY_UMAMI_WEBSITE_ID:-577521d7-3db7-4a77-a45c-3c97f21b5322}"
-readonly _LACY_TELEMETRY_FLAG="${LACY_SHELL_HOME}/.telemetry_sent"
+# Plain assignments, not readonly: the plugin can be sourced again in the
+# same shell, and readonly would print an error for each on every re-source.
+_LACY_UMAMI_URL="${LACY_UMAMI_URL:-https://analytics.lacy.sh}"
+_LACY_UMAMI_WEBSITE_ID="${LACY_UMAMI_WEBSITE_ID:-577521d7-3db7-4a77-a45c-3c97f21b5322}"
+_LACY_TELEMETRY_FLAG="${LACY_SHELL_HOME}/.telemetry_sent"
 
 # _lacy_json_escape_str is defined in constants.sh (shared helper).
 # Guard: define here only if not already available (e.g., standalone sourcing).
@@ -74,7 +76,7 @@ _lacy_track_event() {
         }" >/dev/null 2>&1 &)
 }
 
-# One-time first-load tracking — detects install method and fires once
+# One-time first-load tracking: detects install method and fires once
 _lacy_track_first_load() {
     [[ "${DO_NOT_TRACK:-}" == "1" ]] && return
     [[ "${LACY_NO_TELEMETRY:-}" == "1" ]] && return

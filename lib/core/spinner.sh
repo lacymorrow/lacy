@@ -10,7 +10,7 @@ LACY_SPINNER_NOTIFY_WAS_SET=""
 
 lacy_start_spinner() {
     # Signal to Bash interrupt handler that an agent/spinner is active.
-    # In ZSH this is unnecessary — TRAPINT checks $ZLE_STATE instead.
+    # In ZSH this is unnecessary: TRAPINT checks $ZLE_STATE instead.
     LACY_SHELL_AGENT_RUNNING=true
 
     # Guard against double-start
@@ -110,8 +110,12 @@ lacy_start_spinner() {
             esac
 
             # Render: clear line, carriage return, draw
-            printf "\e[2K\r \e[38;5;${LACY_COLOR_AGENT}m%s\e[0m %b\e[38;5;${LACY_COLOR_NEUTRAL}m%s\e[0m" \
-                "$spinner_char" "$shimmer" "$dots" >&2
+            if [[ -n "${NO_COLOR:-}" ]]; then
+                printf '\e[2K\r %s %s%s' "$spinner_char" "$text" "$dots" >&2
+            else
+                printf "\e[2K\r \e[38;5;${LACY_COLOR_AGENT}m%s\e[0m %b\e[38;5;${LACY_COLOR_NEUTRAL}m%s\e[0m" \
+                    "$spinner_char" "$shimmer" "$dots" >&2
+            fi
 
             frame_num=$(( frame_num + 1 ))
 

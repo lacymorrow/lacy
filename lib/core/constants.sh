@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Lacy Shell Constants — shared across Bash 4+ and ZSH
+# Lacy Shell Constants: shared across Bash 4+ and ZSH
 # Sourced by lib/zsh/init.zsh and lib/bash/init.bash
 
 # === Runtime State ===
@@ -8,8 +8,8 @@ LACY_SHELL_ENABLED=true
 LACY_SHELL_DEFER_QUIT=false
 
 # === Shell Type (set by entry point before sourcing) ===
-# LACY_SHELL_TYPE — "zsh" or "bash"
-# _LACY_ARR_OFFSET — 1 for ZSH (1-based), 0 for Bash (0-based)
+# LACY_SHELL_TYPE: "zsh" or "bash"
+# _LACY_ARR_OFFSET: 1 for ZSH (1-based), 0 for Bash (0-based)
 
 # === Paths ===
 : "${LACY_SHELL_HOME:="${HOME}/.lacy"}"
@@ -20,30 +20,11 @@ LACY_SHELL_DEFER_QUIT=false
 
 : "${LACY_SHELL_CONVERSATION_FILE:="${LACY_SHELL_HOME}/conversation.log"}"
 
-: "${LACY_SHELL_MCP_DIR:="${LACY_SHELL_HOME}/mcp"}"
-
 # === Defaults ===
 : "${LACY_SHELL_DEFAULT_MODE:="auto"}"
 
-: "${LACY_SHELL_DEFAULT_INDICATOR_STYLE:="top"}"
-
-: "${LACY_SHELL_DEFAULT_CONFIDENCE_THRESHOLD:="0.7"}"
-
-: "${LACY_SHELL_DEFAULT_PROVIDER:="openai"}"
-
-: "${LACY_SHELL_DEFAULT_MODEL:="gpt-4o-mini"}"
-
 # === Timeouts (in milliseconds) ===
 : "${LACY_SHELL_EXIT_TIMEOUT_MS:=1000}"
-
-: "${LACY_SHELL_EXIT_TIMEOUT_SEC:="1.0"}"
-
-: "${LACY_SHELL_MESSAGE_DURATION_SEC:="1.0"}"
-
-: "${LACY_SHELL_MCP_TIMEOUT_SEC:=5}"
-
-# === UI ===
-: "${LACY_SHELL_TOP_BAR_HEIGHT:=1}"
 
 # === Preheat ===
 : "${LACY_PREHEAT_EAGER:="false"}"
@@ -57,15 +38,15 @@ LACY_COLOR_NEUTRAL=238     # Dark gray - neutral/dim
 LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
 # === Detection ===
-# (LACY_HARD_AGENT_INDICATORS removed — replaced by LACY_AGENT_WORDS below)
+# (LACY_HARD_AGENT_INDICATORS removed: replaced by LACY_AGENT_WORDS below)
 
-# Shell reserved words — pass `command -v` but are never valid standalone commands.
+# Shell reserved words: pass `command -v` but are never valid standalone commands.
 # Used by Layer 1 of natural language detection (see docs/NATURAL_LANGUAGE_DETECTION.md).
 # Not listed: `{`, `[[`, `function`, `coproc` start real one-liners
 # (`{ ls; } > out`, `[[ -f x ]] && ...`, `function f() {...}`, `coproc cat`).
 LACY_SHELL_RESERVED_WORDS=("do" "done" "then" "else" "elif" "fi" "esac" "in" "select" "}" "!")
 
-# Agent words — common English words that always route to agent, even as
+# Agent words: common English words that always route to agent, even as
 # single-word input. Some (yes, nice, cancel) exist as real commands but are
 # almost never typed standalone intentionally.
 # Kept in sync with lash plugin/shell-mode/command-check.ts AGENT_WORDS.
@@ -111,7 +92,7 @@ LACY_AGENT_WORDS=(
     "diagnose" "troubleshoot" "hotfix" "rollback" "revert"
 )
 
-# Natural language markers — common English words unusual as shell arguments.
+# Natural language markers: common English words unusual as shell arguments.
 # Used by has_nl_markers (reroute candidates) and Layer 2 detection.
 # Kept in sync with lash plugin/shell-mode/natural-language.ts.
 LACY_NL_MARKERS=(
@@ -197,8 +178,7 @@ LACY_SHELL_INPUT_TYPE=""
 
 # === UI ===
 LACY_INDICATOR_CHAR="▌"
-LACY_SPINNER_FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-: "${LACY_SPINNER_STYLE:="random"}"
+: "${LACY_SPINNER_STYLE:="braille"}"   # braille or ascii
 LACY_SPINNER_TEXT='Thinking'
 
 # === Tool List (canonical order for detection and display) ===
@@ -210,12 +190,6 @@ LACY_DOCS_URL="https://lacy.sh/docs"
 # === User-Facing Messages ===
 LACY_MSG_QUIT="Exiting Lacy Shell..."
 LACY_MSG_CTRL_C_HINT="Press Ctrl-C again to quit"
-LACY_MSG_NO_TOOL="  No AI tool found. Install one to get started:"
-LACY_MSG_INSTALL_HINT="    npm install -g lashcode   (lash — recommended)"
-LACY_MSG_INSTALL_HINT2="    brew install claude       (Claude Code CLI)"
-LACY_MSG_INSTALL_HINT3="    brew install opencode     (OpenCode CLI)"
-LACY_MSG_INSTALL_HINT4="    npm install -g @openai/codex"
-LACY_MSG_CONFIGURE_HINT="  Run \`lacy setup\` to configure after installing."
 LACY_MSG_RECOVERY_TOOL="  Try: tool set <name>    Switch to a different tool"
 LACY_MSG_RECOVERY_ASK='       ask "your query"   Send directly to agent'
 LACY_MSG_RECOVERY_DOCTOR="       lacy doctor        Diagnose issues"
@@ -233,15 +207,10 @@ LACY_MSG_COLOR_SHELL="Green  = shell command"
 LACY_MSG_COLOR_AGENT="Magenta = agent query"
 
 # === Gemini ===
-LACY_GEMINI_CONTEXT="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available — answer from context instead. cwd: {cwd}]"
-
-# === API URLs ===
-LACY_API_URL_OPENAI="https://api.openai.com/v1/chat/completions"
-LACY_API_URL_ANTHROPIC="https://api.anthropic.com/v1/messages"
+LACY_GEMINI_CONTEXT="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available; answer from context instead. cwd: {cwd}]"
 
 # === timing (seconds) ===
 LACY_HEALTH_CHECK_TIMEOUT_SYNC=1
-LACY_HEALTH_CHECK_TIMEOUT_ASYNC=0.5
 
 LACY_SPINNER_FRAME_DELAY=0.05
 LACY_TERMINAL_FLUSH_DELAY=0.02
@@ -249,38 +218,24 @@ LACY_HEALTH_CHECK_ATTEMPTS=150  # x LACY_HEALTH_CHECK_INTERVAL = 15s; lash serve
 LACY_HEALTH_CHECK_INTERVAL=0.1
 LACY_SESSION_CREATE_TIMEOUT=10
 LACY_SESSION_MESSAGE_TIMEOUT=600
+LACY_CTX_CAPTURE_TIMEOUT_TICKS=20  # x 0.1s: budget for an AppleScript screen capture
 
 # === Thresholds ===
 LACY_SIGNAL_EXIT_THRESHOLD=128  # Exit codes >= this are signal-based
 
-# === API Models (fallback only) ===
-LACY_API_MODEL_OPENAI="gpt-4o-mini"
-LACY_API_MODEL_ANTHROPIC="claude-3-5-sonnet-20241022"
-
-# === Dangerous Commands ===
-LACY_DANGEROUS_PATTERNS=("rm -rf" "sudo rm" "mkfs" "dd if=" ">" "truncate")
-
-# === Performance Optimization: Caching ===
-LACY_CONFIG_CACHE_VALID=false
-declare -A LACY_CACHED_CONFIG 2>/dev/null || true
-: "${LACY_SHELL_CONFIG_CACHE_FILE:="${LACY_SHELL_HOME}/.config_cache"}"
-
-# Async health check cache
-LACY_PREHEAT_HEALTH_CACHE=false
-LACY_PREHEAT_HEALTH_CHECK_PID=""
-: "${LACY_SHELL_HEALTH_CACHE_FILE:="${LACY_SHELL_HOME}/.health_cache"}"
-
 # === Portable Helpers ===
 
-# Print colored text — dispatches to shell-appropriate method
+# Print colored text (256-color code). The text is printed as-is: no prompt
+# or backslash expansion. With $NO_COLOR set (https://no-color.org) no escape
+# sequences are written at all.
 # Usage: lacy_print_color <color_code> <text>
 lacy_print_color() {
     local color="$1"
     shift
-    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-        print -P "%F{${color}}$*%f"
+    if [[ -n "${NO_COLOR:-}" ]]; then
+        printf '%s\n' "$*"
     else
-        printf '\e[38;5;%dm%s\e[0m\n' "$color" "$*"
+        printf '\e[38;5;%sm%s\e[0m\n' "$color" "$*"
     fi
 }
 
@@ -289,10 +244,10 @@ lacy_print_color() {
 lacy_print_color_n() {
     local color="$1"
     shift
-    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-        print -Pn "%F{${color}}$*%f"
+    if [[ -n "${NO_COLOR:-}" ]]; then
+        printf '%s' "$*"
     else
-        printf '\e[38;5;%dm%s\e[0m' "$color" "$*"
+        printf '\e[38;5;%sm%s\e[0m' "$color" "$*"
     fi
 }
 
@@ -308,7 +263,7 @@ _lacy_in_list() {
     return 1
 }
 
-# Portable lowercase — works in Bash 4+, ZSH, and falls back to tr
+# Portable lowercase: works in Bash 4+, ZSH, and falls back to tr
 # Usage: result=$(_lacy_lowercase "STRING")
 _lacy_lowercase() {
     if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
@@ -316,12 +271,12 @@ _lacy_lowercase() {
     elif (( BASH_VERSINFO[0] >= 4 )) 2>/dev/null; then
         echo "${1,,}"
     else
-        # Bash 3 fallback (macOS default) — only used in test/core contexts
+        # Bash 3 fallback (macOS default): only used in test/core contexts
         echo "$1" | tr '[:upper:]' '[:lower:]'
     fi
 }
 
-# Portable pipe status — get exit code of first command in pipeline
+# Portable pipe status: get exit code of first command in pipeline
 # Must be called immediately after a pipeline
 # Usage: local exit_code=$(_lacy_pipe_status)
 _lacy_pipe_status() {
@@ -355,10 +310,17 @@ _lacy_jobctl_on() {
     fi
 }
 
-# Escape a string for safe JSON embedding — handles \, ", and control chars.
+# Control bytes JSON strings cannot carry raw: 0x01-0x1f except tab, newline,
+# and carriage return (those are escaped below), plus DEL. Includes ESC and BEL,
+# which is what screen captures with colors or OSC 8 hyperlinks contain.
+_LACY_JSON_STRIP_CHARS=$'\001\002\003\004\005\006\007\010\013\014\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037\177'
+
+# Escape a string for safe JSON embedding: drops stray control bytes, then
+# escapes \, ", newline, carriage return, and tab.
 # Usage: escaped=$(_lacy_json_escape_str "$value")
 _lacy_json_escape_str() {
     local s="$1"
+    s="${s//[$_LACY_JSON_STRIP_CHARS]/}"
     s="${s//\\/\\\\}"   # \ → \\
     s="${s//\"/\\\"}"   # " → \"
     s="${s//$'\n'/\\n}" # newline → \n
