@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Lacy Shell - Info command
-# Shows basic information and guides users to setup
+# Lacy Shell: info command
+# Run by `npx lacy info` (shipped in the npm package) and `lacy info`.
 
 _lacy_info_version() {
     local pkg="${HOME}/.lacy/package.json"
@@ -12,14 +12,16 @@ _lacy_info_version() {
     fi
 }
 
-printf '\033[38;5;75m%s\033[0m\n' "🔧 Lacy Shell v$(_lacy_info_version)"
-echo
-printf '%s\n' "Lacy Shell detects natural language and routes it to AI coding agents."
-echo
-printf '%s\n' "Quick tips:"
-printf '  • %s\n' "Type normally for shell commands"
-printf '  • %s\n' "Type natural language for AI assistance"
-printf '  • %s\n' "Press Ctrl+Space to toggle modes"
-echo
-printf '%b\n' "Run '\033[38;5;200mlacy setup\033[0m' to configure your AI tool and settings."
-printf '%b\n' "Run '\033[38;5;200mlacy mode\033[0m' to see current mode and legend."
+if [[ -n "${NO_COLOR:-}" ]]; then
+    _blue="" _magenta="" _reset=""
+else
+    _blue=$'\033[38;5;75m' _magenta=$'\033[38;5;200m' _reset=$'\033[0m'
+fi
+
+printf '%sLacy Shell v%s%s\n\n' "$_blue" "$(_lacy_info_version)" "$_reset"
+printf 'Lacy runs commands in your shell and sends questions to your AI tool.\n\n'
+printf 'Try:\n'
+printf '  ls -la                 runs in your shell\n'
+printf '  what files are here    goes to your AI tool\n\n'
+printf 'Inside Lacy, type %smode%s to see the current mode, or press Ctrl+Space to switch.\n' "$_magenta" "$_reset"
+printf 'Run %slacy setup%s to change your AI tool.\n' "$_magenta" "$_reset"

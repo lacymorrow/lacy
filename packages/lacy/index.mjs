@@ -2,30 +2,72 @@
 
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { execSync, spawn } from "child_process";
+import { execFileSync, execSync, spawn, spawnSync } from "child_process";
 import {
-  existsSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
   appendFileSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
   rmSync,
+  writeFileSync,
 } from "fs";
 import { homedir, tmpdir } from "os";
-import { join, dirname } from "path";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const INSTALL_DIR = join(homedir(), ".lacy");
 const INSTALL_DIR_OLD = join(homedir(), ".lacy-shell");
 const CONFIG_FILE = join(INSTALL_DIR, "config.yaml");
-const REPO_URL = "https://github.com/lacymorrow/lacy.git";
-const TARBALL_URL = "https://github.com/lacymorrow/lacy/archive/refs/heads";
+const DEFAULT_REPO_URL = "https://github.com/lacymorrow/lacy.git";
+// LACY_REPO_URL and LACY_REF let tests and CI install a local checkout.
+const REPO_URL = process.env.LACY_REPO_URL || DEFAULT_REPO_URL;
+const TARBALL_BASE =
+  process.env.LACY_TARBALL_URL ||
+  (REPO_URL === DEFAULT_REPO_URL
+    ? "https://github.com/lacymorrow/lacy/archive/refs"
+    : "");
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 
-// Version — read from installed package.json (single source of truth),
+// User state carried across a reinstall
+const STATE_FILES = ["config.yaml", "current_mode", "logs", ".last_session", ".server.pid"];
+
+// Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
+const TOOL_LIST = ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose", "amp", "aider"];
+
+const TOOL_HINTS = {
+  lash: "AI coding agent, lash.lacy.sh (recommended)",
+  claude: "Claude Code CLI",
+  opencode: "OpenCode CLI",
+  gemini: "Google Gemini CLI",
+  codex: "OpenAI Codex CLI",
+  hermes: "Hermes Agent by Nous Research",
+  copilot: "GitHub Copilot CLI",
+  goose: "Goose agent by Block",
+  amp: "Sourcegraph Amp CLI",
+  aider: "Aider pair programming",
+};
+
+const MODES = [
+  { value: "auto", label: "Auto", hint: "smart detection (recommended)" },
+  { value: "shell", label: "Shell", hint: "all commands execute directly" },
+  { value: "agent", label: "Agent", hint: "all input goes to AI" },
+];
+
+// An uncommented line that sources a lacy plugin / puts ~/.lacy/bin on PATH
+const PLUGIN_LINE_RE = /^[ \t]*(source|\.)[ \t]+[^#\n]*lacy\.plugin\.(zsh|bash|fish)/m;
+const PATH_LINE_RE = /^[ \t]*[^#\s][^#\n]*\.lacy\/bin/m;
+
+// Version: read from installed package.json (single source of truth),
 // fall back to this npm package's own package.json
 function getVersion() {
-  // Try the installed copy first
-  for (const dir of [INSTALL_DIR, INSTALL_DIR_OLD]) {
+  for (const dir of [INSTALL_DIR, INSTALL_DIR_OLD, __dirname]) {
     const pkgPath = join(dir, "package.json");
     if (existsSync(pkgPath)) {
       try {
@@ -34,25 +76,21 @@ function getVersion() {
       } catch {}
     }
   }
-  // Fall back to this package's own version
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const pkg = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
-    if (pkg.version) return pkg.version;
-  } catch {}
   return "unknown";
 }
 
 const VERSION = getVersion();
 
+function isInteractive() {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
 // ============================================================================
 // Terminal state safety net
 // ============================================================================
-// @clack/prompts puts stdin into raw mode during interactive prompts. If the
-// process exits abnormally (unhandled error, SIGINT during a prompt, etc.),
-// raw mode is never restored and the parent shell's tty is left corrupted —
-// breaking Ctrl+C, paste, and other keyboard shortcuts until a new terminal
-// window is opened. These handlers ensure we always clean up.
+// @clack/prompts puts stdin into raw mode during prompts. If the process exits
+// abnormally, raw mode is never restored and the parent shell's tty is left
+// broken until a new window is opened. These handlers always clean up.
 
 function restoreTerminalState() {
   try {
@@ -62,8 +100,10 @@ function restoreTerminalState() {
   } catch {
     // stdin may already be destroyed
   }
-  // Restore cursor visibility and line wrapping
-  process.stdout.write("\x1b[?25h\x1b[?7h");
+  if (process.stdout.isTTY) {
+    // Restore cursor visibility and line wrapping
+    process.stdout.write("\x1b[?25h\x1b[?7h");
+  }
 }
 
 process.on("exit", restoreTerminalState);
@@ -71,40 +111,62 @@ process.on("exit", restoreTerminalState);
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(signal, () => {
     restoreTerminalState();
-    // Re-raise so the parent process sees the correct exit code
-    process.exit(128 + ({ SIGINT: 2, SIGTERM: 15, SIGHUP: 1 }[signal]));
+    process.exit(128 + { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 }[signal]);
   });
 }
 
-// Shell detection and per-shell configuration
+// Ctrl+C / Escape at a prompt. 130 tells the calling shell script to stop
+// instead of falling back to the bash installer.
+function cancelled(message) {
+  p.cancel(message);
+  process.exit(130);
+}
+
+// Spinners redraw with escape codes; without a terminal, log plain lines.
+function spinner() {
+  if (isInteractive()) return p.spinner();
+  return {
+    start: (msg) => p.log.step(msg),
+    stop: (msg) => p.log.success(msg),
+    message: () => {},
+  };
+}
+
+// ============================================================================
+// Shell detection
+// ============================================================================
+
 function detectShell() {
-  const shell = process.env.SHELL || "";
-  const base = shell.split("/").pop();
-  if (base === "bash") return "bash";
-  if (base === "zsh") return "zsh";
-  // Unknown $SHELL — check what's available
-  if (commandExists("zsh")) return "zsh";
-  if (commandExists("bash")) return "bash";
-  return "bash";
+  const base = (process.env.SHELL || "").split("/").pop();
+  if (base === "bash" || base === "zsh" || base === "fish") return base;
+  return commandExists("zsh") ? "zsh" : "bash";
 }
 
 function getShellConfig(shell) {
+  const home = homedir();
   switch (shell) {
     case "bash":
       return {
-        rcFile:
-          process.platform === "darwin"
-            ? join(homedir(), ".bash_profile")
-            : join(homedir(), ".bashrc"),
-        extraRcFile:
-          process.platform === "darwin" ? join(homedir(), ".bashrc") : null,
+        shell,
+        rcFile: process.platform === "darwin" ? join(home, ".bash_profile") : join(home, ".bashrc"),
+        extraRcFile: process.platform === "darwin" ? join(home, ".bashrc") : null,
         pluginFile: "lacy.plugin.bash",
         shellCmd: "bash",
         rcName: process.platform === "darwin" ? ".bash_profile" : ".bashrc",
       };
-    default: // zsh
+    case "fish":
       return {
-        rcFile: join(homedir(), ".zshrc"),
+        shell,
+        rcFile: join(home, ".config", "fish", "conf.d", "lacy.fish"),
+        extraRcFile: null,
+        pluginFile: "lacy.plugin.fish",
+        shellCmd: "fish",
+        rcName: "conf.d/lacy.fish",
+      };
+    default:
+      return {
+        shell: "zsh",
+        rcFile: join(home, ".zshrc"),
         extraRcFile: null,
         pluginFile: "lacy.plugin.zsh",
         shellCmd: "zsh",
@@ -113,29 +175,23 @@ function getShellConfig(shell) {
   }
 }
 
-// All RC files that might contain lacy config (for uninstall)
-const ALL_RC_FILES = [
-  join(homedir(), ".zshrc"),
-  join(homedir(), ".bashrc"),
-  join(homedir(), ".bash_profile"),
-  join(homedir(), ".config", "fish", "conf.d", "lacy.fish"),
-];
-
 // ============================================================================
-// Analytics — lightweight, anonymous install tracking via Umami
-// No PII collected. Respects DO_NOT_TRACK. See: https://umami.is
+// Analytics: anonymous install counts via Umami. No PII. Respects DO_NOT_TRACK.
 // ============================================================================
 
 const UMAMI_URL = process.env.LACY_UMAMI_URL || "https://analytics.lacy.sh";
 const UMAMI_WEBSITE_ID = process.env.LACY_UMAMI_WEBSITE_ID || "577521d7-3db7-4a77-a45c-3c97f21b5322";
 
+// Resolves within 2 seconds either way, so callers can await it before exiting.
 function trackEvent(eventName, method = "npx") {
-  if (process.env.DO_NOT_TRACK === "1" || process.env.LACY_NO_TELEMETRY === "1") return;
+  if (process.env.DO_NOT_TRACK === "1" || process.env.LACY_NO_TELEMETRY === "1") {
+    return Promise.resolve();
+  }
 
   const version = getVersion();
-  fetch(`${UMAMI_URL}/api/send`, {
+  const send = fetch(`${UMAMI_URL}/api/send`, {
     method: "POST",
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(2000),
     headers: {
       "Content-Type": "application/json",
       "User-Agent": `lacy-install/${version}`,
@@ -161,29 +217,12 @@ function trackEvent(eventName, method = "npx") {
       },
     }),
   }).catch(() => {});
+  return Promise.race([send, new Promise((r) => setTimeout(r, 2000))]);
 }
 
-const TOOLS = [
-  { value: "lash", label: "lash", hint: "AI coding agent — lash.lacy.sh (recommended)" },
-  { value: "claude", label: "claude", hint: "Claude Code CLI" },
-  { value: "opencode", label: "opencode", hint: "OpenCode CLI" },
-  { value: "gemini", label: "gemini", hint: "Google Gemini CLI" },
-  { value: "codex", label: "codex", hint: "OpenAI Codex CLI" },
-  { value: "hermes", label: "hermes (beta)", hint: "Hermes Agent — Nous Research" },
-  { value: "copilot", label: "copilot (beta)", hint: "GitHub Copilot CLI" },
-  { value: "goose", label: "goose (beta)", hint: "Block's Goose AI agent" },
-  { value: "amp", label: "amp", hint: "Sourcegraph Amp CLI" },
-  { value: "aider", label: "aider", hint: "Aider AI pair programming — pipx install aider-chat" },
-  { value: "custom", label: "Custom", hint: "enter your own command" },
-  { value: "auto", label: "Auto-detect", hint: "use first available" },
-  { value: "none", label: "None", hint: "I'll install one later" },
-];
-
-const MODES = [
-  { value: "auto", label: "Auto", hint: "smart detection (recommended)" },
-  { value: "shell", label: "Shell", hint: "all commands execute directly" },
-  { value: "agent", label: "Agent", hint: "all input goes to AI" },
-];
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function commandExists(cmd) {
   if (!/^[a-zA-Z0-9._-]+$/.test(cmd)) return false;
@@ -195,789 +234,597 @@ function commandExists(cmd) {
   }
 }
 
-function installViaTarball(branch) {
-  const tmpFile = join(tmpdir(), `lacy-${Date.now()}.tar.gz`);
-  execSync(`curl -fsSL "${TARBALL_URL}/${branch}.tar.gz" -o "${tmpFile}"`, { stdio: "pipe" });
-  mkdirSync(INSTALL_DIR, { recursive: true });
-  execSync(`tar xzf "${tmpFile}" --strip-components=1 -C "${INSTALL_DIR}"`, { stdio: "pipe" });
-  try { rmSync(tmpFile); } catch {}
+function pathExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
+function isLacyTree(dir) {
+  return existsSync(join(dir, "lacy.plugin.zsh")) && existsSync(join(dir, "lib", "core", "constants.sh"));
+}
+
+// A directory only counts as an install when the plugin is actually there.
 function isInstalled() {
-  return existsSync(INSTALL_DIR) || existsSync(INSTALL_DIR_OLD);
+  return isLacyTree(INSTALL_DIR) || isLacyTree(INSTALL_DIR_OLD);
 }
 
-function isInteractive() {
-  return process.stdin.isTTY && process.stdout.isTTY;
+function detectTools() {
+  return TOOL_LIST.filter((tool) => commandExists(tool));
 }
-
-// ============================================================================
-// Config helpers
-// ============================================================================
 
 function readConfigValue(key) {
   if (!existsSync(CONFIG_FILE)) return "";
   const content = readFileSync(CONFIG_FILE, "utf-8");
-  const match = content.match(new RegExp(`^[\\s]*${key}:\\s*(.*)$`, "m"));
+  const match = content.match(new RegExp(`^[ \\t]*${key}:[ \\t]*(.*)$`, "m"));
   if (!match) return "";
-  return match[1].replace(/["']/g, "").replace(/#.*/, "").trim();
+  return match[1].replace(/(^|[ \t])#.*$/, "").replace(/["']/g, "").trim();
 }
 
 function writeConfigValue(key, value) {
   if (!existsSync(CONFIG_FILE)) return;
   const content = readFileSync(CONFIG_FILE, "utf-8");
-  const regex = new RegExp(`^(\\s*${key}:)\\s*.*$`, "m");
+  // [ \t], not \s: \s would run past the newline and eat the next line
+  const regex = new RegExp(`^([ \\t]*${key}:)[ \\t]*.*$`, "m");
   if (regex.test(content)) {
-    writeFileSync(CONFIG_FILE, content.replace(regex, `$1 ${value}`));
+    writeFileSync(CONFIG_FILE, content.replace(regex, (_, lead) => (value ? `${lead} ${value}` : lead)));
   }
 }
 
+// Canonical default config. Same text in install.sh and lib/core/config.sh.
+function defaultConfig(active = "", customCommand = "") {
+  const activeLine = active ? `  active: ${active}` : "  active:";
+  const customLine = customCommand
+    ? `  custom_command: "${customCommand.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+    : '  # custom_command: "your-command --flags"';
+  return `# Lacy Shell configuration
+agent_tools:
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # Leave empty to auto-detect.
+${activeLine}
+${customLine}
+
+modes:
+  default: auto  # shell, agent, or auto
+
+# preheat:
+#   eager: false
+#   server_port: 4096
+
+# logging:
+#   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+`;
+}
+
+// Run install.sh or uninstall.sh from ~/.lacy. A temp copy is used because
+// both scripts replace or delete the directory they live in.
+// Returns the exit status, or null when the script is not there.
+function runRepoScript(name, args = []) {
+  const src = [INSTALL_DIR, INSTALL_DIR_OLD].map((d) => join(d, name)).find((f) => existsSync(f));
+  if (!src) return null;
+  const tmp = mkdtempSync(join(tmpdir(), "lacy-"));
+  const copy = join(tmp, name);
+  copyFileSync(src, copy);
+  restoreTerminalState();
+  const result = spawnSync("bash", [copy, ...args], {
+    stdio: "inherit",
+    env: { ...process.env, LACY_NO_NODE: "1" },
+  });
+  rmSync(tmp, { recursive: true, force: true });
+  return result.status ?? 1;
+}
+
 // ============================================================================
-// Shell restart
+// Download
 // ============================================================================
 
-async function restartShell(
-  message = "Restart shell now to apply changes?",
-  shellCmd = null,
-) {
+// LACY_REF, else the newest stable release tag, else main.
+async function resolveRef() {
+  if (process.env.LACY_REF) return process.env.LACY_REF;
+
+  if (commandExists("git")) {
+    try {
+      const out = execFileSync("git", ["ls-remote", "--tags", "--refs", REPO_URL], {
+        env: GIT_ENV,
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 20000,
+      }).toString();
+      const tags = [...out.matchAll(/refs\/tags\/v(\d+)\.(\d+)\.(\d+)$/gm)].map((m) => [+m[1], +m[2], +m[3]]);
+      tags.sort((a, b) => b[0] - a[0] || b[1] - a[1] || b[2] - a[2]);
+      if (tags.length > 0) return `v${tags[0].join(".")}`;
+    } catch {}
+  }
+
+  if (REPO_URL === DEFAULT_REPO_URL) {
+    try {
+      const res = await fetch("https://api.github.com/repos/lacymorrow/lacy/releases/latest", {
+        signal: AbortSignal.timeout(10000),
+      });
+      const json = await res.json();
+      if (/^v\d+\.\d+\.\d+$/.test(json.tag_name || "")) return json.tag_name;
+    } catch {}
+  }
+
+  return "main";
+}
+
+function stderrOf(e) {
+  return (e.stderr ? e.stderr.toString() : e.message || "").trim();
+}
+
+// Fetch REF into DEST (which must not exist). Throws with the reason on failure.
+function fetchRelease(ref, dest) {
+  const errors = [];
+  const gitOpts = { env: GIT_ENV, stdio: ["ignore", "ignore", "pipe"], timeout: 300000 };
+
+  if (commandExists("git")) {
+    try {
+      execFileSync("git", ["clone", "--quiet", "--depth", "1", "--branch", ref, REPO_URL, dest], gitOpts);
+      if (isLacyTree(dest)) return;
+      errors.push("the download does not contain Lacy");
+    } catch (e) {
+      rmSync(dest, { recursive: true, force: true });
+      if (/^[0-9a-f]{7,40}$/.test(ref)) {
+        // A commit sha: clone --branch cannot take one
+        try {
+          execFileSync("git", ["init", "--quiet", dest], gitOpts);
+          execFileSync("git", ["-C", dest, "remote", "add", "origin", REPO_URL], gitOpts);
+          execFileSync("git", ["-C", dest, "fetch", "--quiet", "--depth", "1", "origin", ref], gitOpts);
+          execFileSync("git", ["-C", dest, "checkout", "--quiet", "FETCH_HEAD"], gitOpts);
+          if (isLacyTree(dest)) return;
+          errors.push("the download does not contain Lacy");
+        } catch (e2) {
+          errors.push(`git fetch ${REPO_URL} ${ref} failed: ${stderrOf(e2)}`);
+        }
+      } else {
+        errors.push(`git clone ${REPO_URL} (${ref}) failed: ${stderrOf(e)}`);
+      }
+    }
+    rmSync(dest, { recursive: true, force: true });
+  }
+
+  if (TARBALL_BASE && commandExists("curl")) {
+    const kind = /^v\d/.test(ref) ? "tags" : "heads";
+    const url = `${TARBALL_BASE}/${kind}/${ref}.tar.gz`;
+    const tmp = mkdtempSync(join(tmpdir(), "lacy-"));
+    const file = join(tmp, "lacy.tar.gz");
+    try {
+      execFileSync("curl", ["-fsSL", "--max-time", "120", url, "-o", file], { stdio: "ignore" });
+      // A captive portal answers with HTML; make sure this is an archive
+      execFileSync("tar", ["tzf", file], { stdio: "ignore" });
+      mkdirSync(dest, { recursive: true });
+      execFileSync("tar", ["xzf", file, "--strip-components=1", "-C", dest], { stdio: "ignore" });
+      if (isLacyTree(dest)) return;
+      errors.push(`${url} does not contain Lacy`);
+    } catch {
+      errors.push(`could not download a valid archive from ${url}`);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    rmSync(dest, { recursive: true, force: true });
+  }
+
+  throw new Error(errors.join("; ") || "git or curl is required to download Lacy");
+}
+
+// Move a verified download into place, keeping user state.
+function swapIn(stage) {
+  let old = null;
+  if (pathExists(INSTALL_DIR)) {
+    for (const name of STATE_FILES) {
+      const src = join(INSTALL_DIR, name);
+      const dst = join(stage, name);
+      if (existsSync(src) && !existsSync(dst)) cpSync(src, dst, { recursive: true });
+    }
+    old = `${INSTALL_DIR}.old.${process.pid}`;
+    renameSync(INSTALL_DIR, old);
+  }
+  renameSync(stage, INSTALL_DIR);
+  if (old) rmSync(old, { recursive: true, force: true });
+}
+
+// ============================================================================
+// Shell restart (settings changes only; install never asks)
+// ============================================================================
+
+async function restartShell(message = "Restart shell now to apply changes?", shellCmd = null) {
   if (!isInteractive()) return;
 
-  const restart = await p.confirm({
-    message,
-    initialValue: true,
-  });
+  const restart = await p.confirm({ message, initialValue: true });
+  if (p.isCancel(restart) || !restart) return;
 
-  if (p.isCancel(restart)) return;
+  const cmd = shellCmd || getShellConfig(detectShell()).shellCmd;
+  p.log.info(`Restarting ${cmd}...`);
+  restoreTerminalState();
 
-  if (restart) {
-    const cmd = shellCmd || getShellConfig(detectShell()).shellCmd;
-    p.log.info(`Restarting ${cmd}...`);
-
-    // Restore terminal state before handing off to the new shell
-    restoreTerminalState();
-
-    // Remove signal handlers so Ctrl+C in the child shell doesn't kill Node.
-    // The child shell manages its own signals; Node just waits for it to exit.
-    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-      process.removeAllListeners(sig);
-    }
-    process.on("SIGINT", () => {});
-
-    // Spawn a new login shell that inherits our stdio, then exit Node.
-    // We use spawn (not execSync) to avoid creating a nested shell —
-    // execSync("exec ...") only replaces the *child* process, not Node,
-    // leaving the user in a nested shell with corrupted terminal state.
-    const child = spawn(cmd, ["-l"], {
-      stdio: "inherit",
-      // Let the child own the terminal
-      detached: false,
-    });
-
-    child.on("error", () => {
-      p.log.warn(`Could not restart. Please run: exec ${cmd} -l`);
-      process.exit(0);
-    });
-
-    // When the spawned shell exits (user typed 'exit'), exit Node too
-    child.on("exit", (code) => {
-      process.exit(code ?? 0);
-    });
-
-    // Prevent Node from exiting while the shell is running
-    // (the child keeps the event loop alive via stdio, but be explicit)
-    return new Promise(() => {});
+  // Ctrl+C in the child shell must not kill Node; Node just waits for it.
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.removeAllListeners(sig);
   }
-}
+  process.on("SIGINT", () => {});
 
-// ============================================================================
-// Uninstall
-// ============================================================================
-
-// Remove lacy lines from an RC file
-function removeLacyFromFile(filePath) {
-  if (!existsSync(filePath)) return false;
-  const content = readFileSync(filePath, "utf-8");
-  if (!content.includes("lacy.plugin") && !content.includes(".lacy/bin"))
-    return false;
-  const cleaned = content
-    .split("\n")
-    .filter(
-      (line) =>
-        !line.includes("lacy.plugin") &&
-        line.trim() !== "# Lacy Shell" &&
-        !line.includes(".lacy/bin"),
-    )
-    .join("\n");
-  writeFileSync(filePath, cleaned);
-  return true;
-}
-
-// Shared uninstall logic — removes RC lines and install dirs completely
-async function doUninstall({ askConfirm = true } = {}) {
-  if (askConfirm) {
-    const confirm = await p.confirm({
-      message: "Are you sure you want to uninstall Lacy Shell?",
-      initialValue: false,
-    });
-
-    if (p.isCancel(confirm) || !confirm) {
-      p.cancel("Uninstall cancelled");
-      process.exit(0);
-    }
-  }
-
-  // Remove from all possible RC files
-  const rcSpinner = p.spinner();
-  rcSpinner.start("Removing from shell configs");
-
-  let removedFrom = [];
-  for (const rcFile of ALL_RC_FILES) {
-    if (removeLacyFromFile(rcFile)) {
-      removedFrom.push(rcFile.split("/").pop());
-    }
-  }
-
-  if (removedFrom.length > 0) {
-    rcSpinner.stop(`Removed from ${removedFrom.join(", ")}`);
-  } else {
-    rcSpinner.stop("No shell configs to clean");
-  }
-
-  // Remove installation directories
-  const removeSpinner = p.spinner();
-  removeSpinner.start("Removing installation");
-
-  if (existsSync(INSTALL_DIR)) {
-    rmSync(INSTALL_DIR, { recursive: true, force: true });
-  }
-  if (existsSync(INSTALL_DIR_OLD)) {
-    rmSync(INSTALL_DIR_OLD, { recursive: true, force: true });
-  }
-
-  removeSpinner.stop("Installation removed");
-
-  trackEvent("uninstall", "npx");
-
-  p.log.success("Lacy Shell uninstalled");
-
-  await restartShell("Restart shell now?");
-
-  p.outro("Restart your terminal to apply changes.");
-}
-
-async function uninstall() {
-  console.clear();
-  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)) + pc.dim(` v${VERSION}`));
-
-  if (!isInstalled()) {
-    p.log.warn("Lacy Shell is not installed");
-    p.outro("Nothing to uninstall");
+  // spawn, not execSync("exec ..."): exec would only replace the child and
+  // leave the user in a nested shell with a broken terminal.
+  const child = spawn(cmd, ["-l"], { stdio: "inherit", detached: false });
+  child.on("error", () => {
+    p.log.warn(`Could not restart. Please run: exec ${cmd} -l`);
     process.exit(0);
-  }
-
-  await doUninstall();
+  });
+  child.on("exit", (code) => process.exit(code ?? 0));
+  return new Promise(() => {});
 }
 
-// setup() is handled by the already-installed dashboard in main()
+// ============================================================================
+// Uninstall: the work is done by uninstall.sh
+// ============================================================================
+
+async function uninstall({ askConfirm = true } = {}) {
+  const anything = pathExists(INSTALL_DIR) || existsSync(INSTALL_DIR_OLD);
+
+  if (isInteractive()) {
+    p.intro(pc.magenta(pc.bold("  Lacy Shell  ")) + pc.dim(` v${VERSION}`));
+    if (!anything) {
+      p.log.warn("Lacy Shell is not installed");
+      p.outro("Nothing to uninstall");
+      return;
+    }
+    if (askConfirm) {
+      const confirm = await p.confirm({ message: "Uninstall Lacy Shell?", initialValue: false });
+      if (p.isCancel(confirm)) cancelled("Uninstall cancelled");
+      if (!confirm) {
+        p.outro("Uninstall cancelled");
+        return;
+      }
+    }
+  } else if (!anything) {
+    console.log("Lacy Shell is not installed.");
+    return;
+  }
+
+  await trackEvent("uninstall");
+  const status = runRepoScript("uninstall.sh");
+  if (status === null) {
+    console.error("uninstall.sh was not found in ~/.lacy. Run: curl -fsSL https://lacy.sh/install | bash -s -- --uninstall");
+    process.exit(1);
+  }
+  process.exit(status);
+}
 
 // ============================================================================
 // Install
 // ============================================================================
 
-async function install() {
-  console.clear();
-  p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)) + pc.dim(` v${VERSION}`));
+function checkPrerequisites(shell) {
+  const missing = [];
+  if (shell === "bash") {
+    const shellEnv = process.env.SHELL || "";
+    // Plain `bash` on macOS is 3.2 even when $SHELL is a newer bash
+    const userBash = shellEnv.endsWith("/bash") ? shellEnv : "bash";
+    let major = 0;
+    try {
+      major = parseInt(execFileSync(userBash, ["-c", "echo ${BASH_VERSINFO[0]}"], { stdio: "pipe" }).toString(), 10);
+    } catch {}
+    if (!(major >= 4)) missing.push(`bash 4+ (found ${major || "none"}; brew install bash)`);
+  } else if (shell === "zsh" && !commandExists("zsh")) {
+    missing.push("zsh");
+  }
+  if (!commandExists("git") && !commandExists("curl")) missing.push("git or curl");
+  return missing;
+}
 
-  // Detect shell
+function installLash() {
+  const s = spinner();
+  s.start("Installing lash");
+  try {
+    if (commandExists("npm")) {
+      execSync("npm install -g lashcode", { stdio: "pipe" });
+    } else if (commandExists("brew")) {
+      execSync("brew tap lacymorrow/tap && brew install lash", { stdio: "pipe" });
+    } else {
+      s.stop("Could not install lash: npm or Homebrew is needed");
+      return false;
+    }
+  } catch {
+    s.stop("lash did not install");
+    return false;
+  }
+  s.stop("lash installed");
+  return commandExists("lash");
+}
+
+// One tool installed: use it. None: offer lash. Several: ask which.
+// Without a terminal nothing is asked and the default is used.
+async function chooseTool() {
+  const detected = detectTools();
+
+  if (detected.length === 1 || (detected.length > 1 && !isInteractive())) {
+    p.log.info(`Using ${pc.green(detected[0])}`);
+    return detected[0];
+  }
+
+  if (detected.length > 1) {
+    const choice = await p.select({
+      message: "Which AI tool should Lacy use?",
+      options: detected.map((t) => ({ value: t, label: t, hint: TOOL_HINTS[t] })),
+      initialValue: detected[0],
+    });
+    if (p.isCancel(choice)) cancelled("Installation cancelled");
+    return choice;
+  }
+
+  if (!isInteractive()) {
+    p.log.warn("No AI CLI tool found. Install one later, for example: npm install -g lashcode");
+    return "";
+  }
+
+  p.log.warn("No AI CLI tool found. Lacy needs one to answer questions.");
+  const yes = await p.confirm({
+    message: `Install ${pc.green("lash")} (lash.lacy.sh)?`,
+    initialValue: true,
+  });
+  if (p.isCancel(yes)) cancelled("Installation cancelled");
+  if (yes && installLash()) return "lash";
+  p.log.info("Install one later, for example: npm install -g lashcode");
+  return "";
+}
+
+function appendLacyBlock(file, sourceLine, pathLine, content) {
+  const needPath = !PATH_LINE_RE.test(content);
+  appendFileSync(file, `\n# Lacy Shell\n${sourceLine}\n${needPath ? `${pathLine}\n` : ""}`);
+}
+
+// Returns a one-line summary. Appending and writing both go through symlinks.
+function configureShell({ shell, rcFile, extraRcFile, pluginFile, rcName }) {
+  const sourceLine = `source ${INSTALL_DIR}/${pluginFile}`;
+  mkdirSync(dirname(rcFile), { recursive: true });
+
+  if (shell === "fish") {
+    // conf.d/lacy.fish is Lacy's own file
+    writeFileSync(rcFile, `# Lacy Shell\n${sourceLine}\nfish_add_path --path ${INSTALL_DIR}/bin\n`);
+    return `Configured ${rcName}`;
+  }
+
+  const pathLine = `export PATH="${INSTALL_DIR}/bin:$PATH"`;
+  const content = existsSync(rcFile) ? readFileSync(rcFile, "utf-8") : "";
+  let summary;
+
+  if (PLUGIN_LINE_RE.test(content)) {
+    if (!PATH_LINE_RE.test(content)) appendFileSync(rcFile, `${pathLine}\n`);
+    summary = `Already configured in ${rcName}`;
+  } else {
+    appendLacyBlock(rcFile, sourceLine, pathLine, content);
+    summary = `Added to ${rcName}`;
+  }
+
+  if (extraRcFile && existsSync(extraRcFile)) {
+    const extra = readFileSync(extraRcFile, "utf-8");
+    if (!PLUGIN_LINE_RE.test(extra)) appendLacyBlock(extraRcFile, sourceLine, pathLine, extra);
+  }
+
+  return summary;
+}
+
+async function install() {
+  p.intro(pc.magenta(pc.bold("  Lacy Shell  ")) + pc.dim(` v${VERSION}`));
+
   const shell = detectShell();
   const shellConfig = getShellConfig(shell);
-  p.log.info(`Detected shell: ${pc.cyan(shell)}`);
 
-  // Check prerequisites
-  const prerequisites = p.spinner();
-  prerequisites.start("Checking prerequisites");
-
-  const missing = [];
-
-  // Check for the target shell
-  if (shell === "bash") {
-    if (commandExists("bash")) {
-      try {
-        // Use $SHELL if it's bash — on macOS, plain `bash` resolves to /bin/bash (3.2)
-        // even when the user has a newer bash (e.g. 5.x from Homebrew) as their login shell
-        const shellEnv = process.env.SHELL || "";
-        const userBash = shellEnv.endsWith("/bash") ? shellEnv : "bash";
-        let bashVer;
-        try {
-          bashVer = execSync(`"${userBash}" -c "echo \\${BASH_VERSINFO[0]}"`, {
-            stdio: "pipe",
-          }).toString().trim();
-        } catch {
-          bashVer = execSync('bash -c "echo ${BASH_VERSINFO[0]}"', {
-            stdio: "pipe",
-          }).toString().trim();
-        }
-        if (parseInt(bashVer) < 4) {
-          missing.push(
-            `bash 4+ (found bash ${bashVer}, upgrade with: brew install bash)`,
-          );
-        }
-      } catch {
-        missing.push("bash 4+");
-      }
-    } else {
-      missing.push("bash");
-    }
-  } else {
-    if (!commandExists("zsh")) missing.push("zsh");
-  }
-
+  const missing = checkPrerequisites(shell);
   if (missing.length > 0) {
-    prerequisites.stop("Prerequisites check failed");
-    p.log.error(`Missing required tools: ${missing.join(", ")}`);
-    p.outro(pc.red("Please install missing prerequisites and try again."));
+    p.log.error(`Missing: ${missing.join(", ")}`);
+    p.outro(pc.red("Install the missing tools and try again."));
     process.exit(1);
   }
 
-  prerequisites.stop("Prerequisites OK");
+  const selectedTool = existsSync(CONFIG_FILE) ? null : await chooseTool();
 
-  // Detect installed tools
-  let detected = [];
-  for (const tool of TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map((t) => t.value)) {
-    if (commandExists(tool)) {
-      detected.push(tool);
-    }
-  }
-
-  if (detected.length > 0) {
-    p.log.info(`Detected: ${detected.map((t) => pc.green(t)).join(", ")}`);
-  } else {
-    p.log.warn("No AI CLI tools detected");
-    p.log.info("Lacy Shell requires an AI CLI tool to work.");
-
-    const installLashNow = await p.confirm({
-      message: `Would you like to install ${pc.green("lash")}? (AI coding agent — lash.lacy.sh)`,
-      initialValue: true,
-    });
-
-    if (p.isCancel(installLashNow)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installLashNow) {
-      const lashSpinner = p.spinner();
-      lashSpinner.start("Installing lash");
-
-      try {
-        if (commandExists("npm")) {
-          execSync("npm install -g lashcode", { stdio: "pipe" });
-          lashSpinner.stop("lash installed");
-          detected.push("lash");
-        } else if (commandExists("brew")) {
-          execSync("brew tap lacymorrow/tap && brew install lash", {
-            stdio: "pipe",
-          });
-          lashSpinner.stop("lash installed");
-          detected.push("lash");
-        } else {
-          lashSpinner.stop("Could not install lash");
-          p.log.warn(
-            "Please install npm or homebrew, then run: npm install -g lashcode",
-          );
-        }
-      } catch (e) {
-        lashSpinner.stop("lash installation failed");
-        p.log.warn(
-          "You can install it manually later: npm install -g lashcode",
-        );
-      }
-    }
-  }
-
-  // Tool selection
-  const selectedTool = await p.select({
-    message: "Which AI CLI tool do you want to use?",
-    options: TOOLS.map((t) => ({
-      value: t.value,
-      label: t.label,
-      hint: detected.includes(t.value) ? pc.green("installed") : t.hint,
-    })),
-    initialValue: detected[0] || "lash",
-  });
-
-  if (p.isCancel(selectedTool)) {
-    p.cancel("Installation cancelled");
-    process.exit(0);
-  }
-
-  // Prompt for custom command if selected
-  let customCommand = "";
-  if (selectedTool === "custom") {
-    customCommand = await p.text({
-      message:
-        "Enter your custom command (query will be appended as a quoted argument):",
-      placeholder: "claude --dangerously-skip-permissions -p",
-      validate(value) {
-        if (!value || value.trim().length === 0)
-          return "Command cannot be empty";
-      },
-    });
-
-    if (p.isCancel(customCommand)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    p.log.info(`Custom command: ${pc.cyan(customCommand)}`);
-  }
-
-  // Show which tool auto-detect resolves to
-  if (selectedTool === "auto" && detected.length > 0) {
-    p.log.info(`Using: ${pc.green("auto-detect")} (currently: ${pc.green(detected[0])})`);
-  }
-
-  // Offer to install lash if selected but not installed,
-  // or if auto-detect was chosen but no tools are available
-  const needsLashInstall =
-    (selectedTool === "lash" && !commandExists("lash")) ||
-    (selectedTool === "auto" && detected.length === 0);
-
-  if (needsLashInstall) {
-    const installLash = await p.confirm({
-      message: selectedTool === "auto"
-        ? `No AI CLI tools are installed. Would you like to install ${pc.green("lash")} (recommended)?`
-        : "lash is not installed. Would you like to install it now?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(installLash)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installLash) {
-      const lashSpinner = p.spinner();
-      lashSpinner.start("Installing lash");
-
-      try {
-        if (commandExists("npm")) {
-          execSync("npm install -g lashcode", { stdio: "pipe" });
-          lashSpinner.stop("lash installed");
-        } else if (commandExists("brew")) {
-          execSync("brew tap lacymorrow/tap && brew install lash", {
-            stdio: "pipe",
-          });
-          lashSpinner.stop("lash installed");
-        } else {
-          lashSpinner.stop("Could not install lash");
-          p.log.warn(
-            "Please install npm or homebrew, then run: npm install -g lashcode",
-          );
-        }
-      } catch (e) {
-        lashSpinner.stop("lash installation failed");
-        p.log.warn(
-          "You can install it manually later: npm install -g lashcode",
-        );
-      }
-    }
-  }
-
-  // Offer to install hermes if selected but not installed
-  if (selectedTool === "hermes" && !commandExists("hermes")) {
-    const installHermes = await p.confirm({
-      message: "hermes is not installed. Would you like to install it now?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(installHermes)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installHermes) {
-      p.log.info("Running hermes installer...");
-
-      try {
-        if (commandExists("curl")) {
-          execSync(
-            "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
-            { stdio: "inherit" },
-          );
-          p.log.success("hermes installed");
-        } else {
-          p.log.warn(
-            "curl not found. Install manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
-          );
-        }
-      } catch (e) {
-        p.log.warn(
-          "Installation failed. You can install manually: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
-        );
-      }
-    }
-  }
-
-  // Offer to install copilot if selected but not installed
-  if (selectedTool === "copilot" && !commandExists("copilot")) {
-    const installCopilot = await p.confirm({
-      message: "copilot is not installed. Would you like to install it now?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(installCopilot)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installCopilot) {
-      p.log.info("Installing copilot via gh extension...");
-
-      try {
-        if (commandExists("gh")) {
-          execSync("gh extension install github/gh-copilot", { stdio: "inherit" });
-          p.log.success("copilot installed");
-        } else {
-          p.log.warn(
-            "gh CLI not found. Install manually: gh extension install github/gh-copilot",
-          );
-        }
-      } catch (e) {
-        p.log.warn(
-          `Installation failed: ${e.message}. You can install manually: gh extension install github/gh-copilot`,
-        );
-      }
-    }
-  }
-
-  // Offer to install goose if selected but not installed
-  if (selectedTool === "goose" && !commandExists("goose")) {
-    const installGoose = await p.confirm({
-      message: "goose is not installed. Would you like to install it now?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(installGoose)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installGoose) {
-      const gooseSpinner = p.spinner();
-      gooseSpinner.start("Installing goose");
-
-      try {
-        if (commandExists("brew")) {
-          execSync("brew install goose", { stdio: "pipe" });
-          gooseSpinner.stop("goose installed");
-        } else {
-          gooseSpinner.stop("Could not install goose");
-          p.log.warn(
-            "Please install homebrew, then run: brew install goose",
-          );
-        }
-      } catch (e) {
-        gooseSpinner.stop(`goose installation failed: ${e.message}`);
-        p.log.warn(
-          "You can install it manually later: brew install goose",
-        );
-      }
-    }
-  }
-
-  // Offer to install amp if selected but not installed
-  if (selectedTool === "amp" && !commandExists("amp")) {
-    const installAmp = await p.confirm({
-      message: "amp is not installed. Would you like to install it now?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(installAmp)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installAmp) {
-      const ampSpinner = p.spinner();
-      ampSpinner.start("Installing amp");
-
-      try {
-        if (commandExists("npm")) {
-          execSync("npm install -g @sourcegraph/amp", { stdio: "pipe" });
-          ampSpinner.stop("amp installed");
-        } else {
-          ampSpinner.stop("Could not install amp");
-          p.log.warn(
-            "Please install npm, then run: npm install -g @sourcegraph/amp",
-          );
-        }
-      } catch (e) {
-        ampSpinner.stop("amp installation failed");
-        p.log.warn(
-          "You can install it manually later: npm install -g @sourcegraph/amp",
-        );
-      }
-    }
-  }
-
-  // Offer to install aider if selected but not installed
-  if (selectedTool === "aider" && !commandExists("aider")) {
-    const installAider = await p.confirm({
-      message: "aider is not installed. Would you like to install it now?",
-      initialValue: true,
-    });
-
-    if (p.isCancel(installAider)) {
-      p.cancel("Installation cancelled");
-      process.exit(0);
-    }
-
-    if (installAider) {
-      const aiderSpinner = p.spinner();
-      aiderSpinner.start("Installing aider");
-
-      try {
-        if (commandExists("pipx")) {
-          execSync("pipx install aider-chat", { stdio: "pipe" });
-          aiderSpinner.stop("aider installed");
-        } else if (commandExists("pip3")) {
-          execSync("pip3 install --user aider-chat", { stdio: "pipe" });
-          aiderSpinner.stop("aider installed");
-        } else {
-          aiderSpinner.stop("Could not install aider");
-          p.log.warn(
-            "Please install pipx, then run: pipx install aider-chat",
-          );
-        }
-      } catch (e) {
-        aiderSpinner.stop("aider installation failed");
-        p.log.warn(
-          "You can install it manually later: pipx install aider-chat",
-        );
-      }
-    }
-  }
-
-  // Clone/update repository
-  const installSpinner = p.spinner();
-  installSpinner.start("Installing Lacy");
-
-  const hasGit = commandExists("git");
-
+  const ref = await resolveRef();
+  const download = spinner();
+  download.start(`Downloading Lacy ${ref}`);
+  const stage = `${INSTALL_DIR}.new.${process.pid}`;
+  rmSync(stage, { recursive: true, force: true });
   try {
-    if (existsSync(INSTALL_DIR)) {
-      // Update existing
-      try {
-        if (hasGit && existsSync(join(INSTALL_DIR, ".git"))) {
-          execSync("git pull origin main", { cwd: INSTALL_DIR, stdio: "pipe" });
-        } else {
-          installViaTarball("main");
-        }
-      } catch {
-        // Ignore update errors, use existing
-      }
-      installSpinner.stop("Lacy updated");
-    } else {
-      if (hasGit) {
-        try {
-          execSync(`git clone --depth 1 ${REPO_URL} "${INSTALL_DIR}"`, {
-            stdio: "pipe",
-          });
-        } catch {
-          installViaTarball("main");
-        }
-      } else {
-        installViaTarball("main");
-      }
-      installSpinner.stop("Lacy installed");
-    }
+    fetchRelease(ref, stage);
+    swapIn(stage);
   } catch (e) {
-    installSpinner.stop("Installation failed");
-    p.log.error(`Could not download repository: ${e.message}`);
-    p.outro(pc.red("Installation failed"));
+    rmSync(stage, { recursive: true, force: true });
+    download.stop("Download failed");
+    p.log.error(e.message);
+    p.outro(pc.red("Nothing was changed."));
     process.exit(1);
   }
+  download.stop(`Downloaded Lacy ${ref}`);
 
-  // Configure shell RC file
-  const shellSpinner = p.spinner();
-  shellSpinner.start(`Configuring ${shell}`);
+  p.log.success(configureShell(shellConfig));
 
-  const { rcFile, extraRcFile, pluginFile, rcName } = shellConfig;
-  const sourceLine = `source ${INSTALL_DIR}/${pluginFile}`;
-  const pathLine = `export PATH="${INSTALL_DIR}/bin:$PATH"`;
-
-  // Ensure parent directory exists
-  const rcDir = rcFile.substring(0, rcFile.lastIndexOf("/"));
-  mkdirSync(rcDir, { recursive: true });
-
-  if (existsSync(rcFile)) {
-    const rcContent = readFileSync(rcFile, "utf-8");
-
-    if (rcContent.includes("lacy.plugin")) {
-      shellSpinner.stop("Already configured");
-
-      // Add PATH if missing (upgrade from older install)
-      if (!rcContent.includes(".lacy/bin")) {
-        appendFileSync(rcFile, `${pathLine}\n`);
-      }
-    } else {
-      appendFileSync(rcFile, `\n# Lacy Shell\n${sourceLine}\n${pathLine}\n`);
-      shellSpinner.stop(`Added to ${rcName}`);
-    }
-  } else {
-    writeFileSync(rcFile, `# Lacy Shell\n${sourceLine}\n${pathLine}\n`);
-    shellSpinner.stop(`Created ${rcName}`);
+  if (!existsSync(CONFIG_FILE)) {
+    writeFileSync(CONFIG_FILE, defaultConfig(selectedTool || ""));
   }
 
-  // For Bash on macOS, also add to .bashrc if it exists
-  if (
-    extraRcFile &&
-    existsSync(extraRcFile) &&
-    !readFileSync(extraRcFile, "utf-8").includes("lacy.plugin")
-  ) {
-    appendFileSync(extraRcFile, `\n# Lacy Shell\n${sourceLine}\n${pathLine}\n`);
-  }
+  await trackEvent("install");
 
-  // Create or update config
-  const configSpinner = p.spinner();
-  mkdirSync(INSTALL_DIR, { recursive: true });
+  const tool = readConfigValue("active") || "auto-detect";
+  p.log.success(`Lacy Shell v${getVersion()} installed for ${shell}, using ${tool}.`);
+  p.outro(`Open a new terminal, then type: ${pc.cyan("what files are here")}`);
+}
 
-  const activeToolValue =
-    selectedTool === "auto" || selectedTool === "none" ? "" : selectedTool;
+// ============================================================================
+// Settings dashboard (already installed)
+// ============================================================================
 
-  if (existsSync(CONFIG_FILE)) {
-    // Preserve existing config, only update tool selection
-    configSpinner.start("Updating configuration");
-    if (activeToolValue) {
-      writeConfigValue("active", activeToolValue);
-      if (selectedTool === "custom" && customCommand) {
-        writeConfigValue("custom_command", `"${customCommand}"`);
-      }
-    }
-    configSpinner.stop("Configuration preserved");
-  } else {
-    configSpinner.start("Creating configuration");
+async function dashboard() {
+  p.intro(pc.magenta(pc.bold("  Lacy Shell  ")) + pc.dim(` v${VERSION}`));
 
-    const customCommandLine =
-      selectedTool === "custom" && customCommand
-        ? `  custom_command: "${customCommand}"`
-        : `  # custom_command: "your-command -flags"`;
-
-    const configContent = `# Lacy Shell Configuration
-# https://github.com/lacymorrow/lacy
-
-# AI CLI tool selection
-# Options: lash, claude, opencode, gemini, codex, custom, or empty for auto-detect
-agent_tools:
-  active: ${activeToolValue}
-${customCommandLine}
-
-# API Keys (optional - only needed if no CLI tool is installed)
-api_keys:
-  # openai: "your-key-here"
-  # anthropic: "your-key-here"
-
-# Operating modes
-modes:
-  default: auto  # Options: shell, agent, auto
-
-# Smart auto-detection settings
-auto_detection:
-  enabled: true
-  confidence_threshold: 0.7
-`;
-
-    writeFileSync(CONFIG_FILE, configContent);
-    configSpinner.stop("Configuration created");
-  }
-
-  // Re-read version after install (repo was just cloned/updated)
-  const installedVersion = getVersion();
-
-  trackEvent("install", "npx");
-
-  // Success message
-  p.log.success(pc.green(`Installation complete!`) + pc.dim(` v${installedVersion}`));
+  const active = readConfigValue("active");
+  const mode = readConfigValue("default") || "auto";
+  const detected = detectTools();
+  const toolsDisplay = detected.length > 0 ? detected.map((t) => pc.green(t)).join(", ") : pc.yellow("none");
 
   p.note(
-    `${pc.cyan("what files are here")}  ${pc.dim("→ AI answers")}
-${pc.cyan("ls -la")}               ${pc.dim("→ runs in shell")}
-
-Commands:
-  ${pc.cyan("mode")}        ${pc.dim("Show/change mode")}
-  ${pc.cyan("tool")}        ${pc.dim("Show/change AI tool")}
-  ${pc.cyan('ask "q"')}     ${pc.dim("Direct query to AI")}
-  ${pc.cyan("lacy setup")}  ${pc.dim("Interactive settings")}`,
-    "Try it",
+    `  Tool:       ${pc.cyan(active || "auto-detect")}
+  Mode:       ${pc.cyan(mode)}
+  Installed:  ${toolsDisplay}`,
+    "Current config",
   );
 
-  if (
-    selectedTool === "none" ||
-    (selectedTool === "auto" && detected.length === 0)
-  ) {
-    p.log.warn("Remember to install an AI CLI tool:");
-    console.log(`  ${pc.cyan("npm install -g lashcode")}`);
+  while (true) {
+    const action = await p.select({
+      message: "What would you like to do?",
+      options: [
+        { value: "tool", label: "Change AI tool", hint: `current: ${active || "auto-detect"}` },
+        { value: "mode", label: "Change mode", hint: `current: ${mode}` },
+        { value: "config", label: "Edit config", hint: "open in $EDITOR" },
+        { value: "status", label: "Status", hint: "show full installation info" },
+        { value: "update", label: "Update", hint: "move to the latest release" },
+        { value: "reinstall", label: "Reinstall", hint: "fresh copy, keeps your config" },
+        { value: "uninstall", label: "Uninstall", hint: "remove Lacy Shell" },
+        { value: "done", label: "Done" },
+      ],
+    });
+
+    if (p.isCancel(action) || action === "done") break;
+
+    if (action === "tool") {
+      const selectedTool = await p.select({
+        message: "Which AI CLI tool do you want to use?",
+        options: [
+          ...TOOL_LIST.map((t) => ({
+            value: t,
+            label: t,
+            hint: detected.includes(t) ? pc.green("installed") : TOOL_HINTS[t],
+          })),
+          { value: "custom", label: "Custom", hint: "enter your own command" },
+          { value: "auto", label: "Auto-detect", hint: "use the first one installed" },
+        ],
+        initialValue: active || detected[0] || "auto",
+      });
+      if (p.isCancel(selectedTool)) continue;
+
+      if (selectedTool === "custom") {
+        const customCmd = await p.text({
+          message: "Enter your custom command (query will be appended as a quoted argument):",
+          placeholder: "claude --dangerously-skip-permissions -p",
+          validate(value) {
+            if (!value || value.trim().length === 0) return "Command cannot be empty";
+          },
+        });
+        if (p.isCancel(customCmd)) continue;
+        writeConfigValue("active", "custom");
+        if (readFileSync(CONFIG_FILE, "utf-8").match(/^[ \t]*custom_command:/m)) {
+          writeConfigValue("custom_command", `"${customCmd}"`);
+        } else {
+          writeFileSync(
+            CONFIG_FILE,
+            readFileSync(CONFIG_FILE, "utf-8").replace(/^([ \t]*active:.*)$/m, (line) => `${line}\n  custom_command: "${customCmd}"`),
+          );
+        }
+        p.log.success(`Tool set to: ${pc.cyan("custom")} (${customCmd})`);
+      } else if (selectedTool === "auto") {
+        writeConfigValue("active", "");
+        p.log.success(`Tool set to: ${pc.cyan("auto-detect")}`);
+      } else {
+        writeConfigValue("active", selectedTool);
+        p.log.success(`Tool set to: ${pc.cyan(selectedTool)}`);
+      }
+
+      await restartShell();
+      break;
+    }
+
+    if (action === "mode") {
+      const selectedMode = await p.select({
+        message: "Which default mode?",
+        options: MODES,
+        initialValue: mode,
+      });
+      if (p.isCancel(selectedMode)) continue;
+
+      writeConfigValue("default", `${selectedMode}  # shell, agent, or auto`);
+      p.log.success(`Mode set to: ${pc.cyan(selectedMode)}`);
+
+      await restartShell();
+      break;
+    }
+
+    if (action === "config") {
+      const editor = process.env.EDITOR || process.env.VISUAL || "vi";
+      p.log.info(`Opening ${pc.cyan(CONFIG_FILE)} in ${editor}...`);
+      try {
+        execSync(`${editor} "${CONFIG_FILE}"`, { stdio: "inherit" });
+      } catch {
+        p.log.warn("Editor closed");
+      }
+
+      await restartShell();
+      break;
+    }
+
+    if (action === "status") {
+      const dir = isLacyTree(INSTALL_DIR) ? INSTALL_DIR : INSTALL_DIR_OLD;
+      let ref = "";
+      try {
+        ref = execFileSync("git", ["describe", "--tags", "--always"], { cwd: dir, stdio: "pipe" }).toString().trim();
+      } catch {}
+
+      const shell = detectShell();
+      const rc = getShellConfig(shell).rcFile;
+      const rcConfigured = existsSync(rc) && PLUGIN_LINE_RE.test(readFileSync(rc, "utf-8"));
+
+      const lines = [
+        `  Installed:  ${pc.green(dir)}`,
+        `  Version:    ${pc.cyan("v" + VERSION)}${ref ? pc.dim(` (${ref})`) : ""}`,
+        `  Shell:      ${pc.cyan(shell)} ${rcConfigured ? pc.green("configured") : pc.yellow("not configured")}`,
+        `  Config:     ${existsSync(CONFIG_FILE) ? pc.green("exists") : pc.yellow("missing")}`,
+        `  Tool:       ${pc.cyan(active || "auto-detect")}`,
+        `  Mode:       ${pc.cyan(mode)}`,
+        ``,
+        `  ${pc.bold("AI CLI tools:")}`,
+        ...TOOL_LIST.map((t) => (commandExists(t) ? `    ${pc.green("✓")} ${t}` : `    ${pc.dim("○")} ${pc.dim(t)}`)),
+      ];
+
+      p.note(lines.join("\n"), "Status");
+      continue;
+    }
+
+    if (action === "uninstall") {
+      await uninstall();
+      return;
+    }
+
+    if (action === "update" || action === "reinstall") {
+      const status = runRepoScript("install.sh", [`--${action}`]);
+      if (status === null) {
+        p.log.error("install.sh was not found in ~/.lacy. Run: curl -fsSL https://lacy.sh/install | bash");
+        process.exit(1);
+      }
+      process.exit(status);
+    }
   }
 
-  await restartShell();
-
-  p.outro(pc.dim("Learn more: https://github.com/lacymorrow/lacy"));
+  p.outro(pc.dim("https://github.com/lacymorrow/lacy"));
 }
 
 // ============================================================================
 // Main
 // ============================================================================
 
-async function main() {
-  const args = process.argv.slice(2);
-
-  // Handle info subcommand
-  if (args[0] === "info") {
-    const infoPath = join(INSTALL_DIR, "lib/commands/info.sh");
-    if (existsSync(infoPath)) {
-      const content = readFileSync(infoPath, "utf-8");
-      console.log(content);
-    } else {
-      console.log(`\n${pc.magenta(pc.bold("🔧 Lacy Shell"))} v${VERSION}\n`);
-      console.log("Lacy Shell detects natural language and routes it to AI coding agents.\n");
-      console.log("Quick tips:");
-      console.log("  • Type normally for shell commands");
-      console.log("  • Type natural language for AI assistance");
-      console.log("  • Press Ctrl+Space to toggle modes\n");
-      console.log(`Run '${pc.cyan("lacy setup")}' to configure your AI tool and settings.`);
-      console.log(`Run '${pc.cyan("lacy mode")}' to see current mode and legend.`);
-    }
-    return;
-  }
-
-  // Handle uninstall subcommand/flag
-  if (args[0] === "uninstall") {
-    await uninstall();
-    return;
-  }
-
-  if (args.includes("--uninstall") || args.includes("-u")) {
-    await uninstall();
-    return;
-  }
-
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log(`
-${pc.magenta(pc.bold("Lacy Shell"))} ${pc.dim(`v${VERSION}`)} - Talk directly to your shell
+function printHelp() {
+  console.log(`
+${pc.magenta(pc.bold("Lacy Shell"))} ${pc.dim(`v${VERSION}`)}: talk directly to your shell
 
 ${pc.bold("Usage:")}
-  npx lacy              Install Lacy Shell
-  npx lacy --uninstall  Uninstall Lacy Shell
-  npx lacy setup        Interactive settings
+  npx lacy              Install, or open settings when installed
+  npx lacy setup        Open settings
+  npx lacy info         Show a short introduction
+  npx lacy --uninstall  Remove Lacy Shell
 
 ${pc.bold("Options:")}
-  -h, --help       Show this help message
-  -u, --uninstall  Uninstall Lacy Shell
-
-${pc.bold("Commands:")}
-  setup            Interactive settings (tool, mode, config)
-  info             Show basic information and help
+  -h, --help       Show this help
+  -u, --uninstall  Remove Lacy Shell
 
 ${pc.bold("Other install methods:")}
   curl -fsSL https://lacy.sh/install | bash
@@ -985,261 +832,49 @@ ${pc.bold("Other install methods:")}
 
 ${pc.dim("https://github.com/lacymorrow/lacy")}
 `);
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (args.includes("--help") || args.includes("-h")) {
+    printHelp();
     return;
   }
 
-  // If already installed, show dashboard + menu
+  if (args[0] === "info") {
+    const result = spawnSync("bash", [join(__dirname, "commands", "info.sh")], { stdio: "inherit" });
+    process.exit(result.status ?? 1);
+  }
+
+  if (args[0] === "uninstall" || args.includes("--uninstall") || args.includes("-u")) {
+    await uninstall();
+    return;
+  }
+
+  if (!isInteractive()) {
+    if (isInstalled()) {
+      console.log("No terminal detected. Updating with the bash installer, no prompts.");
+      const status = runRepoScript("install.sh", ["--update"]);
+      process.exit(status ?? 1);
+    }
+    console.log("No terminal detected. Installing with defaults, no prompts.");
+    await install();
+    return;
+  }
+
   if (isInstalled()) {
-    console.clear();
-    p.intro(pc.magenta(pc.bold(`  Lacy Shell  `)) + pc.dim(` v${VERSION}`));
-
-    // Show current status
-    const active = readConfigValue("active");
-    const mode = readConfigValue("default");
-    const detected = [];
-    for (const tool of TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map((t) => t.value)) {
-      if (commandExists(tool)) detected.push(tool);
-    }
-
-    const toolDisplay = active || "auto-detect";
-    const modeDisplay = mode || "auto";
-    const toolsDisplay =
-      detected.length > 0
-        ? detected.map((t) => pc.green(t)).join(", ")
-        : pc.yellow("none");
-
-    p.note(
-      `  Tool:       ${pc.cyan(toolDisplay)}
-  Mode:       ${pc.cyan(modeDisplay)}
-  Installed:  ${toolsDisplay}`,
-      "Current config",
-    );
-
-    let loop = true;
-    while (loop) {
-      const action = await p.select({
-        message: "What would you like to do?",
-        options: [
-          {
-            value: "tool",
-            label: "Change AI tool",
-            hint: `current: ${active || "auto-detect"}`,
-          },
-          {
-            value: "mode",
-            label: "Change mode",
-            hint: `current: ${modeDisplay}`,
-          },
-          { value: "config", label: "Edit config", hint: "open in $EDITOR" },
-          {
-            value: "status",
-            label: "Status",
-            hint: "show full installation info",
-          },
-          { value: "update", label: "Update", hint: "pull latest changes" },
-          {
-            value: "reinstall",
-            label: "Reinstall",
-            hint: "fresh installation",
-          },
-          {
-            value: "uninstall",
-            label: "Uninstall",
-            hint: "remove Lacy Shell",
-          },
-          { value: "done", label: "Done" },
-        ],
-      });
-
-      if (p.isCancel(action) || action === "done") {
-        loop = false;
-        break;
-      }
-
-      if (action === "tool") {
-        const selectedTool = await p.select({
-          message: "Which AI CLI tool do you want to use?",
-          options: TOOLS.filter((t) => t.value !== "none").map((t) => ({
-            value: t.value,
-            label: t.label,
-            hint: detected.includes(t.value) ? pc.green("installed") : t.hint,
-          })),
-          initialValue: active || detected[0] || "auto",
-        });
-
-        if (p.isCancel(selectedTool)) continue;
-
-        if (selectedTool === "custom") {
-          const customCmd = await p.text({
-            message:
-              "Enter your custom command (query will be appended as a quoted argument):",
-            placeholder: "claude --dangerously-skip-permissions -p",
-            validate(value) {
-              if (!value || value.trim().length === 0)
-                return "Command cannot be empty";
-            },
-          });
-          if (p.isCancel(customCmd)) continue;
-          writeConfigValue("active", "custom");
-          writeConfigValue("custom_command", `"${customCmd}"`);
-          p.log.success(`Tool set to: ${pc.cyan("custom")} (${customCmd})`);
-        } else if (selectedTool === "auto") {
-          writeConfigValue("active", "");
-          p.log.success(`Tool set to: ${pc.cyan("auto-detect")}`);
-        } else {
-          writeConfigValue("active", selectedTool);
-          p.log.success(`Tool set to: ${pc.cyan(selectedTool)}`);
-        }
-
-        await restartShell("Restart shell now to apply changes?");
-        loop = false;
-      }
-
-      if (action === "mode") {
-        const selectedMode = await p.select({
-          message: "Which default mode?",
-          options: MODES.map((m) => ({
-            value: m.value,
-            label: m.label,
-            hint: m.hint,
-          })),
-          initialValue: mode || "auto",
-        });
-
-        if (p.isCancel(selectedMode)) continue;
-
-        writeConfigValue(
-          "default",
-          `${selectedMode}  # Options: shell, agent, auto`,
-        );
-        p.log.success(`Mode set to: ${pc.cyan(selectedMode)}`);
-
-        await restartShell("Restart shell now to apply changes?");
-        loop = false;
-      }
-
-      if (action === "config") {
-        const editor = process.env.EDITOR || process.env.VISUAL || "vi";
-        p.log.info(`Opening ${pc.cyan(CONFIG_FILE)} in ${editor}...`);
-        try {
-          execSync(`${editor} "${CONFIG_FILE}"`, { stdio: "inherit" });
-        } catch {
-          p.log.warn("Editor closed");
-        }
-
-        await restartShell("Restart shell now to apply changes?");
-        loop = false;
-      }
-
-      if (action === "status") {
-        const dir = existsSync(INSTALL_DIR) ? INSTALL_DIR : INSTALL_DIR_OLD;
-        let sha = "";
-        try {
-          sha = execSync("git rev-parse --short HEAD", {
-            cwd: dir,
-            stdio: "pipe",
-          })
-            .toString()
-            .trim();
-        } catch {}
-
-        const shell = detectShell();
-        const rc = getShellConfig(shell).rcFile;
-        const rcConfigured =
-          existsSync(rc) && readFileSync(rc, "utf-8").includes("lacy.plugin");
-        const hasConfig = existsSync(CONFIG_FILE);
-
-        const lines = [
-          `  Installed:  ${pc.green(dir)}`,
-          `  Version:    ${pc.cyan("v" + VERSION)}${sha ? pc.dim(` (${sha})`) : ""}`,
-          `  Shell:      ${pc.cyan(shell)} ${rcConfigured ? pc.green("configured") : pc.yellow("not configured")}`,
-          `  Config:     ${hasConfig ? pc.green("exists") : pc.yellow("missing")}`,
-          `  Tool:       ${pc.cyan(active || "auto-detect")}`,
-          `  Mode:       ${pc.cyan(modeDisplay)}`,
-          ``,
-          `  ${pc.bold("AI CLI tools:")}`,
-          ...TOOLS.filter((t) => !["custom", "auto", "none"].includes(t.value)).map(({ value: t }) =>
-            commandExists(t)
-              ? `    ${pc.green("✓")} ${t}`
-              : `    ${pc.dim("○")} ${pc.dim(t)}`,
-          ),
-        ].filter(Boolean);
-
-        p.note(lines.join("\n"), "Status");
-        // Don't break, let user pick another action
-      }
-
-      if (action === "uninstall") {
-        await doUninstall();
-        return;
-      }
-
-      if (action === "update") {
-        const updateSpinner = p.spinner();
-        updateSpinner.start("Updating Lacy");
-        const updateDir = existsSync(INSTALL_DIR)
-          ? INSTALL_DIR
-          : INSTALL_DIR_OLD;
-        try {
-          if (commandExists("git") && existsSync(join(updateDir, ".git"))) {
-            execSync("git pull origin main", { cwd: updateDir, stdio: "pipe" });
-          } else {
-            installViaTarball("main");
-          }
-          const updatedVersion = getVersion();
-          updateSpinner.stop(`Lacy updated to v${updatedVersion}`);
-          trackEvent("update", "npx");
-          p.log.success("Update complete!");
-          await restartShell();
-          p.outro("Restart your terminal to apply changes.");
-        } catch {
-          updateSpinner.stop("Update failed");
-          p.log.error("Could not update. Try reinstalling instead.");
-        }
-        return;
-      }
-
-      if (action === "reinstall") {
-        const removeSpinner = p.spinner();
-        removeSpinner.start("Removing existing installation");
-        // Backup config before removing
-        let configBackup = null;
-        if (existsSync(CONFIG_FILE)) {
-          configBackup = readFileSync(CONFIG_FILE, "utf-8");
-        }
-        if (existsSync(INSTALL_DIR)) {
-          rmSync(INSTALL_DIR, { recursive: true, force: true });
-        }
-        if (existsSync(INSTALL_DIR_OLD)) {
-          rmSync(INSTALL_DIR_OLD, { recursive: true, force: true });
-        }
-        // Restore config so install() sees it and preserves it
-        if (configBackup) {
-          mkdirSync(INSTALL_DIR, { recursive: true });
-          writeFileSync(CONFIG_FILE, configBackup);
-        }
-        removeSpinner.stop("Removed");
-        loop = false;
-        // Falls through to install()
-      }
-    }
-
-    // Only reach here if reinstall was selected (or loop ended without return)
-    if (!isInstalled()) {
-      await install();
-    } else {
-      p.outro(pc.dim("https://github.com/lacymorrow/lacy"));
-    }
+    await dashboard();
     return;
   }
 
   await install();
 }
 
-main().then(() => {
-  process.exit(0);
-}).catch((e) => {
-  restoreTerminalState();
-  p.log.error(e.message);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    restoreTerminalState();
+    p.log.error(e.message);
+    process.exit(1);
+  });
