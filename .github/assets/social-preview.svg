@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" fill="none">
-  <title>lacy — Talk to your shell — commands run, questions go to AI</title>
+  <title>lacy - Talk to your shell - commands run, questions go to AI</title>
   <defs>
     <radialGradient id="g" cx="80%" cy="20%" r="80%">
       <stop offset="0%" stop-color="#10b981" stop-opacity="0.20"/>

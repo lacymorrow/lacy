@@ -20,7 +20,7 @@ export LACY_SHELL_HOME="$TEST_TMPDIR"
 export LACY_PREHEAT_SERVER_PORT="$TEST_PORT"
 
 # ============================================================================
-# Source modules (minimal chain — no ZLE/prompt deps)
+# Source modules (minimal chain - no ZLE/prompt deps)
 # ============================================================================
 
 source "$REPO_ROOT/lib/core/constants.sh"
@@ -367,7 +367,7 @@ run_tests_for_tool() {
     # ------------------------------------------------------------------
     # Test 5: Stale session reset
     # ------------------------------------------------------------------
-    # Set a fake session ID and try to query — should fail and clear it.
+    # Set a fake session ID and try to query - should fail and clear it.
     # Redirect to file instead of $() to preserve global state changes.
     LACY_PREHEAT_SERVER_SESSION_ID="fake-session-id-that-does-not-exist"
 

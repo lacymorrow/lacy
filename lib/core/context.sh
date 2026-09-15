@@ -54,7 +54,8 @@ _lacy_ctx_detect_terminal() {
     fi
 
     # 3-4. macOS: AppleScript for iTerm2 and Terminal.app
-    if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
+    # $OSTYPE instead of $(uname -s): this runs at plugin load, a fork costs ~35 ms.
+    if [[ "${OSTYPE:-}" == darwin* ]]; then
         if [[ "${TERM_PROGRAM:-}" == "iTerm.app" ]]; then
             _LACY_CTX_TERMINAL_CAPTURE_CMD="_lacy_ctx_iterm2_capture"
             return

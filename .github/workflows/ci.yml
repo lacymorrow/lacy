@@ -24,9 +24,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install ${{ matrix.shell }}
-        if: matrix.shell != 'bash'
-        run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.shell }}
+      - name: Install zsh
+        if: matrix.shell == 'zsh'
+        run: sudo apt-get update -q && sudo apt-get install -y zsh
+
+      # Ubuntu's apt fish is 3.x; the fish adapter targets fish 4.
+      - name: Install fish 4
+        if: matrix.shell == 'fish'
+        run: |
+          sudo apt-add-repository -y ppa:fish-shell/release-4
+          sudo apt-get update -q && sudo apt-get install -y fish
 
       - name: Syntax-check entry point
         shell: bash
@@ -108,9 +115,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install ${{ matrix.shell }} (Linux)
-        if: runner.os == 'Linux' && matrix.shell != 'bash'
-        run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.shell }}
+      - name: Install zsh (Linux)
+        if: runner.os == 'Linux' && matrix.shell == 'zsh'
+        run: sudo apt-get update -q && sudo apt-get install -y zsh
+
+      # Ubuntu's apt fish is 3.x; the fish adapter is tested on fish 4.
+      - name: Install fish 4 (Linux)
+        if: runner.os == 'Linux' && matrix.shell == 'fish'
+        run: |
+          sudo apt-add-repository -y ppa:fish-shell/release-4
+          sudo apt-get update -q && sudo apt-get install -y fish
+          fish --version
 
       - name: Install Bash 4+ (macOS)
         if: runner.os == 'macOS' && matrix.shell == 'bash'

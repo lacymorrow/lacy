@@ -864,8 +864,3 @@ _lacy_print_server_error() {
     fi
     echo ""
 }
-
-# Deprecated no-ops kept for one release: lacy.plugin.zsh and
-# lacy.plugin.bash still call them. Remove once the entry points stop.
-lacy_shell_init_mcp() { :; }
-lacy_shell_cleanup_mcp() { :; }

@@ -23,9 +23,6 @@ LACY_SHELL_DEFER_QUIT=false
 # === Defaults ===
 : "${LACY_SHELL_DEFAULT_MODE:="auto"}"
 
-# === Timeouts (in milliseconds) ===
-: "${LACY_SHELL_EXIT_TIMEOUT_MS:=1000}"
-
 # === Preheat ===
 : "${LACY_PREHEAT_EAGER:="false"}"
 : "${LACY_PREHEAT_SERVER_PORT:="4096"}"
@@ -189,7 +186,6 @@ LACY_DOCS_URL="https://lacy.sh/docs"
 
 # === User-Facing Messages ===
 LACY_MSG_QUIT="Exiting Lacy Shell..."
-LACY_MSG_CTRL_C_HINT="Press Ctrl-C again to quit"
 LACY_MSG_RECOVERY_TOOL="  Try: tool set <name>    Switch to a different tool"
 LACY_MSG_RECOVERY_ASK='       ask "your query"   Send directly to agent'
 LACY_MSG_RECOVERY_DOCTOR="       lacy doctor        Diagnose issues"
