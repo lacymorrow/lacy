@@ -174,6 +174,10 @@ assert_false() {
     assert_eq "NO_COLOR shell badge" "SHELL \$ rebuilt> " "$PS1"
     assert_eq "NO_COLOR mode message" "  ? AGENT mode" "$(_lacy_bash_print_mode_msg agent)"
     unset NO_COLOR
+    assert_eq "auto glyph: bar in a UTF-8 locale" "$LACY_INDICATOR_CHAR" \
+        "$(LC_ALL=en_US.UTF-8; _lacy_bash_mode_style auto; printf '%s' "$_LACY_BASH_MODE_GLYPH")"
+    assert_eq "auto glyph: | outside UTF-8" "|" \
+        "$(LC_ALL=C; _lacy_bash_mode_style auto; printf '%s' "$_LACY_BASH_MODE_GLYPH")"
 
     echo ""
     echo "--- Completions ---"

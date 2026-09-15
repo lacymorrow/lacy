@@ -49,6 +49,22 @@ function _lacy_detect_tool --description "Return the AI tool to use"
     return 1
 end
 
+# Install command for a tool. Same list as lacy_tool_install_cmd in lib/core/mcp.sh.
+function _lacy_tool_install_cmd --argument-names tool
+    switch $tool
+        case lash;     echo "npm install -g lashcode"
+        case claude;   echo "brew install claude"
+        case opencode; echo "brew install opencode"
+        case gemini;   echo "brew install gemini"
+        case codex;    echo "npm install -g @openai/codex"
+        case hermes;   echo "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+        case copilot;  echo "gh extension install github/gh-copilot"
+        case goose;    echo "brew install goose"
+        case amp;      echo "npm install -g @sourcegraph/amp"
+        case aider;    echo "pipx install aider-chat"
+    end
+end
+
 function _lacy_print_no_tool --description "Explain that no AI tool is installed"
     set -l red (_lacy_sgr '38;5;196')
     set -l bold (_lacy_sgr 1)
@@ -58,11 +74,15 @@ function _lacy_print_no_tool --description "Explain that no AI tool is installed
     set -l off (_lacy_sgr 0)
     printf '\n%s  No AI tool detected.%s Lacy needs an AI CLI to handle queries.\n\n' "$red" "$off"
     printf '%s  Supported tools:%s\n\n' "$bold" "$off"
-    printf '    %s%-12s%s %s\n' "$green" lash "$off" "npm install -g lashcode        (recommended)"
-    printf '    %s%-12s%s %s\n' "$dim" claude "$off" "brew install claude"
-    printf '    %s%-12s%s %s\n' "$dim" opencode "$off" "brew install opencode"
-    printf '    %s%-12s%s %s\n' "$dim" gemini "$off" "brew install gemini"
-    printf '    %s%-12s%s %s\n' "$dim" codex "$off" "npm install -g @openai/codex"
+    for t in $LACY_TOOL_LIST
+        set -l hint (_lacy_tool_install_cmd $t)
+        if test $t = lash
+            set hint "$hint        (recommended)"
+            printf '    %s%-12s%s %s\n' "$green" $t "$off" "$hint"
+        else
+            printf '    %s%-12s%s %s\n' "$dim" $t "$off" "$hint"
+        end
+    end
     printf '\n  %sThen run:%s  lacy setup\n' "$blue" "$off"
     printf '  %sDocs:%s      https://lacy.sh/docs\n\n' "$blue" "$off"
 end
@@ -91,7 +111,10 @@ function _lacy_query_agent --description "Route a query to the AI agent"
         return 127
     end
 
-    _lacy_log_query $tool "$query"
+    # Off by default, like zsh and bash: only log when logging.queries is true.
+    if contains -- (string lower -- (_lacy_yaml_value logging queries)) true yes on
+        _lacy_log_query $tool "$query"
+    end
 
     printf '\n'
     eval $cmd_str (string escape -- "$query")

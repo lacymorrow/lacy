@@ -45,44 +45,44 @@ set -g LACY_SHELL_RESERVED_WORDS \
 set -g LACY_NL_MARKERS \
     'a' 'an' 'the' 'this' 'that' 'these' 'those' 'my' \
     'our' 'your' 'its' 'their' 'his' 'her' 'i' 'we' \
-    'you' 'it' 'they' 'me' 'us' 'him' 'her' 'them' \
-    'myself' 'yourself' 'itself' 'ourselves' 'themselves' 'to' 'of' 'about' \
-    'with' 'from' 'for' 'into' 'through' 'between' 'after' 'before' \
-    'during' 'without' 'within' 'against' 'above' 'below' 'under' 'upon' \
-    'across' 'toward' 'towards' 'beside' 'besides' 'beyond' 'except' 'inside' \
-    'outside' 'behind' 'near' 'among' 'along' 'around' 'and' 'but' \
-    'or' 'so' 'because' 'since' 'although' 'though' 'unless' 'while' \
-    'whereas' 'whether' 'however' 'therefore' 'moreover' 'furthermore' 'nevertheless' 'otherwise' \
-    'instead' 'is' 'are' 'was' 'were' 'be' 'been' 'being' \
-    'have' 'has' 'had' 'having' 'can' 'could' 'would' 'should' \
-    'will' 'shall' 'may' 'might' 'must' 'need' 'want' 'know' \
-    'think' 'believe' 'understand' 'remember' 'forget' 'seem' 'appear' 'look' \
-    'feel' 'sound' 'mean' 'try' 'keep' 'let' 'begin' 'start' \
-    'stop' 'continue' 'happen' 'work' 'run' 'give' 'take' 'bring' \
-    'send' 'put' 'get' 'got' 'went' 'going' 'done' 'doing' \
-    'made' 'making' 'not' 'already' 'also' 'just' 'still' 'even' \
-    'really' 'actually' 'probably' 'maybe' 'perhaps' 'always' 'never' 'sometimes' \
-    'often' 'usually' 'only' 'very' 'too' 'enough' 'quite' 'rather' \
-    'pretty' 'almost' 'nearly' 'completely' 'entirely' 'definitely' 'certainly' 'obviously' \
-    'clearly' 'honestly' 'basically' 'literally' 'seriously' 'hopefully' 'unfortunately' 'apparently' \
-    'absolutely' 'simply' 'merely' 'exactly' 'roughly' 'how' 'what' 'when' \
-    'where' 'why' 'who' 'which' 'whom' 'whose' 'if' 'there' \
-    'here' 'all' 'any' 'some' 'every' 'no' 'each' 'does' \
-    'do' 'did' 'sure' 'out' 'up' 'down' 'ahead' 'back' \
-    'over' 'away' 'off' 'on' 'now' 'then' 'again' 'once' \
-    'twice' 'first' 'last' 'next' 'new' 'old' 'same' 'other' \
-    'another' 'both' 'either' 'neither' 'much' 'many' 'more' 'most' \
-    'less' 'least' 'few' 'several' 'own' 'such' 'whole' 'entire' \
-    'please' 'thanks' 'thank' 'sorry' 'yes' 'yeah' 'yep' 'ok' \
-    'okay' 'alright' 'right' 'correct' 'wrong' 'perfect' 'great' 'good' \
-    'nice' 'cool' 'awesome' 'amazing' 'wonderful' 'excellent' 'fantastic' 'brilliant' \
-    'fine' 'terrible' 'horrible' 'awful' 'bad' 'worse' 'worst' 'better' \
-    'best' 'anyone' 'someone' 'everyone' 'anything' 'something' 'everything' 'nobody' \
-    'nothing' 'nowhere' 'wherever' 'whatever' 'whoever' 'whenever' 'however' 'way' \
-    'thing' 'things' 'stuff' 'part' 'place' 'point' 'fact' 'issue' \
-    'problem' 'question' 'answer' 'idea' 'reason' 'example' 'change' 'error' \
-    'bug' 'fix' 'feature' 'code' 'file' 'files' 'repo' 'project' \
-    'app' 'test' 'tests'
+    'you' 'it' 'they' 'me' 'us' 'him' 'them' 'myself' \
+    'yourself' 'itself' 'ourselves' 'themselves' 'to' 'of' 'about' 'with' \
+    'from' 'for' 'into' 'through' 'between' 'after' 'before' 'during' \
+    'without' 'within' 'against' 'above' 'below' 'under' 'upon' 'across' \
+    'toward' 'towards' 'beside' 'besides' 'beyond' 'except' 'inside' 'outside' \
+    'behind' 'near' 'among' 'along' 'around' 'and' 'but' 'or' \
+    'so' 'because' 'since' 'although' 'though' 'unless' 'while' 'whereas' \
+    'whether' 'however' 'therefore' 'moreover' 'furthermore' 'nevertheless' 'otherwise' 'instead' \
+    'is' 'are' 'was' 'were' 'be' 'been' 'being' 'have' \
+    'has' 'had' 'having' 'can' 'could' 'would' 'should' 'will' \
+    'shall' 'may' 'might' 'must' 'need' 'want' 'know' 'think' \
+    'believe' 'understand' 'remember' 'forget' 'seem' 'appear' 'look' 'feel' \
+    'sound' 'mean' 'try' 'keep' 'let' 'begin' 'start' 'stop' \
+    'continue' 'happen' 'work' 'run' 'give' 'take' 'bring' 'send' \
+    'put' 'get' 'got' 'went' 'going' 'done' 'doing' 'made' \
+    'making' 'not' 'already' 'also' 'just' 'still' 'even' 'really' \
+    'actually' 'probably' 'maybe' 'perhaps' 'always' 'never' 'sometimes' 'often' \
+    'usually' 'only' 'very' 'too' 'enough' 'quite' 'rather' 'pretty' \
+    'almost' 'nearly' 'completely' 'entirely' 'definitely' 'certainly' 'obviously' 'clearly' \
+    'honestly' 'basically' 'literally' 'seriously' 'hopefully' 'unfortunately' 'apparently' 'absolutely' \
+    'simply' 'merely' 'exactly' 'roughly' 'how' 'what' 'when' 'where' \
+    'why' 'who' 'which' 'whom' 'whose' 'if' 'there' 'here' \
+    'all' 'any' 'some' 'every' 'no' 'each' 'does' 'do' \
+    'did' 'sure' 'out' 'up' 'down' 'ahead' 'back' 'over' \
+    'away' 'off' 'on' 'now' 'then' 'again' 'once' 'twice' \
+    'first' 'last' 'next' 'new' 'old' 'same' 'other' 'another' \
+    'both' 'either' 'neither' 'much' 'many' 'more' 'most' 'less' \
+    'least' 'few' 'several' 'own' 'such' 'whole' 'entire' 'please' \
+    'thanks' 'thank' 'sorry' 'yes' 'yeah' 'yep' 'ok' 'okay' \
+    'alright' 'right' 'correct' 'wrong' 'perfect' 'great' 'good' 'nice' \
+    'cool' 'awesome' 'amazing' 'wonderful' 'excellent' 'fantastic' 'brilliant' 'fine' \
+    'terrible' 'horrible' 'awful' 'bad' 'worse' 'worst' 'better' 'best' \
+    'anyone' 'someone' 'everyone' 'anything' 'something' 'everything' 'nobody' 'nothing' \
+    'nowhere' 'wherever' 'whatever' 'whoever' 'whenever' 'way' 'thing' 'things' \
+    'stuff' 'part' 'place' 'point' 'fact' 'issue' 'problem' 'question' \
+    'answer' 'idea' 'reason' 'example' 'change' 'error' 'bug' 'fix' \
+    'feature' 'code' 'file' 'files' 'repo' 'project' 'app' 'test' \
+    'tests'
 
 set -g LACY_SHELL_OPERATORS \
     '|' '&&' '||' ';' '>'

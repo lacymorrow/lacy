@@ -380,6 +380,37 @@ open(out_file, "w").write(text)
     assert_false "nothing runs after exit" has_line $out SHOULD_NOT_RUN
 end
 
+# ============================================================================
+# Query log gate and no-tool message
+# ============================================================================
+echo "--- query log off by default, no-tool message lists every tool ---"
+source $REPO_DIR/lib/fish/execute.fish
+begin
+    set -l fakebin $TMP_ROOT/logbin
+    mkdir -p $fakebin
+    printf '#!/bin/sh\necho FAKE_CLAUDE_OK\n' > $fakebin/claude
+    chmod +x $fakebin/claude
+    set -l old_path $PATH
+    set -gx PATH $fakebin $PATH
+    set -l log $LACY_SHELL_HOME/logs/queries.log
+    command rm -f $log
+
+    printf 'agent_tools:\n  active: claude\n' > $LACY_SHELL_HOME/config.yaml
+    _lacy_query_agent "log gate probe" >/dev/null 2>&1
+    assert_false "query log: not written by default" test -e $log
+
+    printf 'agent_tools:\n  active: claude\nlogging:\n  queries: true\n' > $LACY_SHELL_HOME/config.yaml
+    _lacy_query_agent "log gate probe on" >/dev/null 2>&1
+    assert_true "query log: written when logging.queries is true" test -s $log
+
+    set -gx PATH $old_path
+    command rm -f $log $LACY_SHELL_HOME/config.yaml
+end
+set -l no_tool_out (NO_COLOR=1 _lacy_print_no_tool | string collect)
+for t in $LACY_TOOL_LIST
+    assert_true "no-tool message lists $t" string match -q -- "*$t *" $no_tool_out
+end
+
 if set -q LACY_TEST_KEEP
     echo "Keeping test files in $TMP_ROOT"
 else

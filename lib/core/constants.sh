@@ -96,7 +96,7 @@ LACY_NL_MARKERS=(
     # articles/determiners
     "a" "an" "the" "this" "that" "these" "those" "my" "our" "your" "its" "their" "his" "her"
     # pronouns
-    "i" "we" "you" "it" "they" "me" "us" "him" "her" "them"
+    "i" "we" "you" "it" "they" "me" "us" "him" "them"
     "myself" "yourself" "itself" "ourselves" "themselves"
     # prepositions
     "to" "of" "about" "with" "from" "for" "into" "through" "between" "after" "before"
@@ -136,7 +136,7 @@ LACY_NL_MARKERS=(
     "terrible" "horrible" "awful" "bad" "worse" "worst" "better" "best"
     # indefinite pronouns
     "anyone" "someone" "everyone" "anything" "something" "everything"
-    "nobody" "nothing" "nowhere" "wherever" "whatever" "whoever" "whenever" "however"
+    "nobody" "nothing" "nowhere" "wherever" "whatever" "whoever" "whenever"
     # common nouns used in conversation
     "way" "thing" "things" "stuff" "part" "place" "point" "fact"
     "issue" "problem" "question" "answer" "idea" "reason" "example"

@@ -51,3 +51,4 @@ lib/.lash/
 lash-panic-*.log
 **/lash-panic-*.log
 .claude/settings.local.json
+.claude/worktrees/

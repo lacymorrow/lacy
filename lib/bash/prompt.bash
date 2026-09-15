@@ -52,13 +52,21 @@ _lacy_bash_mode_style() {
         "auto")
             _LACY_BASH_MODE_TEXT="AUTO"
             _LACY_BASH_MODE_COLOR="$LACY_COLOR_AUTO"
-            _LACY_BASH_MODE_GLYPH="$LACY_INDICATOR_CHAR"
+            _lacy_bash_bar_glyph
             ;;
         *)
             _LACY_BASH_MODE_TEXT="?"
             _LACY_BASH_MODE_COLOR="$LACY_COLOR_NEUTRAL"
-            _LACY_BASH_MODE_GLYPH="$LACY_INDICATOR_CHAR"
+            _lacy_bash_bar_glyph
             ;;
+    esac
+}
+
+# The bar glyph is multibyte; outside a UTF-8 locale use "|" (zsh does the same).
+_lacy_bash_bar_glyph() {
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) printf -v _LACY_BASH_MODE_GLYPH '%s' "$LACY_INDICATOR_CHAR" ;;
+        *) _LACY_BASH_MODE_GLYPH="|" ;;
     esac
 }
 
