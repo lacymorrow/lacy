@@ -393,7 +393,7 @@ assert_eq "toggle agent→auto" "auto" "$LACY_SHELL_CURRENT_MODE"
 
 # Mode description
 assert_eq "desc shell" "Normal shell execution" "$(lacy_mode_description 'shell')"
-assert_eq "desc agent" "AI agent assistance via MCP" "$(lacy_mode_description 'agent')"
+assert_eq "desc agent" "All input goes to the AI agent" "$(lacy_mode_description 'agent')"
 
 # Cleanup
 rm -f "$LACY_SHELL_MODE_FILE"

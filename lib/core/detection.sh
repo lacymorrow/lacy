@@ -63,7 +63,7 @@ lacy_shell_is_valid_command() {
 
 # Check if input starting with a valid command has natural language markers.
 # Returns 0 (true) if at least one bare word after the first word is a strong
-# NL marker. Used to flag reroute candidates — the reroute only fires when
+# NL marker. Used to flag reroute candidates: the reroute only fires when
 # the command also fails, so this can be fairly aggressive.
 lacy_shell_has_nl_markers() {
     local input="$1"
@@ -71,7 +71,7 @@ lacy_shell_has_nl_markers() {
     # Bail if single word (no spaces)
     [[ "$input" != *" "* ]] && return 1
 
-    # Bail if input contains shell operators — clearly shell syntax
+    # Bail if input contains shell operators: clearly shell syntax
     local op
     for op in "${LACY_SHELL_OPERATORS[@]}"; do
         [[ "$input" == *"$op"* ]] && return 1
@@ -360,16 +360,6 @@ _lacy_classify_impl() {
     fi
 }
 
-# Backward-compatible wrapper: returns 0 (agent) or 1 (shell/neutral)
-lacy_shell_should_use_agent() {
-    lacy_shell_classify_input "$1" >/dev/null
-    if [[ "$_LACY_CLASSIFY_RESULT" == "agent" ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Initialize detection cache (call at startup)
 lacy_shell_init_detection_cache() {
     LACY_CMD_CACHE_WORD=""
@@ -457,7 +447,7 @@ lacy_shell_test_detection() {
         "RUST_LOG=debug cargo run"
         "FOO=bar BAZ=qux node index.js"
         "CC=gcc make -j4"
-        # Agent words that are also valid commands — should use heuristics
+        # Agent words that are also valid commands: should use heuristics
         "which python"
         "which -a git"
         "which version should I install"
