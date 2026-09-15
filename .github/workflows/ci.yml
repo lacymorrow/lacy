@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -16,46 +19,53 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shell: [bash, zsh]
+        shell: [bash, zsh, fish]
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install zsh
-        if: matrix.shell == 'zsh'
-        run: sudo apt-get update && sudo apt-get install -y zsh
+      - name: Install ${{ matrix.shell }}
+        if: matrix.shell != 'bash'
+        run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.shell }}
 
-      - name: Syntax-check entry points
+      - name: Syntax-check entry point
         shell: bash
         run: |
           set -e
-          shopt -s nullglob
-          # Pick the right plugin file for this shell
           plugin="lacy.plugin.${{ matrix.shell }}"
           if [ -f "$plugin" ]; then
             echo "checking $plugin"
             ${{ matrix.shell }} -n "$plugin"
           fi
 
-      - name: Syntax-check lib/
+      - name: Syntax-check lib/ and scripts
         shell: bash
         run: |
           set -e
-          shopt -s nullglob
-          # zsh syntax check only zsh files; bash syntax check only sh + bash files
-          if [ "${{ matrix.shell }}" = "zsh" ]; then
-            files=(lib/**/*.zsh lib/*.zsh)
-          else
-            files=(lib/**/*.sh lib/**/*.bash lib/*.sh lib/*.bash)
-          fi
+          shopt -s nullglob globstar
+          case "${{ matrix.shell }}" in
+            zsh)  files=(lib/**/*.zsh) ;;
+            fish) files=(lib/**/*.fish) ;;
+            bash) files=(lib/**/*.sh lib/**/*.bash install.sh uninstall.sh bin/lacy script/*.sh) ;;
+          esac
           if [ ${#files[@]} -eq 0 ]; then
-            echo "no ${{ matrix.shell }} files to check under lib/"
+            echo "no ${{ matrix.shell }} files to check"
             exit 0
           fi
           for f in "${files[@]}"; do
             echo "checking $f"
             ${{ matrix.shell }} -n "$f"
           done
+
+      - name: Word lists in sync
+        if: matrix.shell == 'bash'
+        shell: bash
+        run: |
+          if [ -f script/sync-word-lists.sh ]; then
+            bash script/sync-word-lists.sh --check
+          else
+            echo "SKIP: script/sync-word-lists.sh not present"
+          fi
 
   shellcheck:
     name: shellcheck (.sh / .bash only)
@@ -65,7 +75,11 @@ jobs:
       # ShellCheck does NOT support zsh (SC1071), so we scan only POSIX/bash
       # script files. The two pre-existing SC2296 errors in lib/core/*.sh
       # come from intentional zsh-style parameter expansion inside files
-      # that are sourced from zsh — those are excluded individually.
+      # that are sourced from zsh; those are excluded individually.
+      #
+      # additional_files entries are matched with `find -name "*<entry>"`, so
+      # they must be base names: `lacy` picks up bin/lacy (a path with a slash
+      # would never match).
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
@@ -73,8 +87,124 @@ jobs:
           scandir: '.'
           ignore_paths: 'node_modules tests'
           ignore_names: 'config.sh preheat.sh'
-          additional_files: 'install.sh uninstall.sh'
+          additional_files: 'install.sh uninstall.sh lacy'
           format: gcc
           check_together: 'yes'
         env:
           SHELLCHECK_OPTS: '-e SC1071 -e SC2296'
+
+  tests:
+    name: Tests (${{ matrix.os }}, ${{ matrix.shell }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        shell: [bash, zsh]
+        include:
+          - os: ubuntu-latest
+            shell: fish
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install ${{ matrix.shell }} (Linux)
+        if: runner.os == 'Linux' && matrix.shell != 'bash'
+        run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.shell }}
+
+      - name: Install Bash 4+ (macOS)
+        if: runner.os == 'macOS' && matrix.shell == 'bash'
+        run: |
+          brew install bash
+          for b in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+            if [ -x "$b" ]; then
+              "$b" --version | head -n 1
+              echo "LACY_TEST_BASH=$b" >> "$GITHUB_ENV"
+              break
+            fi
+          done
+
+      # The installer and word-list checks have their own jobs below/above.
+      - name: Run suites
+        shell: bash
+        run: script/test.sh --shell ${{ matrix.shell }} --skip test_installer.sh --skip sync-word-lists.sh
+
+  installer-smoke:
+    name: Installer smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      DO_NOT_TRACK: "1"
+      LACY_NO_NODE: "1"
+      LACY_REPO_URL: file://${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # install.sh clones from LACY_REPO_URL and checks out the latest
+          # tag, so the local clone needs full history and tags.
+          fetch-depth: 0
+
+      - name: Install zsh (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y zsh
+
+      - name: Install, reinstall, doctor, uninstall (sandboxed HOME)
+        shell: bash
+        run: |
+          if [ ! -f tests/test_installer.sh ]; then
+            echo "SKIP: tests/test_installer.sh not present"
+            exit 0
+          fi
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          bash tests/test_installer.sh
+
+  npm-package:
+    name: npm package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/lacy
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/lacy/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: CLI help runs
+        run: node index.mjs --help
+
+      - name: Pack (dry run)
+        run: npm pack --dry-run
+
+      - name: Versions in sync
+        working-directory: .
+        run: |
+          root=$(node -p "require('./package.json').version")
+          pkg=$(node -p "require('./packages/lacy/package.json').version")
+          lock=$(node -p "require('./packages/lacy/package-lock.json').version")
+          lockroot=$(node -p "require('./packages/lacy/package-lock.json').packages[''].version")
+          cli=$(sed -n 's/^VERSION_FALLBACK="\(.*\)"$/\1/p' bin/lacy)
+          printf '%-44s %s\n' \
+            "package.json" "$root" \
+            "packages/lacy/package.json" "$pkg" \
+            "packages/lacy/package-lock.json" "$lock" \
+            "packages/lacy/package-lock.json packages['']" "$lockroot" \
+            "bin/lacy VERSION_FALLBACK" "$cli"
+          for v in "$pkg" "$lock" "$lockroot" "$cli"; do
+            if [ "$v" != "$root" ]; then
+              echo "::error::version drift: expected $root everywhere (see table above)"
+              exit 1
+            fi
+          done
