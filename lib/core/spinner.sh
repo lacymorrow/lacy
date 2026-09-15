@@ -145,10 +145,14 @@ lacy_stop_spinner() {
     # Kill if still running
     if kill -0 "$LACY_SPINNER_PID" 2>/dev/null; then
         kill "$LACY_SPINNER_PID" 2>/dev/null
-        # In ZSH we can wait; in Bash the process is disowned so just sleep
-        if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
-            wait "$LACY_SPINNER_PID" 2>/dev/null
-        fi
+        # Poll instead of `wait`: this also runs while handling Ctrl+C, and a
+        # `wait` there can block until the child finishes its own signal
+        # handling, which hangs the line editor.
+        local _spin_wait=0
+        while (( _spin_wait < 20 )) && kill -0 "$LACY_SPINNER_PID" 2>/dev/null; do
+            sleep "$LACY_TERMINAL_FLUSH_DELAY"
+            _spin_wait=$(( _spin_wait + 1 ))
+        done
         sleep "$LACY_TERMINAL_FLUSH_DELAY"
         printf '\e[2K\r' >&2
     fi
