@@ -1,6 +1,6 @@
 # lacy
 
-Interactive installer for [Lacy Shell](https://github.com/lacymorrow/lacy) — talk directly to your shell.
+Installer for [Lacy Shell](https://github.com/lacymorrow/lacy). Talk directly to your shell.
 
 ## Install
 
@@ -8,11 +8,12 @@ Interactive installer for [Lacy Shell](https://github.com/lacymorrow/lacy) — t
 npx lacy
 ```
 
-Features:
-- Arrow-key tool selection
-- Auto-detects installed AI CLI tools
-- Offers to install lash if selected
-- Automatic shell restart
+- Uses your AI CLI tool without asking when exactly one is installed
+- Asks which one to use only when several are installed
+- Offers to install lash when none is found
+- Installs the latest release, and asks nothing when there is no terminal (CI, Docker)
+
+Run `npx lacy` again after installing to change the tool or mode, update, or uninstall.
 
 ## Uninstall
 
@@ -24,17 +25,19 @@ npx lacy --uninstall
 
 ```
 Usage:
-  npx lacy              Install Lacy Shell
-  npx lacy --uninstall  Uninstall Lacy Shell
+  npx lacy              Install, or open settings when installed
+  npx lacy setup        Open settings
+  npx lacy info         Show a short introduction
+  npx lacy --uninstall  Remove Lacy Shell
 
 Options:
-  -h, --help       Show help message
-  -u, --uninstall  Uninstall Lacy Shell
+  -h, --help       Show this help
+  -u, --uninstall  Remove Lacy Shell
 ```
 
 ## What is Lacy Shell?
 
-Lacy routes natural language to AI and commands to your shell — automatically.
+Lacy sends commands to your shell and questions to your AI tool.
 
 ```
 ❯ ls -la                → runs in shell
@@ -43,9 +46,9 @@ Lacy routes natural language to AI and commands to your shell — automatically.
 ❯ fix the build error   → AI answers
 ```
 
-Works with: **lash**, **claude**, **opencode**, **gemini**, **codex**
+Works with: **lash**, **claude**, **opencode**, **gemini**, **codex**, **hermes**, **copilot**, **goose**, **amp**, **aider**
 
-## Alternative Install Methods
+## Other install methods
 
 ```bash
 # curl
@@ -58,4 +61,4 @@ brew install lacy
 
 ## License
 
-MIT
+FSL-1.1-MIT
