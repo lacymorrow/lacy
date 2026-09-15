@@ -22,10 +22,10 @@ export LACY_PREHEAT_SERVER_PORT="$TEST_PORT"
 # Source modules (minimal chain — no ZLE/prompt deps)
 # ============================================================================
 
-source "$REPO_ROOT/lib/constants.zsh"
-source "$REPO_ROOT/lib/spinner.zsh"
-source "$REPO_ROOT/lib/mcp.zsh"
-source "$REPO_ROOT/lib/preheat.zsh"
+source "$REPO_ROOT/lib/core/constants.sh"
+source "$REPO_ROOT/lib/core/spinner.sh"
+source "$REPO_ROOT/lib/core/mcp.sh"
+source "$REPO_ROOT/lib/core/preheat.sh"
 source "$REPO_ROOT/lib/core/context.sh"
 
 # ============================================================================
