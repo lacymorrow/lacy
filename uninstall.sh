@@ -14,6 +14,9 @@ set -e
 LACY_DIR="${HOME}/.lacy"
 LACY_DIR_OLD="${HOME}/.lacy-shell"
 
+# A dumb terminal renders escapes as garbage: treat it like NO_COLOR.
+# Not exported, so child processes are unaffected.
+if [[ "${TERM:-}" == "dumb" && -z "${NO_COLOR:-}" ]]; then NO_COLOR=1; fi
 if [[ -n "${NO_COLOR:-}" ]]; then
     GREEN="" YELLOW="" NC=""
 else

@@ -1,7 +1,7 @@
 {
   "name": "lacy",
   "version": "1.8.23",
-  "description": "Install lacy: talk to your terminal",
+  "description": "Installer for lacy. Talk to your shell: commands run, questions go to your AI coding tool.",
   "type": "module",
   "bin": {
     "lacy": "index.mjs"

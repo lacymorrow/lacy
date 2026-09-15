@@ -28,6 +28,11 @@ set -g LACY_COLOR_NEUTRAL 238       # dark gray
 # Output helpers
 # ============================================================================
 
+# A dumb terminal renders escapes as garbage: treat it like NO_COLOR (not exported).
+if test "$TERM" = dumb; and test -z "$NO_COLOR"
+    set -g NO_COLOR 1
+end
+
 # Print an SGR escape (e.g. "38;5;34", "1", "0"), or nothing when NO_COLOR is set.
 function _lacy_sgr --description "Print an SGR escape unless NO_COLOR is set"
     test -n "$NO_COLOR"; and return

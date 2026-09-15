@@ -451,6 +451,31 @@ load
 assert_eq "no config: created and set" "amp" "$LACY_ACTIVE_TOOL"
 assert_contains "no config: template kept" "$(cat "$CFG")" "# Leave empty to auto-detect."
 
+# ============================================================================
+echo "Unknown agent_tools.active and mode output"
+# ============================================================================
+
+printf 'agent_tools:\n  active: notatool\n' > "$CFG"
+lacy_shell_load_config 2> "$OUT"
+assert_eq "unknown tool: falls back to auto-detect" "" "$LACY_ACTIVE_TOOL"
+assert_contains "unknown tool: warns on stderr" "$(cat "$OUT")" "'notatool' is not a known tool"
+
+printf 'agent_tools:\n  active: [claude\n' > "$CFG"
+lacy_shell_load_config 2> "$OUT"
+assert_eq "malformed tool value: falls back to auto-detect" "" "$LACY_ACTIVE_TOOL"
+
+printf 'agent_tools:\n  active: custom\n' > "$CFG"
+lacy_shell_load_config 2> "$OUT"
+assert_eq "custom tool: kept" "custom" "$LACY_ACTIVE_TOOL"
+assert_eq "custom tool: no warning" "" "$(cat "$OUT")"
+
+LACY_SHELL_CURRENT_MODE="auto"
+out=$(NO_COLOR=1 lacy_shell_mode)
+assert_contains "mode: leads with the current mode" "$(printf '%s\n' "$out" | sed -n 2p)" "AUTO"
+assert_contains "mode: shows the shell glyph" "$out" '$  runs in the shell'
+assert_contains "mode: shows the agent glyph" "$out" '?  goes to the AI agent'
+assert_eq "mode status: same output as mode" "$out" "$(NO_COLOR=1 lacy_shell_mode status)"
+
 echo "================================================================"
 echo "Results: $PASS passed, $FAIL failed"
 if [[ $FAIL -gt 0 ]]; then

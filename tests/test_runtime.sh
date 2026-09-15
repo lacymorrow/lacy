@@ -186,6 +186,12 @@ assert_eq "NO_COLOR: plain, no newline" 'abc' "$(NO_COLOR=1 lacy_print_color_n 2
 out=$(NO_COLOR=1 _lacy_print_no_tool)
 assert_not_contains "NO_COLOR: no-tool message has no escapes" "$out" $'\e'
 
+# TERM=dumb behaves like NO_COLOR, without exporting NO_COLOR to children
+out=$(unset NO_COLOR; export TERM=dumb; source "$REPO_DIR/lib/core/constants.sh"; lacy_print_color 34 hi; env | grep -c '^NO_COLOR=')
+assert_eq "TERM=dumb: plain output, NO_COLOR not exported" $'hi\n0' "$out"
+out=$(unset NO_COLOR; export TERM=xterm-256color; source "$REPO_DIR/lib/core/constants.sh"; lacy_print_color 34 hi)
+assert_eq "TERM=xterm-256color: colour kept" $'\e[38;5;34mhi\e[0m' "$out"
+
 # ============================================================================
 echo "No AI tool: one message, no prompt"
 # ============================================================================

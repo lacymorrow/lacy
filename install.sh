@@ -22,6 +22,9 @@
 
 set -e
 
+# A dumb terminal renders escapes as garbage: treat it like NO_COLOR.
+# Not exported, so child processes are unaffected.
+if [[ "${TERM:-}" == "dumb" && -z "${NO_COLOR:-}" ]]; then NO_COLOR=1; fi
 if [[ -n "${NO_COLOR:-}" ]]; then
     RED="" GREEN="" YELLOW="" BLUE="" MAGENTA="" CYAN="" BOLD="" DIM="" NC=""
 else

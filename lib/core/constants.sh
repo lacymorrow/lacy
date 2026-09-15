@@ -199,8 +199,6 @@ LACY_MSG_MODE_AUTO="AUTO mode - smart detection"
 LACY_MSG_MODE_SHELL_SHORT="SHELL mode"
 LACY_MSG_MODE_AGENT_SHORT="AGENT mode"
 LACY_MSG_MODE_AUTO_SHORT="AUTO mode"
-LACY_MSG_COLOR_SHELL="Green  = shell command"
-LACY_MSG_COLOR_AGENT="Magenta = agent query"
 
 # === Gemini ===
 LACY_GEMINI_CONTEXT="[Context: headless mode (-p). Available tools: grep_search, cli_help, read_file. Shell execution (run_shell_command) is NOT available; answer from context instead. cwd: {cwd}]"
@@ -220,6 +218,10 @@ LACY_CTX_CAPTURE_TIMEOUT_TICKS=20  # x 0.1s: budget for an AppleScript screen ca
 LACY_SIGNAL_EXIT_THRESHOLD=128  # Exit codes >= this are signal-based
 
 # === Portable Helpers ===
+
+# A dumb terminal renders escapes as garbage: treat it like NO_COLOR.
+# Not exported, so child processes are unaffected.
+if [[ "${TERM:-}" == "dumb" && -z "${NO_COLOR:-}" ]]; then NO_COLOR=1; fi
 
 # Print colored text (256-color code). The text is printed as-is: no prompt
 # or backslash expansion. With $NO_COLOR set (https://no-color.org) no escape

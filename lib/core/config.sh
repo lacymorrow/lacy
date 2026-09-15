@@ -268,6 +268,12 @@ lacy_shell_load_config() {
             ;;
     esac
 
+    if [[ -n "$LACY_ACTIVE_TOOL" && "$LACY_ACTIVE_TOOL" != "custom" ]] &&
+       ! _lacy_in_list "$LACY_ACTIVE_TOOL" "${LACY_TOOL_LIST[@]}"; then
+        printf "lacy: agent_tools.active '%s' is not a known tool. Using auto-detect.\n" "$LACY_ACTIVE_TOOL" >&2
+        LACY_ACTIVE_TOOL=""
+    fi
+
     LACY_SHELL_CURRENT_MODE="${LACY_CONFIG_DEFAULT_MODE:-${LACY_SHELL_DEFAULT_MODE:-auto}}"
     return $rc
 }

@@ -78,20 +78,7 @@ lacy_shell_mode() {
             lacy_shell_mode_status
             ;;
         *)
-            echo ""
-            echo "Usage: mode [shell|agent|auto|toggle|status]"
-            echo ""
-            echo -n "Current: "
-            case "$LACY_SHELL_CURRENT_MODE" in
-                "shell") lacy_print_color "$LACY_COLOR_SHELL" "SHELL" ;;
-                "agent") lacy_print_color "$LACY_COLOR_AGENT" "AGENT" ;;
-                "auto")  lacy_print_color "$LACY_COLOR_AUTO" "AUTO" ;;
-            esac
-            echo ""
-            echo "Colors:"
-            _lacy_print_indicator_msg "$LACY_COLOR_SHELL" "$LACY_MSG_COLOR_SHELL"
-            _lacy_print_indicator_msg "$LACY_COLOR_AGENT" "$LACY_MSG_COLOR_AGENT"
-            echo ""
+            lacy_shell_mode_status
             ;;
     esac
 }
