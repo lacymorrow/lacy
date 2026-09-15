@@ -5,6 +5,180 @@ All notable changes to Lacy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Production hardening (see PR)
+
+## [1.8.23] - 2026-09-14
+
+- Version bump only.
+
+## [1.8.22] - 2026-09-14
+
+### Changed
+
+- Releases are cut with shipx instead of `script/release.ts`.
+
+## [1.8.21] - 2026-09-14
+
+### Added
+
+- Experimental Nushell plugin.
+
+### Fixed
+
+- `.lash/` session state and local Claude settings are no longer tracked or shipped to installs. A pre-commit hook (`.githooks/pre-commit`) blocks logs, databases, and API tokens.
+- Release notes are passed to `gh release create` by file, so a commit subject can no longer run shell code on the release machine.
+- The root `install` npm script is now `setup:local`, so `npm install` in the repo no longer runs the installer.
+- The preheat server is stopped by port. Orphaned `lash serve` processes no longer hold port 4096, which was the cause of the intermittent Bun errors.
+- Agent failures print the tool's exit code and the last lines of its error output. An unknown tool name no longer runs the query as a shell command.
+- zsh cleanup runs from `zshexit_functions` instead of an EXIT trap that fired early under zinit and antidote.
+- 22 inputs that are plain shell syntax (paths, redirects, subshells, `[[`, env prefixes, `! true`) now go to the shell.
+- Classifying input no longer forks on every keystroke. Long pastes went from about 300 ms to under 1 ms.
+- Internal state cleanup uses `command rm` so user aliases for `rm` are bypassed.
+
+## [1.8.20] - 2026-05-25
+
+- Version bump only.
+
+## [1.8.19] - 2026-05-25
+
+- Version bump only.
+
+## [1.8.18] - 2026-05-25
+
+### Fixed
+
+- `npx lacy` works again. 1.8.12 through 1.8.17 were published from the root package, which has no `bin`. The root is now private, and `packages/lacy` version and lockfile are back in sync.
+
+## [1.8.17] - 2026-05-24
+
+- Version bump only.
+
+## [1.8.16] - 2026-05-24
+
+### Fixed
+
+- Uninstall no longer prints an npm error, and it offers to restart the shell.
+
+## [1.8.15] - 2026-05-20
+
+- Version bump only.
+
+## [1.8.14] - 2026-05-20
+
+- Version bump only.
+
+## [1.8.13] - 2026-05-20
+
+### Changed
+
+- README images use absolute URLs so they render on npm.
+
+## [1.8.12] - 2026-05-18
+
+### Added
+
+- Backends: GitHub Copilot CLI, Hermes, Goose, Amp, and Aider.
+- Fish shell support (`lacy.plugin.fish`).
+- Tab completion for the `lacy` CLI in zsh and bash (`lacy completions`).
+- `lacy changelog` and `lacy logs [N]` / `lacy logs --clear`.
+- `spinner.style` config key, plus `dots` and `ascii` spinner styles.
+- About 40 more agent words for natural language routing.
+
+### Changed
+
+- License is now FSL-1.1-MIT.
+- Git is optional for installation (curl/tarball fallback).
+- "No AI tool found" messages list every supported tool with its install command.
+- Repo polish: CONTRIBUTING.md, issue templates, security policy, CI, new logo and social preview.
+
+### Fixed
+
+- The npx installer no longer hangs after it finishes.
+- Installing from bash no longer requires zsh or git, and the Bash version check uses your bash instead of `/bin/bash`.
+- `lacy doctor` detects hermes, copilot, and goose.
+
+## [1.8.11] - 2026-05-05
+
+### Fixed
+
+- Path-prefixed commands (`./script.sh`, `/usr/bin/env`) go to the shell, and backslashes are kept in history.
+
+## [1.8.10] - 2026-04-21
+
+### Added
+
+- Agent queries carry terminal context (cwd, git branch, last exit code, recent commands), sent only when something changed.
+
+### Fixed
+
+- Quoted paths go to the shell.
+- Trailing punctuation is stripped before agent word matching, so `thanks!` routes to the agent.
+- Telemetry JSON payload escaping is hardened.
+
+## [1.8.9] - 2026-03-23
+
+### Fixed
+
+- Uninstall handles the Homebrew symlink.
+
+## [1.8.8] - 2026-03-23
+
+- Version bump only.
+
+## [1.8.7] - 2026-03-23
+
+- Version bump only.
+
+## [1.8.6] - 2026-03-23
+
+### Fixed
+
+- Tool detection checks every supported tool, not only lash and claude.
+
+## [1.8.5] - 2026-03-22
+
+### Added
+
+- Ghost text follow-up suggestion (zsh). After a rerouted command gets an agent reply, a suggestion shows on the next empty prompt. Right arrow or Tab accepts it.
+
+## [1.8.4] - 2026-03-13
+
+### Added
+
+- `/new`, `/reset`, `/clear`, and `/resume` session commands. A leading slash always routes to these commands, never to the shell.
+- `tool set` persists the choice to `config.yaml`.
+
+### Fixed
+
+- Gemini no longer leaves the spinner running forever.
+- Formatting fixes for rendered agent output (horizontal rules, headers).
+
+## [1.8.3] - 2026-03-07
+
+### Changed
+
+- The spinner style defaults to random.
+
+### Fixed
+
+- opencode session resume.
+
+## [1.8.2] - 2026-03-07
+
+- Version bump only.
+
+## [1.8.1] - 2026-03-07
+
+- Detection and agent routing tweaks (no release notes recorded).
+
+## [1.8.0] - 2026-03-03
+
+### Added
+
+- Hint showing how to resume the last agent session.
+
 ## [1.7.0] - 2026-02-07
 
 ### Added
