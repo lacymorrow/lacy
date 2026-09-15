@@ -7,11 +7,12 @@
 ## How to test
 
 ```bash
-npm test
+script/test.sh            # every suite in bash, zsh (and fish if installed)
+script/test.sh --shell zsh
 ```
 
 ## Checklist
 
-- [ ] `npm test` passes locally
+- [ ] `script/test.sh` passes locally
 - [ ] Updated the README if a public option changed
 - [ ] PR is focused (one logical change)
