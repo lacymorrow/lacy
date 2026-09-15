@@ -1,6 +1,6 @@
 {
   "name": "lacy",
-  "version": "1.8.22",
+  "version": "1.8.23",
   "private": true,
   "type": "module",
   "description": "Talk to your terminal — AI agent routing for your shell",
