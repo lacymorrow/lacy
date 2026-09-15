@@ -9,7 +9,10 @@ _lacy_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     local commands="setup install uninstall update reinstall status info doctor config new resume logs changelog completions version help"
-    local tool_names="lash claude opencode gemini codex custom auto"
+    # Tool names come from the canonical list in lib/core/constants.sh
+    local IFS=' '
+    local tool_names="${LACY_TOOL_LIST[*]} custom auto"
+    IFS=$' \t\n'
 
     case "$prev" in
         config)

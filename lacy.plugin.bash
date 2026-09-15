@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Lacy Shell - Smart shell plugin with MCP support (Bash adapter)
+# Lacy Shell - Smart shell plugin (Bash adapter)
 
 # Prevent multiple sourcing
 if [[ "${LACY_SHELL_LOADED:-}" == "true" ]]; then
@@ -29,47 +29,29 @@ lacy_shell_init() {
 
     lacy_shell_load_config
     lacy_shell_setup_keybindings
-    lacy_shell_init_mcp
     lacy_preheat_init
     lacy_shell_setup_prompt
     lacy_shell_init_mode
-    lacy_shell_setup_interrupt_handler
-    lacy_shell_setup_eof_handler
+    _lacy_bash_install_prompt_hooks
 }
 
 # Cleanup
 lacy_shell_cleanup() {
     lacy_stop_spinner 2>/dev/null
     lacy_preheat_cleanup
-    lacy_shell_cleanup_mcp
     lacy_shell_cleanup_keybindings_bash
-    trap - INT
-    unset IGNOREEOF
-    # Restore original PROMPT_COMMAND
-    if [[ -n "$_LACY_ORIGINAL_PROMPT_COMMAND" ]]; then
-        PROMPT_COMMAND="$_LACY_ORIGINAL_PROMPT_COMMAND"
-    else
-        PROMPT_COMMAND=""
-    fi
+    _lacy_bash_remove_prompt_hooks
     LACY_SHELL_QUITTING=false
     LACY_SHELL_ENABLED=false
     LACY_SHELL_LOADED=false
     unset LACY_SHELL_ACTIVE
 }
 
-# Set up PROMPT_COMMAND for post-execution hooks
-_LACY_ORIGINAL_PROMPT_COMMAND="${PROMPT_COMMAND:-}"
-if [[ -n "$PROMPT_COMMAND" ]]; then
-    PROMPT_COMMAND="lacy_shell_precmd_bash; ${PROMPT_COMMAND}"
-else
-    PROMPT_COMMAND="lacy_shell_precmd_bash"
-fi
-
 # Initialize
 lacy_shell_init
 
 # One-time install tracking (background, fail-silent)
-_lacy_track_first_load
+declare -F _lacy_track_first_load >/dev/null && _lacy_track_first_load
 
 # Cleanup on exit
 trap lacy_shell_cleanup EXIT

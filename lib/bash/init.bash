@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Bash adapter init — sources shared core + Bash-specific modules
+# Bash adapter init: sources shared core + Bash-specific modules
 
 # Require Bash 4+ (for declare -A, ${var,,}, READLINE_LINE)
 if [[ ${BASH_VERSINFO[0]} -lt 4 ]]; then
