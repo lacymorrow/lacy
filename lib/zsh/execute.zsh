@@ -2,8 +2,12 @@
 
 # Command execution logic for Lacy Shell
 
-# Pending internal command (set by slash-command handler, dispatched by precmd)
+# Pending internal command (set by the accept-line widget, dispatched by precmd)
 LACY_SHELL_PENDING_CMD=""
+
+# First-run hint: shown once ever, on the first empty prompt after load
+LACY_HINT_QUERY="what files are here"
+LACY_HINT_DISPLAY="what files are here   (Enter to ask, or just type)"
 
 # Smart accept-line widget that handles agent queries
 lacy_shell_smart_accept_line() {
@@ -15,26 +19,38 @@ lacy_shell_smart_accept_line() {
 
     local input="$BUFFER"
 
-    # Skip empty commands — also dismiss any ghost text suggestion
+    # Empty line: Enter asks the first-run hint; any other ghost text is dismissed
     if [[ -z "$input" ]]; then
-        LACY_SHELL_SUGGESTION=""
+        if [[ "$LACY_SHELL_HINT_ACTIVE" == true && -n "$LACY_SHELL_SUGGESTION" ]]; then
+            local hint="$LACY_SHELL_SUGGESTION"
+            _lacy_clear_suggestion
+            _lacy_submit_agent_query "$hint" "$hint"
+            return
+        fi
+        _lacy_clear_suggestion
         zle .accept-line
         return
     fi
 
-    # Intercept slash-prefixed session commands (/new, /reset, /clear, /resume)
-    local _slashcmd="$input"
-    _slashcmd="${_slashcmd#"${_slashcmd%%[^[:space:]]*}"}"
-    case "$_slashcmd" in
-        /new|/reset|/clear|/resume)
-            local _slash_hist="${input//\\/\\\\}"
-            print -s -- "$_slash_hist"
+    local trimmed="${input#"${input%%[^[:space:]]*}"}"
+    trimmed="${trimmed%"${trimmed##*[^[:space:]]}"}"
+
+    # Checked before classification, in every mode:
+    # `exit` always exits the shell, `quit` leaves Lacy.
+    case "$trimmed" in
+        exit|exit\ <->)
+            zle .accept-line
+            return
+            ;;
+        quit|/new|/reset|/clear|/resume)
+            local _cmd_hist="${input//\\/\\\\}"
+            print -s -- "$_cmd_hist"
             fc -AI 2>/dev/null
-            if [[ "$_slashcmd" == "/resume" ]]; then
-                LACY_SHELL_PENDING_CMD="session_resume"
-            else
-                LACY_SHELL_PENDING_CMD="session_new"
-            fi
+            case "$trimmed" in
+                quit)    LACY_SHELL_PENDING_CMD="quit" ;;
+                /resume) LACY_SHELL_PENDING_CMD="session_resume" ;;
+                *)       LACY_SHELL_PENDING_CMD="session_new" ;;
+            esac
             BUFFER=""
             zle .accept-line
             return
@@ -53,24 +69,11 @@ lacy_shell_smart_accept_line() {
             return
             ;;
         "shell")
-            # Trim input to check for ! bypass
-            local trimmed="$input"
-            trimmed="${trimmed#"${trimmed%%[^[:space:]]*}"}"
-
             # Bypass only when ! is glued to the command (`!rm -rf x`).
             # `! true` with a space is the shell's own negation: leave it alone.
             if [[ "$trimmed" == \![^[:space:]]* ]]; then
-                # Strip the ! prefix, keep everything after it
                 trimmed="${trimmed#!}"
                 BUFFER="$trimmed"
-            fi
-
-            # Handle "exit" explicitly: in shell mode pass through to builtin,
-            # in auto/agent mode quit lacy shell
-            local first_word="${trimmed%% *}"
-            if [[ "$first_word" == "exit" && "$LACY_SHELL_CURRENT_MODE" != "shell" ]]; then
-                lacy_shell_quit
-                return
             fi
 
             # In auto mode, flag commands with NL markers as reroute candidates.
@@ -95,47 +98,69 @@ lacy_shell_smart_accept_line() {
                 agent_input="${_at_trimmed#@}"
                 agent_input="${agent_input#"${agent_input%%[^[:space:]]*}"}"
             fi
-
-            # Add to history before clearing buffer.
-            # Double backslashes before print -s: ZSH's print processes \X escape
-            # sequences even with -s, so "Google\ Chrome" becomes "Google Chrome".
-            # Doubling (\ → \\) makes print convert \\ → \, preserving the original.
-            local _hist_input="${input//\\/\\\\}"
-            print -s -- "$_hist_input"
-            # Flush to HISTFILE immediately — needed for INC_APPEND_HISTORY / SHARE_HISTORY users,
-            # since the subsequent empty-buffer accept-line doesn't trigger a file write.
-            fc -AI 2>/dev/null
-
-            # Defer agent execution to precmd — output produced inside a ZLE
-            # widget (after zle .accept-line) confuses ZLE's cursor tracking,
-            # causing the prompt to overwrite short (one-line) results.
-            LACY_SHELL_PENDING_QUERY="$agent_input"
-            BUFFER=""
-            zle .accept-line
+            _lacy_submit_agent_query "$agent_input" "$input"
             ;;
     esac
 }
 
-# Disable input interception (emergency mode)
-lacy_shell_disable_interception() {
-    echo "🚨 Disabling Lacy Shell input interception"
-    zle -A .accept-line accept-line
-    echo "✅ Normal shell behavior restored"
-    echo "   Run 'lacy_shell_enable_interception' to re-enable"
+# Hand an agent query to precmd and accept the line.
+# Output produced inside a ZLE widget confuses ZLE's cursor tracking, so the
+# query runs in precmd. BUFFER is emptied so the shell runs nothing; the typed
+# text moves to POSTDISPLAY so the accepted line still shows it, with no need
+# to re-render the user's prompt.
+# Usage: _lacy_submit_agent_query <query> <text as typed>
+_lacy_submit_agent_query() {
+    local query="$1" shown="$2"
+
+    # Add to history before clearing buffer.
+    # Double backslashes before print -s: ZSH's print processes \X escape
+    # sequences even with -s, so "Google\ Chrome" becomes "Google Chrome".
+    # Doubling (\ -> \\) makes print convert \\ -> \, preserving the original.
+    local _hist_input="${shown//\\/\\\\}"
+    print -s -- "$_hist_input"
+    # Flush to HISTFILE immediately, needed for INC_APPEND_HISTORY / SHARE_HISTORY
+    # users, since the subsequent empty-buffer accept-line doesn't write the file.
+    fc -AI 2>/dev/null
+
+    LACY_SHELL_PENDING_QUERY="$query"
+    BUFFER=""
+    (( $+functions[_zsh_autosuggest_clear] )) && _zsh_autosuggest_clear
+    POSTDISPLAY="$shown"
+    LACY_SHELL_OWN_POSTDISPLAY=false
+
+    local own_pre=0
+    _lacy_set_indicator agent && own_pre=1
+    if (( _LACY_ZLE_HL )); then
+        region_highlight=("${(@)region_highlight:#*memo=lacy*}")
+        if [[ -z ${NO_COLOR-} ]]; then
+            (( own_pre )) && region_highlight+=("P0 1 fg=${LACY_COLOR_AGENT} memo=lacy")
+            _lacy_first_word_bounds "$shown"
+            if (( _LACY_FW_END > _LACY_FW_START )); then
+                region_highlight+=("$_LACY_FW_START $_LACY_FW_END fg=${LACY_COLOR_AGENT},bold memo=lacy")
+            fi
+        fi
+    fi
+
+    zle .accept-line
 }
 
-# Re-enable input interception
-lacy_shell_enable_interception() {
-    echo "🔄 Re-enabling Lacy Shell input interception"
-    zle -N accept-line lacy_shell_smart_accept_line
-    echo "✅ Lacy Shell features restored"
+# Arm the first-run hint (once ever; flag file written when armed)
+_lacy_arm_first_run_hint() {
+    [[ "$LACY_SHELL_CURRENT_MODE" == "shell" ]] && return
+    [[ -e "$LACY_SHELL_HOME/.hinted" ]] && return
+    [[ -n "$LACY_SHELL_SUGGESTION" ]] && return
+    [[ -d "$LACY_SHELL_HOME" ]] || mkdir -p "$LACY_SHELL_HOME" 2>/dev/null || return
+    { : >| "$LACY_SHELL_HOME/.hinted" } 2>/dev/null || return
+    LACY_SHELL_SUGGESTION="$LACY_HINT_QUERY"
+    LACY_SHELL_SUGGESTION_DISPLAY="$LACY_HINT_DISPLAY"
+    LACY_SHELL_HINT_ACTIVE=true
 }
 
 # lacy_shell_execute_agent is in lib/core/commands.sh
 
 # Precmd hook - called before each prompt
 lacy_shell_precmd() {
-    # Capture exit code immediately — must be the first line
+    # Capture exit code immediately; must be the first line
     local last_exit=$?
 
     # Track exit code for terminal context (only for real shell commands)
@@ -153,6 +178,8 @@ lacy_shell_precmd() {
 
     # Clear any previous ghost text suggestion
     LACY_SHELL_SUGGESTION=""
+    LACY_SHELL_SUGGESTION_DISPLAY=""
+    LACY_SHELL_HINT_ACTIVE=false
 
     # Check reroute candidate: if the command failed with a non-signal exit
     # code (< 128), set ghost text suggestion to re-try via agent with @ prefix.
@@ -163,18 +190,16 @@ lacy_shell_precmd() {
             LACY_SHELL_SUGGESTION="@ ${candidate}"
         fi
     fi
-    # Handle deferred quit triggered by Ctrl-D without letting EOF propagate
-    if [[ "$LACY_SHELL_DEFER_QUIT" == true ]]; then
-        LACY_SHELL_DEFER_QUIT=false
-        LACY_SHELL_REROUTE_CANDIDATE=""
-        lacy_shell_quit
-        return
-    fi
-    # Handle pending internal commands (from slash-prefixed session commands)
+
+    # Handle pending internal commands (quit and slash-prefixed session commands)
     if [[ -n "$LACY_SHELL_PENDING_CMD" ]]; then
         local _cmd="$LACY_SHELL_PENDING_CMD"
         LACY_SHELL_PENDING_CMD=""
         case "$_cmd" in
+            quit)
+                lacy_shell_quit
+                return
+                ;;
             session_new)    lacy_session_new ;;
             session_resume) lacy_session_resume ;;
         esac
@@ -184,31 +209,20 @@ lacy_shell_precmd() {
     if [[ -n "$LACY_SHELL_PENDING_QUERY" ]]; then
         local pending="$LACY_SHELL_PENDING_QUERY"
         LACY_SHELL_PENDING_QUERY=""
-        # Restore query text on the prompt block above.
-        # accept-line cleared the buffer (to prevent shell execution), so the
-        # prompt was displayed with no input text. Move up over the entire prompt
-        # (which may span multiple lines), clear it, and reprint with the query.
-        local _expanded_ps1
-        _expanded_ps1=$(print -Pn "$LACY_SHELL_BASE_PS1")
-        local _prompt_lines=1
-        local _tmp="$_expanded_ps1"
-        while [[ "$_tmp" == *$'\n'* ]]; do
-            _tmp="${_tmp#*$'\n'}"
-            (( _prompt_lines++ ))
-        done
-        # Move up to start of prompt block, clear to end of screen
-        printf "\e[${_prompt_lines}A\e[J"
-        # Reprint full prompt with agent-colored indicator + query text
-        print -Pn "${LACY_SHELL_BASE_PS1}%F{${LACY_COLOR_AGENT}}${LACY_INDICATOR_CHAR}%f "
-        printf '%s\n' "$pending"
-        lacy_shell_execute_agent "$pending"
+        {
+            lacy_shell_execute_agent "$pending"
+        } always {
+            _lacy_query_interrupt_cleanup
+        }
     fi
 
-    # If a Ctrl-C message is currently displayed, skip redraw to preserve it
-    if [[ -n "$LACY_SHELL_MESSAGE_JOB_PID" ]] && kill -0 "$LACY_SHELL_MESSAGE_JOB_PID" 2>/dev/null; then
-        return
+    # First-run hint, checked on the first prompt after load only
+    if [[ -z "$_LACY_HINT_CHECKED" ]]; then
+        _LACY_HINT_CHECKED=1
+        _lacy_arm_first_run_hint
     fi
-    # Update prompt with current mode
+
+    # Update mode badge in the right prompt
     lacy_shell_update_prompt
 }
 
@@ -221,42 +235,22 @@ lacy_shell_quit() {
 
     echo ""
     lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_QUIT"
-    echo ""
-    
-    # CRITICAL: Remove precmd hooks FIRST to prevent redrawing
-    precmd_functions=(${precmd_functions:#lacy_shell_precmd})
-    precmd_functions=(${precmd_functions:#lacy_shell_update_prompt})
-    
-    # Disable input interception (only if ZLE is active)
-    if [[ -n "$ZLE_VERSION" ]]; then
+
+    # Disable input interception
+    if [[ -o zle ]]; then
         zle -A .accept-line accept-line 2>/dev/null
     fi
-    
-    # Comprehensive terminal reset sequence
-    # Reset all terminal attributes and clear any scroll regions
-    # Avoid full terminal reset (\033c) because it can cause prompt systems to redraw unpredictably
-    echo -ne "\033[0m"  # Reset all attributes
-    echo -ne "\033[r"  # Reset scroll region to full screen
-    echo -ne "\033[?7h"  # Enable line wrapping
-    echo -ne "\033[?25h" # Ensure cursor is visible
-    echo -ne "\033[?1049l"  # Exit alternate screen if active
-    echo -ne "\033[1;1H"  # Move to top-left
-    echo -ne "\033[J"  # Clear from cursor to end of screen
-    
-    # Stop any preheated servers
-    lacy_preheat_cleanup
 
-    # Run cleanup
+    # Reset attributes, line wrapping and cursor visibility left by an agent
+    # tool. No cursor moves or screen clears: the user's scrollback stays put.
+    printf '\e[0m\e[?7h\e[?25h'
+
+    # Stop servers, restore bindings, hooks and RPS1
     lacy_shell_cleanup
-    
-    # Prepare for prompt display if not in ZLE
-    if [[ -z "$ZLE_VERSION" ]]; then
-        print -r -- ""
-    fi
 
     # Unset aliases and function overrides
-    unalias ask mode tool spinner quit_lacy quit stop disable_lacy enable_lacy 2>/dev/null
-    unfunction lacy 2>/dev/null
+    unalias mode tool quit 2>/dev/null
+    unfunction ask lacy 2>/dev/null
 
     # Define a `lacy` function so user can re-enter by typing `lacy`
     local _ldir="$LACY_SHELL_DIR"
@@ -270,29 +264,24 @@ lacy_shell_quit() {
         fi
     }"
 
-    # Restore original prompt
-    lacy_shell_restore_prompt
-
-    # Print newline and trigger prompt display
     echo ""
-    if [[ -n "$ZLE_VERSION" ]]; then
-        zle -I 2>/dev/null
-        zle -R 2>/dev/null
-        zle reset-prompt 2>/dev/null || true
-    fi
+    zle && zle reset-prompt 2>/dev/null
+    return 0
 }
 
-# lacy_shell_mode, lacy_shell_tool, lacy_shell_spinner, lacy_shell_clear_conversation,
+# lacy_shell_mode, lacy_shell_tool, lacy_shell_clear_conversation,
 # lacy_shell_show_conversation, and lacy() are in lib/core/commands.sh
 
-# Aliases
-alias ask="lacy_shell_query_agent"
+# `ask` sends every argument as one query (an alias would pass only $1)
+unalias ask 2>/dev/null
+function ask {
+    {
+        lacy_shell_query_agent "$*"
+    } always {
+        _lacy_query_interrupt_cleanup
+    }
+}
+
 alias mode="lacy_shell_mode"
 alias tool="lacy_shell_tool"
-alias spinner="lacy_shell_spinner"
-alias quit_lacy="lacy_shell_quit"
 alias quit="lacy_shell_quit"
-alias stop="lacy_shell_quit"
-
-alias disable_lacy="lacy_shell_disable_interception"
-alias enable_lacy="lacy_shell_enable_interception"
