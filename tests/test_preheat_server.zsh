@@ -9,7 +9,8 @@ setopt NO_MONITOR  # suppress job control messages
 # Test configuration
 # ============================================================================
 
-TEST_PORT=14096
+# Free ephemeral port so parallel runs (CI legs, worktrees) never collide.
+TEST_PORT="${LACY_TEST_PORT:-$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}"
 TEST_TMPDIR=$(mktemp -d)
 SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h}"
