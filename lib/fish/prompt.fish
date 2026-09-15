@@ -1,30 +1,34 @@
-# Lacy Shell — Fish prompt indicator
+# Lacy Shell: Fish prompt indicator
 #
-# Appends a colored mode badge to the right prompt.
-# Note: real-time per-keystroke indicator is not available in Fish
-# without a custom event loop — the badge updates on each new prompt.
+# Appends the mode badge to the right prompt. Fish has no per-keystroke hook
+# without a custom event loop, so the badge updates on each new prompt.
 
 function _lacy_mode_badge --description "Print Lacy mode badge"
-    switch $LACY_SHELL_MODE
-        case shell
-            printf '\e[38;5;34mSHELL\e[0m'
-        case agent
-            printf '\e[38;5;200mAGENT\e[0m'
-        case auto
-            printf '\e[38;5;75mAUTO\e[0m'
+    set -l style (_lacy_mode_style $LACY_SHELL_MODE)
+    set -l on (_lacy_sgr "38;5;$style[1]")
+    set -l off (_lacy_sgr 0)
+    printf '%s%s %s%s' "$on" $style[2] $style[3] "$off"
+end
+
+# If fish_right_prompt already exists (Tide, Starship, oh-my-fish), copy it
+# and wrap it so both the theme output and the Lacy badge render.
+if not set -q _LACY_FISH_PROMPT_WRAPPED
+    set -g _LACY_FISH_PROMPT_WRAPPED 1
+    if functions -q fish_right_prompt
+        functions -c fish_right_prompt _lacy_original_right_prompt
+    end
+    function fish_right_prompt --description "fish_right_prompt with Lacy mode badge"
+        functions -q _lacy_original_right_prompt; and _lacy_original_right_prompt
+        _lacy_mode_badge
     end
 end
 
-# If fish_right_prompt already exists (e.g. Tide, Starship, oh-my-fish),
-# copy it and wrap it so both the theme output and Lacy badge render.
-if functions -q fish_right_prompt
-    functions -c fish_right_prompt _lacy_original_right_prompt
-    function fish_right_prompt --description "fish_right_prompt with Lacy mode badge"
-        _lacy_original_right_prompt
-        _lacy_mode_badge
+function _lacy_restore_right_prompt --description "Put the user's right prompt back"
+    set -q _LACY_FISH_PROMPT_WRAPPED; or return
+    functions -e fish_right_prompt
+    if functions -q _lacy_original_right_prompt
+        functions -c _lacy_original_right_prompt fish_right_prompt
+        functions -e _lacy_original_right_prompt
     end
-else
-    function fish_right_prompt --description "Show Lacy mode badge in right prompt"
-        _lacy_mode_badge
-    end
+    set -e _LACY_FISH_PROMPT_WRAPPED
 end
