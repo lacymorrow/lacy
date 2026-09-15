@@ -49,4 +49,5 @@ agent/lacy-agent
 lib/.lash/
 .venv/
 lash-panic-*.log
+**/lash-panic-*.log
 .claude/settings.local.json
