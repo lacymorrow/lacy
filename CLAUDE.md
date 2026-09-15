@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) in this repository. Internal reference: terse, exact. Code wins over this file; fix this file when they disagree.
 
 ## Mission
 
@@ -8,10 +8,11 @@ Enable developers to talk directly to their shell.
 
 ## Project Overview
 
-Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and routes it to an AI coding agent. Commands execute normally. Natural language goes to the AI. No context switching required.
+Lacy Shell is a shell plugin (zsh, Bash 4+, fish) that classifies each line you type and runs it in the shell or sends it to an AI CLI tool.
 
-**Install location:** `~/.lacy`
-**Package name:** `lacy` (npm)
+- Install location: `~/.lacy`
+- npm package: `lacy` (`packages/lacy`)
+- License: FSL-1.1-MIT
 
 ## Installation Methods
 
@@ -21,111 +22,113 @@ Lacy Shell is a shell plugin (ZSH and Bash 4+) that detects natural language and
 | npx      | `npx lacy`                                   |
 | Homebrew | `brew install lacymorrow/tap/lacy`           |
 
+curl and npx install the newest `vX.Y.Z` release tag (falls back to `main` only when no tag is found). `LACY_REF` overrides.
+
 ## Visual Feedback
 
-**Real-time indicator** (left of prompt) changes color as you type:
+### zsh
 
-- **Green (34)** = will execute in shell
-- **Magenta (200)** = will go to AI agent
+- PS1 is never modified.
+- Live indicator drawn in `PREDISPLAY` (between prompt and buffer), updated on `zle-line-pre-redraw`:
+  - `$` green (34) = shell
+  - `?` magenta (200) = agent
+  - `▌` gray (238) = neutral (auto mode, nothing decided yet). `|` when the locale is not UTF-8.
+  - Lacy writes `PREDISPLAY` only when empty or still holding its own last value.
+- First-word highlight (green/magenta bold) via `region_highlight`, zsh 5.9+ only (`memo=` needs 5.9). Older zsh: glyph only, no highlights. `NO_COLOR`: no highlights.
+- Mode badge `SHELL` / `AGENT` / `AUTO` appended to the user's `RPS1`, removed on `quit`.
+- Ghost text (`POSTDISPLAY`, gray, empty buffer only):
+  - Reroute suggestion `@ <command>` (see Auto Mode Logic, rule 9). Right arrow or Tab accepts into BUFFER. Enter on the empty line dismisses it. Typing clears it.
+  - First-run hint `what files are here   (Enter to ask, or just type)`: once per install (flag file `$LACY_SHELL_HOME/.hinted`), not in shell mode. Enter on the empty line asks it.
 
-**First-word syntax highlighting** (ZSH only, via `region_highlight`):
+### Bash 4+
 
-- First word is highlighted **green bold** for shell commands, **magenta bold** for agent queries
-- Updates on every `zle-line-pre-redraw` (accounts for leading whitespace)
+- No per-keystroke indicator (readline has no redraw hook).
+- Badge prepended to PS1 each prompt: `SHELL $` (green), `AGENT ?` (magenta), `AUTO ▌` (blue). Plain text with `NO_COLOR`.
 
-**Mode indicator** shows current mode:
+### fish
 
-- ZSH: right prompt (`RPS1`) — `SHELL` (green) / `AGENT` (magenta) / `AUTO` (blue)
-- Bash: PS1 badge — `SHELL` / `AGENT` / `AUTO` with matching colors
-
-**Ghost text suggestions** (ZSH only, via `POSTDISPLAY`):
-
-- After a reroute candidate fails and the agent responds, a suggestion appears as gray ghost text on the next empty prompt
-- Right arrow or Tab accepts the suggestion into BUFFER
-- Typing any character clears it; autosuggestions resumes normally
+- No per-keystroke indicator.
+- Badge `$ SHELL` / `? AGENT` / `▌ AUTO` appended to `fish_right_prompt` (wraps the existing one, restored on `quit`).
 
 ## Auto Mode Logic
 
-In AUTO mode, routing is determined by:
+Canonical: `_lacy_classify_impl` in `lib/core/detection.sh`. Order:
 
-1. **Agent words** (~150 common conversational words like `perfect`, `thanks`, `yes`, `no`, `explain`, `why`) → Agent (always, even single-word). Defined in `LACY_AGENT_WORDS` in `lib/core/constants.sh`.
-2. **Shell reserved words** (`do`, `done`, `then`, `else`, `elif`, `fi`, `esac`, `in`, `select`, `function`, `coproc`, `{`, `}`, `!`, `[[`) → Agent (Layer 1 — these pass `command -v` but are never standalone commands)
-3. First word is valid command → Shell
-4. Single word, not a command → Shell (typo, let it error)
-5. Multiple words, first not a command → Agent (natural language)
-6. Valid command + NL arguments → Shell first, then agent on failure (post-execution reroute, silent)
+1. Empty input: `shell` / `agent` in locked modes, `neutral` in auto.
+2. Leading `!` → shell, any mode. Glued (`!rm -rf x`) the accept-line widget strips the `!`. With a space (`! true`) it is shell negation, left intact.
+3. Leading `@` → agent, any mode. Widget strips `@` and leading whitespace before sending.
+4. Shell mode → shell. Agent mode → agent.
+5. (auto) `#` comment → shell. Path/syntax first token (contains `/`, starts with `\ ( { [[ < >`, `N>`, `&>`) → shell.
+6. First word (lowercased, trailing `?.,;:!` stripped) in `LACY_SHELL_RESERVED_WORDS` (11: `do done then else elif fi esac in select } !`) → agent. `function coproc { [[` are not in the list.
+7. First word in `LACY_AGENT_WORDS` (209 entries) → agent, except:
+   - single word that is a user alias or function → shell (builtins/externals do not get this pass)
+   - valid command + args with an operator (`| && || ; >`) → shell
+   - valid command + 0 bare words, or exactly 1 bare word that is not an NL marker → shell (`which python`, `nice -n 10 make`)
+8. `VAR=value cmd`: skip assignments; quoted or `$(` RHS → shell; operator after assignment → shell; next word valid command → shell.
+9. First word valid command (`command -v`, cached) → shell. In auto mode, if `lacy_shell_has_nl_markers` is true the line is a reroute candidate (see below).
+10. Single word, not a command → shell (typo). Multiple words, first not a command → agent.
 
-Rule 2 detail: Shell reserved words pass `command -v` but are never valid as the first token of a standalone invocation. When a user types "do we have X" or "in the codebase", they mean natural language. List defined in `LACY_SHELL_RESERVED_WORDS` in `lib/core/constants.sh`. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full spec.
+Only the first line of a multi-line buffer is classified.
 
-Rule 6 detail: When a valid command receives NL arguments and fails (exit non-zero, code < 128), the error output is analyzed. If it matches a known error pattern AND has NL markers in the input, the command silently reroutes to the agent. No user-facing hint — just auto-reroute. Only active in auto mode.
+### Reroute (one story, all docs must match)
 
-Examples:
+- `lacy_shell_has_nl_markers(input)`: true when there is no shell operator and at least 1 bare word after the first word (not a flag, path, number, or `$var`) is in `LACY_NL_MARKERS`.
+- zsh (`lib/zsh/execute.zsh`): accept-line stores the candidate (auto mode only). `precmd`: if exit code is 1-127, sets ghost text `@ <command>` on the next empty prompt. User accepts with Right arrow/Tab, then presses Enter; `@` routes it to the agent.
+- Bash (`lib/bash/execute.bash`): same trigger; prints a hint line `  ? @ <command>`. User retypes it.
+- fish: no reroute.
+- Nothing is sent to the agent automatically. Exit codes >= 128 (signals, Ctrl+C) never suggest. Shell mode never suggests.
+- `lacy_shell_detect_natural_language` (Layer 2: error pattern + NL signal) exists in `detection.sh` and is tested in `tests/test_core.sh`, but no adapter calls it. It is kept for parity with the lash spec.
 
-- `ls -la` → Shell (valid command)
-- `what files are here` → Agent (agent word "what")
-- `do we have a way to uninstall?` → Agent (reserved word "do")
-- `in the codebase where is auth?` → Agent (reserved word "in")
-- `cd..` → Shell (single word typo)
-- `fix the bug` → Agent (multi-word natural language)
-- `kill the process on localhost:3000` → Shell → Agent (4 bare words, "the" marker, fails)
-- `go ahead and fix the tests` → Shell → Agent ("ahead" marker, "unknown command" error)
-- `make sure the tests pass` → Shell → Agent ("sure" marker, "No rule to make target" error)
-- `kill -9 my baby` → Shell only (2 bare words, below threshold)
-- `echo the quick brown fox` → Shell only (succeeds, no reroute)
-- `!rm -rf` → Shell (emergency bypass with `!` prefix)
+Examples (verified against `tests/test_core.sh` and a sandboxed classify run):
+
+- `ls -la` → shell
+- `what files are here` → agent (agent word)
+- `do we have a way to uninstall?` → agent (reserved word)
+- `fix the bug` → agent (multi-word, `fix` not a command)
+- `which python` → shell; `nice work` → agent
+- `kill the process on localhost:3000` → shell; candidate; fails → suggestion `@ kill the process on localhost:3000`
+- `make sure the tests pass` → shell; candidate (`sure`); fails → suggestion
+- `kill -9 my baby` → shell; candidate (`my` is a marker, test_core.sh:315); suggestion only if it fails
+- `echo the quick brown fox` → shell; candidate; succeeds → nothing
+- `@ make sure the tests pass` → agent
+- `!rm -rf x` → shell, `!` stripped
 
 ## Canonical Functions
 
-### `lacy_shell_classify_input(input)` — The Single Source of Truth
+### `lacy_shell_classify_input(input)`
 
-**File:** `lib/core/detection.sh`
+File: `lib/core/detection.sh`. Prints `shell` / `agent` / `neutral` and sets `_LACY_CLASSIFY_RESULT`. Hot-path callers discard stdout and read the variable (no fork per keystroke):
 
-All input classification MUST go through this function. It returns one of three strings:
+```bash
+lacy_shell_classify_input "$BUFFER" >/dev/null
+case "$_LACY_CLASSIFY_RESULT" in ...
+```
 
-- `"shell"` → route to shell (indicator: green)
-- `"agent"` → route to AI agent (indicator: magenta)
-- `"neutral"` → no routing decision yet (indicator: gray)
+Never add parallel detection logic. Fish carries a port in `lib/fish/detection.fish`; `tests/test_fish.fish` runs the core probe inputs against it.
 
-**Mode-aware behavior:**
+Consumers:
 
-1. **Empty input** → returns mode color (`shell`/`agent`) in locked modes, `neutral` in auto
-2. **Shell mode** → always returns `shell` (after empty check)
-3. **Agent mode** → always returns `agent` (after empty check)
-4. **Auto mode** → applies detection heuristics
+- zsh: `keybindings.zsh:lacy_shell_update_input_indicator()` (indicator glyph + first-word highlight)
+- zsh: `execute.zsh:lacy_shell_smart_accept_line()` (routing)
+- Bash: `execute.bash:lacy_shell_smart_accept_line_bash()` (routing)
+- fish: `execute.fish:_lacy_accept_line()` via `_lacy_classify_input` (port)
 
-**Why this matters:**
+### `lacy_shell_has_nl_markers(input)`
 
-- The indicator, execution, and highlighting ALL call this function
-- Never create parallel detection logic — always extend this function
-- The empty-input behavior ensures the indicator shows the correct mode color when idle
+File: `lib/core/detection.sh`. Reroute candidate test. See Reroute above.
 
-**Consumers:**
+### `lacy_shell_detect_natural_language(input, output, exit_code)`
 
-- ZSH: `keybindings.zsh:lacy_shell_update_input_indicator()` — real-time indicator color
-- ZSH: `execute.zsh:lacy_shell_smart_accept_line()` — execution routing
-- ZSH: `keybindings.zsh:lacy_shell_update_first_word_highlight()` — syntax highlighting
-- Bash: `execute.bash:lacy_shell_smart_accept_line_bash()` — execution routing
+File: `lib/core/detection.sh`. Layer 2 helper, not wired into any adapter. Returns 0 when: exit code non-zero, 2+ words, output matches one of 17 `LACY_SHELL_ERROR_PATTERNS`, and (second word in `LACY_NL_MARKERS` OR 4+ words with `parse error` / `syntax error` / `unexpected token`).
 
-### `lacy_shell_detect_natural_language(input, output, exit_code)` — Layer 2 Post-Execution
+### `_lacy_build_query_context(query)`
 
-**File:** `lib/core/detection.sh`
+File: `lib/core/context.sh`. Prepends delta-based context (cwd, git branch, exit code, recent commands, terminal output) to agent queries. Only what changed since the last query.
 
-Analyzes a failed shell command's output to detect natural language. Returns 0 if NL detected, 1 otherwise. Both criteria must match:
+Format: `[cwd: /path] [git: branch] [exit: 1] [recent: cmd1 | cmd2] <query>`
 
-1. **Error pattern** — output contains a known shell error from `LACY_SHELL_ERROR_PATTERNS`
-2. **NL signal** — second word is in `LACY_NL_MARKERS`, OR 5+ words with parse/syntax error
+With terminal output (tmux, screen, iTerm2, Terminal.app):
 
-Minimum 2 words required. See `docs/NATURAL_LANGUAGE_DETECTION.md` for full algorithm.
-
-### `_lacy_build_query_context(query)` — Terminal Context for Agent Queries
-
-**File:** `lib/core/context.sh`
-
-Prepends delta-based terminal context (cwd, git branch, exit code, recent commands, terminal output) to agent queries. Only includes what changed since the last query — zero overhead when nothing changed.
-
-**Format:** `[cwd: /path] [git: branch] [exit: 1] [recent: cmd1 | cmd2] <query>`
-
-**With terminal output** (tmux, screen, iTerm2, Terminal.app):
 ```
 [cwd: /path] [exit: 1] [recent: npm test]
 [terminal-output]
@@ -134,207 +137,245 @@ npm ERR! Test failed. See above for more details.
 why did that fail?
 ```
 
-**Delta tracking:**
+Delta tracking:
 
-- CWD and git branch: compared against last-sent values, skipped if unchanged. Detached HEAD shows short commit hash instead of literal "HEAD"
-- Exit code: only included when non-zero AND a shell command ran since the last query
-- Recent commands: explicit ring buffer (max 10), not `fc`/`history` (avoids agent queries leaking)
-- Terminal output: lazy screen capture via terminal/multiplexer API at query time (tmux, screen, iTerm2, Terminal.app). Stripped of ANSI escapes, capped at 50 lines (configurable via `context.output_lines`). tmux/screen checked first since terminal emulator APIs return wrong content inside multiplexers.
-- Counters reset after each agent query — next query starts fresh
+- cwd and git branch: skipped if unchanged. Detached HEAD shows short hash.
+- Exit code: only when non-zero AND a shell command ran since the last query.
+- Recent commands: ring buffer (max 10, each truncated at 80 chars), not `fc`/history.
+- Terminal output: captured at query time, ANSI stripped, capped by `context.output_lines` (default 50). tmux/screen checked before terminal emulator APIs. Off with `context.output: false`.
+- Counters reset after each query. `/new` calls `_lacy_ctx_reset()`.
 
-**Hook chain:**
+Hook chain: accept-line (shell) → `_lacy_ctx_mark_command`; precmd → `_lacy_ctx_on_precmd($?)`; agent query → `_lacy_build_query_context` sets `_LACY_CTX_RESULT` and resets counters. Result variable, not `$()`, so resets persist. zsh and Bash only.
 
-1. `accept-line` routes to "shell" → `_lacy_ctx_mark_command($BUFFER)` records the command
-2. `precmd` fires → `_lacy_ctx_on_precmd($?)` captures exit code (only if `_LACY_CTX_REAL_CMD` flag is set)
-3. User types agent query → `_lacy_build_query_context()` builds delta, sets `_LACY_CTX_RESULT`, resets counters
-4. `/new` session → `_lacy_ctx_reset()` clears all state so next query sends full context
+## Plugin Coexistence (zsh)
 
-**Why result variable, not stdout:** The function modifies global state (resets counters). Using `$()` subshell would lose those resets. `_LACY_CTX_RESULT` avoids the fork entirely.
+Full rationale in the header of `lib/zsh/keybindings.zsh`. Tested with zsh-syntax-highlighting, zsh-autosuggestions, powerlevel10k, starship.
 
-## Plugin Coexistence (zsh-autosuggestions)
-
-Lacy shares two ZLE resources with `zsh-autosuggestions` (and potentially `zsh-syntax-highlighting`). Mishandling either causes visible bugs. Full design rationale is documented in the header of `lib/zsh/keybindings.zsh`.
-
-### `region_highlight` — tagged entries with `memo=lacy`
-
-Multiple plugins write highlight specs to the `region_highlight` array. Lacy adds first-word coloring (green/magenta) and ghost text styling. These entries are tagged with `memo=lacy` (ZSH 5.8+ feature) so they can be selectively removed on each redraw without destroying highlights from other plugins.
-
-**Rule:** Never use `region_highlight=()`. Always filter: `region_highlight=("${(@)region_highlight:#*memo=lacy*}")`. Always append `memo=lacy` to any highlight entry Lacy creates.
-
-### `POSTDISPLAY` — suppressing autosuggestions during ghost text
-
-Both Lacy (reroute ghost text) and autosuggestions (history suggestions) write to `POSTDISPLAY`. When Lacy's ghost text is active (BUFFER empty), call `_zsh_autosuggest_clear` before setting `POSTDISPLAY` to prevent autosuggestions from overwriting it. When the user starts typing, Lacy clears its ghost text and autosuggestions resumes normally.
-
-### Right arrow / Tab — no dot prefix on fallback widgets
-
-Lacy's `_lacy_forward_char_or_accept` and `_lacy_expand_or_accept` widgets check for Lacy ghost text first. On fallback, they call `zle forward-char` (not `zle .forward-char`). The dot prefix bypasses widget wrapping, which would skip autosuggestions' accept-suggestion behavior. Without the dot, autosuggestions' wrapper fires and right arrow / tab accept its suggestions normally.
+- Hooks: `add-zle-hook-widget line-init|line-pre-redraw` and `add-zsh-hook precmd|zshexit`. Never `zle -N zle-line-pre-redraw` (kills z-sy-h's dispatcher). Every hook ends `return 0` (add-zle-hook-widget stops on non-zero). Cleanup runs from `zshexit`, not an EXIT trap (EXIT fires on function return under zinit/antidote/`lacy`).
+- PS1: never touched. Indicator lives in `PREDISPLAY`; badge is a suffix on `RPS1`.
+- `region_highlight`: tag every entry `memo=lacy`; remove with `region_highlight=("${(@)region_highlight:#*memo=lacy*}")`. Never `region_highlight=()`. Skip highlights entirely below zsh 5.9.
+- `POSTDISPLAY`: call `_zsh_autosuggest_clear` before writing ghost text. Clear only when it still holds Lacy's text.
+- Keys: binds `^@` (Ctrl+Space), `^[[C` / `^[OC` (Right arrow), `^I` (Tab). Saves each key's `bindkey -L` line and restores it verbatim on cleanup. Without ghost text, Right arrow/Tab call the widget previously bound to that key (by name, no dot prefix) so autosuggest/fzf wrappers fire.
+- Ctrl+C: no `TRAPINT`. Queries run in `{ ... } always { _lacy_query_interrupt_cleanup }` (stops spinner, restores MONITOR/NOTIFY).
 
 ## Supported AI CLI Tools
 
-| Tool     | Command                | Prompt Flag  |
-| -------- | ---------------------- | ------------ |
-| lash (recommended) | `lash run -c "query"`  | `-c`         |
-| claude   | `claude -p "query"`    | `-p`         |
-| opencode | `opencode run -c "query"` | `-c`         |
-| gemini   | `gemini --resume -p "query"` | `-p`         |
-| codex    | `codex exec resume --last "query"` | positional   |
-| hermes   | `hermes chat -q "query"` | `-q`         |
-| copilot  | `copilot -p "query"`   | `-p`         |
-| goose    | `goose run -t "query"` | `-t`         |
-| amp      | `amp -x "query"`       | `-x`         |
-| aider    | `aider --no-auto-commits --message "query"` | `--message`  |
-| custom   | user-defined command   | user-defined |
+From `lacy_tool_cmd()` in `lib/core/mcp.sh`. Order in `LACY_TOOL_LIST` is auto-detect order.
 
-lash is the recommended default — it's an opencode fork built by the same author. Website: lash.lacy.sh. During onboarding, lacy offers to install lash if no AI CLI tool is detected.
+| Tool     | Command                                     |
+| -------- | ------------------------------------------- |
+| lash     | `lash run -c "query"` (recommended)         |
+| claude   | `claude -p "query"`                         |
+| opencode | `opencode run -c "query"`                   |
+| gemini   | `gemini -p "query"`                         |
+| codex    | `codex exec resume --last "query"`          |
+| hermes   | `hermes chat -q "query"`                    |
+| copilot  | `copilot -p "query"`                        |
+| goose    | `goose run -t "query"`                      |
+| amp      | `amp -x "query"`                            |
+| aider    | `aider --no-auto-commits --message "query"` |
+| custom   | `agent_tools.custom_command`                |
 
-All tools handle their own authentication - no API keys needed from lacy.
+lash is an opencode fork by the same author (lash.lacy.sh). Tools handle their own auth. No API keys, no direct API fallback.
+
+Execution paths in `lacy_shell_query_agent()`: server (lash, opencode via background `serve`), claude (JSON + `--resume`), gemini (session), generic (everything else).
+
+Per-query output: no "Using X" line. Resume hint (`Resume: <cmd>`) only after a failure. No tool installed: one `No AI tool found` message listing an install line per tool, no prompt.
 
 ## Architecture
 
 ```
-~/.lacy/
-├── lacy.plugin.zsh          # Entry point (ZSH)
-├── lacy.plugin.bash         # Entry point (Bash 4+)
-├── config.yaml              # User configuration
-├── install.sh               # Installer (bash + npx fallback)
-├── uninstall.sh             # Uninstaller
-├── bin/
-│   └── lacy                 # Standalone CLI (no Node required)
-└── lib/
-    ├── core/                    # Shared modules (Bash 4+ and ZSH)
-    │   ├── constants.sh         # Colors, timeouts, paths, detection arrays
-    │   ├── config.sh            # YAML config, API key management
-    │   ├── modes.sh             # Mode state (shell/agent/auto)
-    │   ├── spinner.sh           # Loading spinner with shimmer text effect
-    │   ├── mcp.sh               # Multi-tool routing (LACY_TOOL_CMD registry)
-    │   ├── preheat.sh           # Agent preheating (background server, session reuse)
-    │   ├── context.sh           # Delta-based terminal context for agent queries
-    │   ├── detection.sh         # classify_input(), has_nl_markers(), detect_natural_language()
-    │   └── commands.sh          # Shared command implementations (mode, tool, session, quit)
-    ├── zsh/
-    │   ├── keybindings.zsh      # Ctrl+Space toggle, indicator, first-word region_highlight
-    │   ├── prompt.zsh           # Prompt with indicator, mode in right prompt
-    │   └── execute.zsh          # Execution routing, reroute candidate logic
-    ├── bash/
-    │   ├── init.bash            # Bash adapter init (sources core + bash modules)
-    │   ├── keybindings.bash     # Macro-based Enter override, Ctrl+Space toggle
-    │   ├── prompt.bash          # Mode badge in PS1
-    │   └── execute.bash         # Execution routing, reroute candidate logic
-    └── *.zsh                    # Backward-compat wrappers → lib/core/ or lib/zsh/
-
-packages/lacy/               # npm package for interactive installer
-├── package.json
-├── index.mjs                # @clack/prompts based installer
-└── README.md
+lacy.plugin.zsh          # Entry (zsh): sources lib/zsh/init.zsh, hooks, zshexit cleanup
+lacy.plugin.bash         # Entry (Bash 4+): sources lib/bash/init.bash, PROMPT_COMMAND hooks
+lacy.plugin.fish         # Entry (fish 3.1+ required, fish 4 tested)
+install.sh               # Installer (Bash 3.2+), --update/--reinstall/--uninstall
+uninstall.sh             # The one uninstall implementation, never prompts
+bin/lacy                 # Standalone CLI (pure bash)
+lib/
+├── core/                # Shared by zsh and Bash 4+
+│   ├── constants.sh     # Paths, colors, word lists, error patterns, messages, helpers
+│   ├── config.sh        # config.yaml template, parser, lacy_config_set
+│   ├── modes.sh         # Mode state, toggle, current_mode persistence
+│   ├── animations.sh    # Spinner frames (braille, ascii)
+│   ├── spinner.sh       # Spinner + shimmer "Thinking"
+│   ├── mcp.sh           # Tool registry, install hints, lacy_shell_query_agent, query log
+│   ├── preheat.sh       # Background server (lash/opencode), claude/gemini sessions, /new /resume
+│   ├── context.sh       # Terminal context for queries
+│   ├── detection.sh     # classify_input, has_nl_markers, detect_natural_language
+│   ├── commands.sh      # mode, tool, lacy (session subcommands), execute_agent
+│   └── telemetry.sh     # One-time first-load event
+├── zsh/
+│   ├── init.zsh         # Sources core + zsh modules
+│   ├── keybindings.zsh  # PREDISPLAY indicator, region_highlight, ghost text, keys
+│   ├── prompt.zsh       # RPS1 badge
+│   ├── execute.zsh      # accept-line, precmd, reroute suggestion, first-run hint, quit
+│   └── completions.zsh  # `lacy` CLI completion
+├── bash/
+│   ├── init.bash        # Bash 4+ check, sources core + bash modules
+│   ├── keybindings.bash # Enter macro, Ctrl+Space, saved bindings
+│   ├── prompt.bash      # PS1 badge
+│   ├── execute.bash     # Enter handler, PROMPT_COMMAND hooks, reroute hint, quit
+│   └── completions.bash # `lacy` CLI completion
+└── fish/
+    ├── config.fish      # Config reader, mode state (generated tool list)
+    ├── detection.fish   # Classifier port (generated word lists)
+    ├── execute.fish     # Enter handler, ask/mode/quit, tool invocation
+    ├── keybindings.fish # Enter, Ctrl+J, Ctrl+Space
+    └── prompt.fish      # Right-prompt badge
+script/
+├── test.sh              # Runs every suite in its target shells
+└── sync-word-lists.sh   # Regenerates fish lists from constants.sh (--check in CI)
+tests/                   # test_core.sh, test_config.sh, test_query_agent.sh, test_runtime.sh,
+                         # test_gemini*.sh, test_bash*.bash, test_zsh_adapter.zsh,
+                         # test_preheat_server.zsh, test_fish.fish, test_installer.sh
+packages/lacy/           # npm installer (@clack/prompts): index.mjs, commands/info.sh
 ```
 
-## CLI (standalone, no Node required)
+Nushell adapter removed. No `lib/*.zsh` wrappers, no `lib/commands/`.
 
-After installation, `~/.lacy/bin` is added to `$PATH`, making the `lacy` command available:
+## Shell Adapters
+
+### Bash 4+ (`lib/bash/keybindings.bash`, `execute.bash`)
+
+- Enter: `\C-m` and `\C-j` are macros `"\C-x\C-l\C-x\C-j"`. `\C-x\C-l` is `bind -x` to `lacy_shell_smart_accept_line_bash` (classify; agent query clears `READLINE_LINE` and sets `LACY_SHELL_PENDING_QUERY`). `\C-x\C-j` is `accept-line`. `bind -x` straight on `\C-m` would replace accept-line.
+- `\C-j` gets the macro too: Enter typed while a command runs arrives as NL.
+- Bound in `emacs`, `vi-insert`, `vi-command` (vi mode supported).
+- Ctrl+Space: `bind -x '"\C-@": _lacy_ctrl_space_toggle'`, keeps the in-progress line.
+- Before binding, the user's existing `\C-m`, `\C-j`, `\C-@` bindings (from `bind -X`, `-s`, `-p`) are saved per keymap and restored on `quit`. Enter falls back to `accept-line` if nothing was saved.
+- PROMPT_COMMAND: `_lacy_bash_capture_exit` first (passes `$?` through), `lacy_shell_precmd_bash` last, so the badge lands on PS1 rebuilt by starship/`__git_ps1`. Array form on Bash 5.1+, newline-joined string otherwise. Removed on `quit`.
+- Continuation lines: `_LACY_BASH_AT_PS1` is 1 only between precmd and the first accepted line. PS2 lines go straight to accept-line, never classified.
+- Queries run from precmd; a temporary INT trap stops the spinner only, user's INT trap restored after.
+- macOS `/bin/bash` is 3.2: `init.bash` refuses with upgrade instructions.
+
+### fish (`lib/fish/`)
+
+- Requires fish 3.1+. fish 4 is tested in CI; fish 3 code paths (`\r` key names, no `history append`) are untested.
+- Commands: `mode [shell|agent|auto|toggle]`, `ask`, `quit`. Ctrl+Space cycles modes. No `tool`, `/new`, `/resume`, terminal context, preheat, reroute, or ghost text.
+- Enter (`bind -M default|insert enter|ctrl-j`, via wrapped `fish_user_key_bindings`): an agent line is rewritten to ` ask '<query>'` and executed as a normal command (Ctrl+C reaches the tool, `$status` set). On fish 4 the typed text is added with `history append` and the rewrite is deleted from history on `fish_postexec`.
+- Pager and history search keep Enter's normal meaning.
+- Word lists and tool list are generated blocks copied from `lib/core/constants.sh` by `script/sync-word-lists.sh`. Edit constants.sh, then run the script.
+- Known gap: `_lacy_query_agent` in `execute.fish` calls `_lacy_log_query` without checking `logging.queries`.
+
+## Modes and Keys
+
+- `exit` exits the shell in every mode (checked before classification, never routed to the agent).
+- `quit` leaves Lacy; the shell keeps running. Typing `lacy` with no args re-enables.
+- Ctrl+C and Ctrl+D are shell defaults. Ctrl+C aborts a running query.
+- Ctrl+Space toggles mode (shell → agent → auto → shell).
+- Removed: `stop`, `quit_lacy`, `disable_lacy`, `enable_lacy`, `spinner` in-shell commands; double Ctrl+C quit; Ctrl+T toggle.
+
+Startup mode (zsh, Bash, fish share it): `~/.lacy/current_mode` if valid, else `modes.default`, else auto. Every mode change rewrites `current_mode`, so `modes.default` only applies until the first switch.
+
+## Key Commands (inside Lacy)
+
+- `mode shell|agent|auto|toggle` (short: `s a u t`). `mode` or `mode status` prints `lacy_shell_mode_status` (mode, `$`/`?` legend, how to switch). fish: `mode` prints the mode line and usage.
+- `tool` shows active and installed tools. `tool set <name>` (`lash claude opencode gemini codex hermes copilot goose amp aider custom auto`) persists `agent_tools.active` to config.yaml and prints `Saved to <file>` or `Not saved (<reason>). Applies to this shell only.` `tool set custom "cmd"` also writes `custom_command`. zsh/Bash only.
+- `ask "query"` sends straight to the agent.
+- `/new` `/reset` `/clear` start a new session; `/resume` resumes the last one. Intercepted in accept-line (zsh/Bash). `lacy new|reset|clear|resume` does the same in-shell.
+- `quit` leaves Lacy.
+
+## CLI (`bin/lacy`, pure bash)
+
+Exactly as `lacy help` lists:
+
+```
+lacy                Open a shell with Lacy loaded
+lacy setup          Change AI tool, mode, or config
+lacy install        Install Lacy Shell
+lacy uninstall      Remove Lacy Shell
+lacy update         Move to the latest release
+lacy reinstall      Fresh copy of the latest release (keeps config)
+lacy status         Show installation status
+lacy info           Show a short introduction
+lacy doctor         Check for common problems
+lacy config         Show config (config edit, config path)
+lacy new            Forget the saved agent session
+lacy resume         Show the saved agent session
+lacy logs [N]       Show the last N agent queries (default: 50)
+lacy logs --clear   Clear the query log
+lacy changelog      Show the latest release notes
+lacy completions    Print a completion script (zsh or bash)
+lacy version        Show version
+lacy help           Show this help
+```
+
+- `setup`, `install`, `uninstall` try `npx --yes lacy@latest` first, then bash. `LACY_NO_NODE=1` skips Node.
+- `update` / `reinstall` run `install.sh --update` / `--reinstall`. Both refuse when `~/.lacy` is a symlink (Homebrew: use `brew upgrade`; dev checkout: use git) or a git checkout with uncommitted changes.
+- `doctor` checks: plugin file present, uncommented source line in the rc file, Bash 4+ (bash users), config file, configured tool installed (or auto-detect finds one, or custom command exists), `~/.lacy/bin` on PATH. Exits 1 on any issue.
+- `uninstall` asks `[y/N]` on a TTY, then runs `uninstall.sh`.
+
+### Testing the Node UI locally
+
+`bin/lacy` runs the published `lacy@latest`, not local code. For local changes:
 
 ```bash
-lacy setup           # Interactive settings (tool, mode, config) — fancy Node UI if available
-lacy status          # Show installation status
-lacy doctor          # Diagnose common issues
-lacy update          # Pull latest changes
-lacy uninstall       # Remove Lacy Shell — fancy Node UI if available
-lacy reinstall       # Fresh installation
-lacy config          # Show config
-lacy config edit     # Open config in $EDITOR
-lacy install         # Install (delegates to npx or curl installer)
-lacy version         # Show version
-lacy help            # Show all commands
+node packages/lacy/index.mjs          # install, or dashboard when installed
+node packages/lacy/index.mjs --help
+LACY_NO_NODE=1 bin/lacy setup         # bash fallback
 ```
 
-Source: `bin/lacy` (pure bash, zero dependencies)
+## Installer
 
-**Hybrid Node delegation:** `setup`, `install`, and `uninstall` try `npx lacy@latest` first for the rich @clack/prompts UI, then fall back to bash if Node is unavailable. Set `LACY_NO_NODE=1` to force bash-only mode.
+`install.sh` (Bash 3.2+) and `packages/lacy/index.mjs` behave the same:
 
-### Testing locally
+- Tool question: one tool installed → none asked. None → one question (install lash? Y/n). Several → picker. No TTY → nothing asked. Skipped when config.yaml exists.
+- Already installed on a TTY (curl): menu Update / Reinstall / Uninstall / Cancel. npx: settings dashboard. npx without TTY: `install.sh --update`.
+- Flags: `--update`, `--reinstall`, `--uninstall`, `--bash` (skip Node), `--shell zsh|bash|fish`, `--tool NAME|auto`, `--tool custom "CMD"`. `--beta` / `--channel` removed.
+- Env: `LACY_REPO_URL`, `LACY_REF`, `LACY_TARBALL_URL`, `LACY_NO_NODE`, `NO_COLOR`, `DO_NOT_TRACK`, `LACY_NO_TELEMETRY`.
+- Download goes to a staging dir and is swapped in after it verifies.
+- rc files: zsh `~/.zshrc`; Bash `~/.bash_profile` on macOS else `~/.bashrc`; fish `~/.config/fish/conf.d/lacy.fish`. Adds `# Lacy Shell`, the source line, and the `~/.lacy/bin` PATH line.
+- Success message, two lines: `Lacy Shell vX.Y.Z installed for <shell>, using <tool>.` / `Open a new terminal, then type: what files are here`.
 
-`bin/lacy` delegates to `npx lacy@latest` which downloads the **published** npm package, not the local code. To test local changes to `packages/lacy/index.mjs`:
-
-```bash
-# Run the local Node installer/menu directly
-node packages/lacy/index.mjs          # already-installed dashboard
-node packages/lacy/index.mjs setup    # same dashboard
-node packages/lacy/index.mjs --help   # help text
-
-# Or force the bash fallback (skips npx entirely)
-LACY_NO_NODE=1 bin/lacy setup
-```
-
-## Key Commands
-
-- `mode [shell|agent|auto]` - Switch modes
-- `mode` - Show current mode and color legend
-- `tool` - Show active AI tool and available tools
-- `tool set <name>` - Set AI tool (lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom, auto) — persists to config.yaml
-- `tool set custom "cmd"` - Set a custom command as the AI tool
-- `/new` / `/reset` / `/clear` - Start a new conversation session
-- `/resume` - Resume the last saved session
-- `ask "question"` - Direct query to agent
-- `quit` / `stop` / `exit` - Exit lacy shell
-- `Ctrl+Space` - Toggle between modes
-- `Ctrl+C` (2x) - Quit
-
-Leading-slash commands (e.g. `/new`) are intercepted before shell execution and routed to the session handler. The slash is stripped and matched against known session commands.
-
-## Key Files
-
-- `lib/core/constants.sh` - Colors, paths, `LACY_AGENT_WORDS`, `LACY_SHELL_RESERVED_WORDS`, `LACY_NL_MARKERS`, `LACY_SHELL_ERROR_PATTERNS`
-- `lib/core/detection.sh` - **`lacy_shell_classify_input()`** (canonical), `lacy_shell_has_nl_markers()`, `lacy_shell_detect_natural_language()`
-- `lib/core/mcp.sh` - `_lacy_run_tool_cmd()` safe executor, `lacy_tool_cmd()` registry, `lacy_shell_query_agent()` routing
-- `lib/core/context.sh` - `_lacy_build_query_context()` delta-based terminal context, `_lacy_ctx_mark_command()`, `_lacy_ctx_on_precmd()`
-- `lib/core/config.sh` - `agent_tools.active` parsing → `LACY_ACTIVE_TOOL`
-- `lib/core/spinner.sh` - Braille spinner + shimmer "Thinking" animation during AI queries
-- `lib/core/preheat.sh` - Background server (lash/opencode) + session reuse (claude), `lacy_session_new()`, `lacy_session_resume()`
-- `lib/core/commands.sh` - Shared command implementations: mode, tool, session, quit (portable Bash 4+/ZSH)
-- `lib/zsh/execute.zsh` - `lacy_shell_tool()` command, routing logic, reroute candidates, slash-command interception
-- `lib/zsh/keybindings.zsh` - Real-time indicator logic, first-word `region_highlight`
-- `install.sh` - Bash installer with npx fallback, interactive menu
-- `packages/lacy/index.mjs` - Node installer with @clack/prompts
-- `docs/NATURAL_LANGUAGE_DETECTION.md` - Shared spec for NL detection (synced with lash)
+`uninstall.sh`: stops the preheat server by port (only signals a PID whose command line is `serve --port <port>`), strips Lacy lines from rc files writing through the path (symlinked rc files stay symlinks), deletes an empty `conf.d/lacy.fish`, removes `~/.lacy` (a symlink: only the link) and `~/.lacy-shell`, uninstalls the Homebrew formula if applicable.
 
 ## Configuration
 
-Config file: `~/.lacy/config.yaml`
+`~/.lacy/config.yaml`. Canonical template: `_lacy_default_config_text` in `lib/core/config.sh` (install.sh and index.mjs carry copies).
 
 ```yaml
+# Lacy Shell configuration
 agent_tools:
-  active: claude # or lash, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom, empty for auto
-  # custom_command: "your-command -flags"  # used when active: custom
-
-api_keys:
-  openai: "sk-..." # Only needed if no CLI tool
-  anthropic: "sk-..."
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # Leave empty to auto-detect.
+  active:
+  # custom_command: "your-command --flags"
 
 modes:
-  default: auto
-# Preheat: keep agents warm between queries
+  default: auto  # shell, agent, or auto
+
 # preheat:
-#   eager: false          # Start background server on plugin load
-#   server_port: 4096     # Port for background server
+#   eager: false
+#   server_port: 4096
+
+# logging:
+#   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
 ```
 
-**Preheating:** lash/opencode use a background server (`lash serve`) to eliminate cold-start. Claude uses `--resume SESSION_ID` for conversation continuity. Other tools have no preheating.
+Keys read (`_lacy_config_var_for`): `agent_tools.active`, `agent_tools.custom_command`, `modes.default`, `preheat.eager`, `preheat.server_port`, `context.output`, `context.output_lines`, `spinner.style` (`braille` default, `ascii`), `logging.queries`. fish reads only `agent_tools.*` and `modes.default`. An `agent_tools.active` that is not in `LACY_TOOL_LIST` or `custom` prints a warning and falls back to auto-detect.
+
+Parser: flat YAML subset. Only direct children of a top-level section. One matching outer quote pair removed. `#` starts a comment only at value start or after whitespace, never inside quotes. `null` / `~` = empty. Unknown keys ignored. Nothing executed. `lacy_config_set` rewrites in place keeping comments and order, writing through the path (symlinks stay).
+
+Query log (`logging.queries: true`): `~/.lacy/logs/queries.log`, one line `timestamp<TAB>tool<TAB>query` (raw query, no context), dir 0700, file 0600, trimmed to the last 1000 lines past 1 MB. Off by default.
+
+Preheat: lash/opencode keep a background `serve` on `preheat.server_port`; claude reuses sessions with `--resume`.
+
+`NO_COLOR` (any non-empty value) removes all escape sequences in zsh, Bash, fish, installer, and uninstaller. `TERM=dumb` sets `NO_COLOR=1` (not exported) in constants.sh, config.fish, bin/lacy, install.sh, uninstall.sh.
+
+Telemetry (`lib/core/telemetry.sh`): zsh/Bash send one `first_load` event per install (flag `~/.lacy/.telemetry_sent`). install.sh sends `install` / `update` / `uninstall`; index.mjs sends `install` / `uninstall`. POST to `https://analytics.lacy.sh/api/send` (Umami) with install method, OS, arch, shell, version. Disabled by `DO_NOT_TRACK=1` or `LACY_NO_TELEMETRY=1` (exact value `1`). fish sends nothing.
+
+## Release and CI
+
+- Release: `bun run release` via shipx (`shipx.config.ts`, see RELEASING.md). No beta channel.
+- Tests: `script/test.sh [--shell bash|zsh|fish|all] [--skip NAME]...`. Each suite gets a throwaway HOME. Missing fish → SKIP; missing zsh or Bash 4+ → FAIL. `LACY_TEST_BASH` picks the Bash binary.
+- CI (`.github/workflows/ci.yml`): syntax check per shell (bash, zsh, fish 4) plus `script/sync-word-lists.sh --check`; shellcheck; test suites on ubuntu and macOS for bash and zsh; installer smoke on ubuntu and macOS (install, reinstall, doctor, uninstall in a sandboxed HOME); npm package (help, `npm pack --dry-run`, version sync across package.json, packages/lacy, lockfile, bin/lacy).
 
 ## Development Notes
 
-- Install path changed from `~/.lacy-shell` to `~/.lacy`
-- Repo (`lib/`) and install dir (`~/.lacy/lib/`) are separate copies — changes must be applied to both
-- Prompt capture is deferred to first `precmd`/`PROMPT_COMMAND` so user's shell profile loads first
-- Indicator only updates when type changes (avoids flickering)
-- Colors: Green=34, Magenta=200, Blue=75, Gray=238
-- Use `print -P` (not `echo`) for colored output in ZSH — `%F{...}%f` escapes need `print -P`
-- Use `printf '\e[38;5;Nm...\e[0m'` for colored output in Bash
-- Installer uses `printf` instead of `echo -e` for portability
-- Node installer falls back to bash if npm package not available
-
-### Bash adapter notes
-
-- **Enter key**: Can't use `bind -x` directly on `\C-m` — it replaces accept-line entirely, so shell commands never submit. Instead, bind classification to a hidden key (`\C-x\C-l`) and make `\C-m` a macro: `"\C-x\C-l\C-j"` (classify, then accept-line)
-- **Spinner**: Background `{ ... } &` jobs dump their source on exit via bash's `[N] Done ...` notification. Fix: `disown` the PID immediately after starting; use `kill` + `sleep` instead of `wait` for cleanup
-- **No real-time indicator**: Bash can't redraw PS1 on keystroke (no `zle-line-pre-redraw` equivalent). Mode badge in PS1 updates on each prompt cycle only
-- **Ctrl+Space**: Uses macro `"\C-a\C-k _lacy_mode_toggle_\C-j"` — types hidden command and submits, so PROMPT_COMMAND can update PS1
-- **macOS default bash is 3.2** — adapter requires 4+ and shows a clear error if version is too old. Users install modern bash via `brew install bash`
+- Repo (`lib/`) and install dir (`~/.lacy/lib/`) are separate copies. Changes must be applied to both (or symlink `~/.lacy` to the repo).
+- Colors (256): shell 34, agent 200, auto 75, neutral 238.
+- Output helpers: `lacy_print_color` / `lacy_print_color_n` (honor `NO_COLOR`, print text as-is). Bash adapter: `_lacy_bash_print_color`. fish: `_lacy_sgr`.
+- Use `command rm` for internal cleanup (users alias `rm`).
+- Installer uses `printf`, not `echo -e`.
+- Never touch the real `~/.lacy` or rc files in tests: `HOME=$(mktemp -d) LACY_NO_NODE=1 DO_NOT_TRACK=1`.
+- Word lists: edit `lib/core/constants.sh`, run `script/sync-word-lists.sh`.
+- `docs/NATURAL_LANGUAGE_DETECTION.md` is the shared spec with lash.

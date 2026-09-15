@@ -1,6 +1,6 @@
 # lacy
 
-Installer for [Lacy Shell](https://github.com/lacymorrow/lacy). Talk directly to your shell.
+Installer for [Lacy Shell](https://github.com/lacymorrow/lacy). Talk to your shell.
 
 ## Install
 
@@ -8,12 +8,13 @@ Installer for [Lacy Shell](https://github.com/lacymorrow/lacy). Talk directly to
 npx lacy
 ```
 
+- Installs the latest Lacy Shell release into `~/.lacy` and adds it to your zsh, Bash or fish config
 - Uses your AI CLI tool without asking when exactly one is installed
-- Asks which one to use only when several are installed
+- Asks which one to use when several are installed
 - Offers to install lash when none is found
-- Installs the latest release, and asks nothing when there is no terminal (CI, Docker)
+- Asks nothing when there is no terminal (CI, Docker)
 
-Run `npx lacy` again after installing to change the tool or mode, update, or uninstall.
+Run `npx lacy` again after installing to change the tool or mode, edit the config, update, reinstall, or uninstall. Without a terminal it updates to the latest release instead.
 
 ## Uninstall
 
@@ -35,18 +36,20 @@ Options:
   -u, --uninstall  Remove Lacy Shell
 ```
 
+The installer sends an anonymous event on install and on uninstall (OS, architecture, shell, version). Set `DO_NOT_TRACK=1` to turn it off.
+
 ## What is Lacy Shell?
 
 Lacy sends commands to your shell and questions to your AI tool.
 
 ```
-❯ ls -la                → runs in shell
-❯ what files are here   → AI answers
-❯ git status            → runs in shell
-❯ fix the build error   → AI answers
+$ ls -la                  runs in shell
+? what files are here     AI answers
+$ git status              runs in shell
+? fix the build error     AI answers
 ```
 
-Works with: **lash**, **claude**, **opencode**, **gemini**, **codex**, **hermes**, **copilot**, **goose**, **amp**, **aider**
+Works with lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, or a custom command.
 
 ## Other install methods
 
@@ -55,10 +58,9 @@ Works with: **lash**, **claude**, **opencode**, **gemini**, **codex**, **hermes*
 curl -fsSL https://lacy.sh/install | bash
 
 # Homebrew
-brew tap lacymorrow/tap
-brew install lacy
+brew install lacymorrow/tap/lacy
 ```
 
 ## License
 
-FSL-1.1-MIT
+[FSL-1.1-MIT](https://github.com/lacymorrow/lacy/blob/main/LICENSE)

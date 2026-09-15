@@ -29,7 +29,7 @@ Every repo README follows the same skeleton. Omit sections that don't apply, but
                                   ← hero image (if available)
 
 ## Install                        ← primary method first, others in <details>
-## How It Works / Usage           ← the meat — images, tables, code
+## How It Works / Usage           ← the meat - images, tables, code
 ## API / Commands / Options       ← reference material
 ## Configuration                  ← if applicable
 ## Uninstall                      ← if applicable (CLI tools)
@@ -44,7 +44,7 @@ Every repo README follows the same skeleton. Omit sections that don't apply, but
 - **No "Contributing" section in the README.** Use CONTRIBUTING.md if needed.
 - **No "Acknowledgements" or "Credits" sections.** Use package.json or a separate file.
 - **Images over colored text.** GitHub markdown can't render colored text. Use generated images (dark background, monospaced font, accent colors) for anything that needs color.
-- **`<details>` for secondary content.** Alternative install methods, full API reference, verbose config examples — collapse them.
+- **`<details>` for secondary content.** Alternative install methods, full API reference, verbose config examples - collapse them.
 - **Tables for structured data.** Commands, options, comparisons. Left-aligned, no unnecessary columns.
 - **One install command above the fold.** The most common method, in a bash code block, before anything else. No prose before the install block.
 
@@ -54,7 +54,7 @@ When generating images for READMEs (via Gemini, Midjourney, or any tool):
 
 - **Background:** `#09090b` (near-black, matches GitHub dark mode)
 - **Text:** Monospaced, white (`#fafafa`) for primary, gray (`#a1a1aa`) for secondary
-- **Accent colors:** Use the palette below — small, precise doses only
+- **Accent colors:** Use the palette below - small, precise doses only
 - **No window chrome.** No title bars, no traffic light dots, no drop shadows
 - **No rounded corners** on containers or cards
 - **Width:** Generate at 2x resolution, display at `width="680"` max in markdown
@@ -88,7 +88,7 @@ Six grays and four accents. Use these exact values everywhere.
 | blue | `#60a5fa` | Info, auto mode |
 
 **Rules:**
-- Colors appear at full saturation in small doses — dots, bars, single words. Never as backgrounds.
+- Colors appear at full saturation in small doses - dots, bars, single words. Never as backgrounds.
 - Background tinting uses 8% opacity max: `rgba(74,222,128,0.08)`
 - No gradients. No glows. No shadows with color.
 
@@ -105,7 +105,7 @@ Six grays and four accents. Use these exact values everywhere.
 https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap
 ```
 
-- Mono is the default voice. Serif is rare — headings and CTAs only.
+- Mono is the default voice. Serif is rare - headings and CTAs only.
 - No sans-serif anywhere.
 - Body text: 13–14px. Headings: let the size do the work, never bold (weight 400).
 - The italic serif word in a heading carries the violet accent color.
@@ -117,7 +117,7 @@ GitHub renders markdown in its own fonts, so typography control is limited. Comp
 - Use `##` headings, not `###` or deeper. Two levels of hierarchy is enough.
 - Use code blocks (`bash`, `yaml`, etc.) aggressively. They're the closest thing to the mono aesthetic.
 - Use tables instead of bullet lists when data has structure.
-- Bold (`**text**`) sparingly — for the first mention of a key term, not for emphasis.
+- Bold (`**text**`) sparingly - for the first mention of a key term, not for emphasis.
 
 ## Website Layout
 

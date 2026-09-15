@@ -6,7 +6,7 @@ Lacy intercepts every command you type and routes it either to the shell or to a
 
 - Command classification / routing logic (does a destructive command stay shell-side as intended?)
 - Backend command construction (no shell injection when forwarding a query to any supported AI CLI)
-- Credential leakage in fallback paths or panic logs
+- Credential or query leakage in logs (the opt-in query log, tool error output, panic logs)
 
 If you've found a security issue, please report it privately:
 

@@ -1,124 +1,81 @@
 # Adding a New AI Backend to Lacy Shell
 
-This guide documents how to add a new AI CLI tool as a supported backend. The hermes integration (PR #40) serves as the reference implementation.
+How to add an AI CLI tool as a supported backend.
 
 ## Prerequisites
 
 Before starting, verify the CLI tool supports:
 
-1. **Single-shot query mode** -- a flag that accepts a prompt string and exits after responding (e.g. `-p`, `-c`, `-q`)
-2. **Stdout output** -- response text goes to stdout, not a TUI
-3. **Session resume** (optional) -- a flag to continue a previous conversation
+1. **Single-shot query mode**: a flag that accepts a prompt string and exits after responding (e.g. `-p`, `-c`, `-q`)
+2. **Stdout output**: response text goes to stdout, not a TUI
+3. **Non-zero exit codes on errors**
+4. **Session resume** (optional): a flag to continue a previous conversation
 
 ## Integration Checklist
 
 ### 1. Tool registry (`lib/core/mcp.sh`)
 
-Add two entries:
+Add entries to three functions:
 
 ```bash
-# lacy_tool_cmd() -- single-shot command
+# lacy_tool_cmd(): single-shot command
 your_tool) echo "your-tool query-flag" ;;
 
-# lacy_resume_cmd() -- session resume (or omit if unsupported)
+# lacy_resume_cmd(): shown as "Resume: ..." after a failed query (omit if unsupported)
 your_tool) echo "your-tool --resume-flag" ;;
+
+# lacy_tool_install_cmd(): install line shown when no tool is found
+your_tool) echo "npm install -g your-tool" ;;
 ```
 
-The command string returned by `lacy_tool_cmd()` is split on whitespace and the user's query is appended as the final argument. So `"hermes chat -q"` becomes `hermes chat -q "user's query"`.
+The command string from `lacy_tool_cmd()` is split into words and the query is appended as the final argument. `"hermes chat -q"` becomes `hermes chat -q "user's query"`.
 
-Also add install hints to both the interactive prompt section and the non-interactive fallback section in `lacy_shell_query_agent()`.
+### 2. Tool list
 
-### 2. Tool list (`lib/core/constants.sh`)
+Append the tool to `LACY_TOOL_LIST` in `lib/core/constants.sh`. The order is the auto-detect order and the order in `tool` output. Messages such as `Options: ...` are built from this list.
 
-Append your tool to the `LACY_TOOL_LIST` array:
+The same list is copied in other places. Keep them identical (the tests check):
 
-```bash
-LACY_TOOL_LIST=(lash claude opencode gemini codex your_tool)
-```
+- `install.sh`: `TOOL_LIST`
+- `bin/lacy`: `TOOL_LIST`
+- `packages/lacy/index.mjs`: `TOOL_LIST` and `TOOL_HINTS`
+- `lib/fish/config.fish`: generated. Run `script/sync-word-lists.sh`.
 
-This controls auto-detection order and the `tool` command display.
+### 3. Fish (`lib/fish/execute.fish`)
 
-### 3. Session management (`lib/core/preheat.sh`)
+Add the command to the `switch` in `_lacy_tool_cmd`.
 
-Add a session reuse block following the existing pattern:
+### 4. Sessions (`lib/core/preheat.sh`)
 
-```bash
-LACY_YOURTOOL_SESSION_ID=""
-LACY_YOURTOOL_SESSION_ID_FILE="$LACY_SHELL_HOME/.yourtool_session_id_$$"
+Tools without their own session handling share the `default` session entry: add the tool to the `codex|hermes|copilot|goose|amp` cases in `_lacy_save_last_session()` and `lacy_session_resume()`.
 
-lacy_preheat_yourtool_restore_session() { ... }
-lacy_preheat_yourtool_build_cmd() { ... }
-lacy_preheat_yourtool_capture_session() { ... }
-lacy_preheat_yourtool_extract_result() { ... }
-lacy_preheat_yourtool_reset_session() { ... }
-```
+If the tool returns a session ID you can pass back (as claude and gemini do), follow the claude or gemini pattern: `*_restore_session`, `*_reset_session`, and wiring in `_lacy_get_current_tool()`, `_lacy_save_last_session()`, `lacy_session_new()`, `lacy_session_resume()` and `lacy_preheat_cleanup()`. If the prompt flag is not `-p`, check `_lacy_session_build_cmd()`.
 
-Then wire it into:
+### 5. Docs
 
-- `_lacy_get_current_tool()` -- add to the detection loop
-- `_lacy_save_last_session()` -- add case for session ID
-- `lacy_session_new()` -- call reset function
-- `lacy_session_resume()` -- add case to restore session
-- `lacy_preheat_cleanup()` -- delete session file
-
-If the tool uses `-p` for its prompt flag, `_lacy_session_build_cmd()` works as-is. For other flags (like hermes `chat -q`), add a conditional in that function.
-
-### 4. Help text (`lib/core/commands.sh`)
-
-Add your tool name to the options list in three places (search for `Options:`):
-
-```
-Options: lash, claude, opencode, gemini, codex, your_tool, custom, auto
-```
-
-### 5. Node installer (`packages/lacy/index.mjs`)
-
-Update these locations:
-
-- **TOOLS array** -- add selection entry with label and hint
-- **Detection loops** -- all `for (const tool of [...])` loops (3 locations)
-- **Install prompt** -- add a block after the lash install prompt if your tool has a simple install command
-
-For beta tools, use a label like `"your_tool (beta)"` to signal maturity.
-
-### 6. Docs
-
-- **`CLAUDE.md`** -- add row to the Supported AI CLI Tools table
-- **This file** -- reference your PR as an additional example if it introduces new patterns
+- `CLAUDE.md`: Supported AI CLI Tools table
+- `lib/core/config.sh`: the tool list comment in the default config (and its copies in `install.sh` and `packages/lacy/index.mjs`)
 
 ## Execution Paths
 
-Lacy has three execution paths in `lacy_shell_query_agent()`. Choose the right one:
+`lacy_shell_query_agent()` has four paths:
 
-| Path | Used by | When to use |
-|------|---------|-------------|
-| **Server** (background `serve` + REST API) | lash, opencode | Tool has a `serve` command for persistent background process |
-| **JSON** (single-shot with JSON output parsing) | claude | Tool outputs structured JSON with session IDs |
-| **Generic** (streaming stdout) | codex, hermes, custom | Tool streams plain text to stdout |
+| Path       | Used by               | When to use                                                  |
+| ---------- | --------------------- | ------------------------------------------------------------ |
+| **Server** | lash, opencode        | Tool has a `serve` command with an HTTP API                  |
+| **claude** | claude                | JSON output with session IDs, `--resume`                     |
+| **gemini** | gemini                | Session reuse with `--resume`                                |
+| **Generic** | everything else, custom | Tool streams plain text to stdout                         |
 
-Most new tools use the **generic path** -- no special handling needed. The tool command runs, stdout streams to the terminal, and the spinner is killed on first output line.
+Most new tools use the generic path and need nothing more. The command runs, stdout streams to the terminal, and on failure Lacy prints the exit code, the last lines of error output, and the resume hint.
 
-## Beta Integrations
+## Before Opening the PR
 
-For tools that are new, experimental, or have unverified behavior:
+With the tool installed, check:
 
-1. Add `(beta)` to the label in the TOOLS array: `label: "your_tool (beta)"`
-2. Note any known limitations in the PR description
-3. Open questions to verify with the tool installed:
-   - Does single-shot mode output cleanly to stdout (no TUI artifacts)?
-   - Are exit codes non-zero on errors?
-   - What is cold-start latency?
-   - Does session resume work as documented?
+- Single-shot mode prints cleanly to stdout (no TUI artifacts)
+- Exit codes are non-zero on errors
+- Cold-start latency is acceptable
+- Session resume works as documented, if you added it
 
-## Reference: Hermes Integration (PR #40)
-
-The hermes backend added in PR #40 is a minimal example touching 6 files with ~90 lines changed:
-
-| File | Change |
-|------|--------|
-| `lib/core/constants.sh` | Added `hermes` to `LACY_TOOL_LIST` |
-| `lib/core/mcp.sh` | `hermes chat -q` in tool registry, `hermes --continue` for resume, install hints |
-| `lib/core/preheat.sh` | Session state, build cmd with `chat -q` flag, cleanup |
-| `lib/core/commands.sh` | Help text |
-| `packages/lacy/index.mjs` | Detection, selection with `(beta)` label, install prompt |
-| `CLAUDE.md` | Supported tools table |
+Run `script/test.sh` and note any known limitations in the PR description.

@@ -7,7 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- Production hardening (see PR)
+### Fixed
+
+- zsh: Lacy no longer rewrites `PS1`. The shell/agent mark is drawn after the prompt (`$` shell, `?` agent) and the mode badge is appended to your right prompt, so powerlevel10k, starship, zsh-syntax-highlighting and zsh-autosuggestions keep working.
+- zsh: first-word colors are only added on zsh 5.9+, where they can be removed cleanly. Older zsh no longer piles up highlights.
+- zsh: Right arrow and Tab call whatever they were bound to before Lacy loaded when there is no suggestion.
+- Bash: continuation lines (open quotes, loop bodies, heredocs) are never classified. Before, `done` or `fi` could go to the agent and leave the shell stuck at `>`.
+- Bash: Lacy's `PROMPT_COMMAND` hook runs last, so the badge survives prompts rebuilt by starship or `__git_ps1`. Vi mode works.
+- Bash: your own Enter, Ctrl+J and Ctrl+Space bindings are restored on `quit`.
+- fish: classification matches zsh and Bash, and questions run as ` ask '<question>'` commands so Ctrl+C and history behave normally.
+- `exit` exits the shell in every mode and is never sent to the agent.
+- The config parser reads sections, strips one pair of quotes, and only treats `#` as a comment after whitespace.
+- `NO_COLOR` is honored by the plugin, installer and uninstaller.
+- Uninstall stops the background server by port and keeps symlinked rc files as symlinks.
+- `lacy doctor` checks the configured tool, an uncommented `source` line and the Bash version, and exits 1 when it finds a problem.
+
+### Changed
+
+- Startup mode comes from `~/.lacy/current_mode`, then `modes.default`, then auto, in zsh, Bash and fish.
+- `tool set <name>` saves the choice to `config.yaml` and says whether it was saved.
+- The query log is off by default. `logging.queries: true` turns it on; it stores only the question as typed, readable only by you.
+- `spinner.style` accepts `braille` (default) or `ascii`.
+- Questions no longer print a "Using X" line. The resume hint only appears after a failure. With no AI tool installed, one message lists how to install each tool.
+- curl and npx install the latest release tag instead of `main`. The installer asks nothing when one AI tool is installed, one question when none is, and shows a picker only when there are several. Without a terminal it asks nothing. The success message is two lines.
+- `install.sh` takes `--update`, `--reinstall` and `--uninstall`. `lacy update` moves to the latest tag; update and reinstall refuse a symlinked or modified `~/.lacy`.
+- A one-time gray hint (`what files are here`) shows on the first prompt in zsh.
+- Tests run with `script/test.sh`. CI runs the suites on Ubuntu and macOS, an installer smoke test, npm package and version checks, and a fish word-list check.
+- Fish word lists are generated from `lib/core/constants.sh` by `script/sync-word-lists.sh`.
+- License is FSL-1.1-MIT everywhere.
+
+### Removed
+
+- Nushell support.
+- The direct OpenAI and Anthropic API fallback and the `api_keys` config section.
+- The `stop`, `quit_lacy`, `disable_lacy`, `enable_lacy` and `spinner` commands, double Ctrl+C to quit, and the Ctrl+T toggle. Ctrl+C and Ctrl+D are back to shell defaults; `quit` leaves Lacy.
+- Installer `--beta` and `--channel` options.
+- Launch and marketing material from the repository.
 
 ## [1.8.23] - 2026-09-14
 
@@ -183,18 +218,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Bash 4+ adapter** — Lacy Shell now works in Bash 4+ in addition to ZSH. Uses `bind -x` for Enter override, `PROMPT_COMMAND` for post-execution hooks, and `PS1` badge for mode display. Requires Bash 4+ (macOS: `brew install bash`); shows a clear error on Bash 3.2
-- **Standalone CLI** (`bin/lacy`) — pure-bash CLI with zero dependencies. Commands: `lacy setup`, `lacy status`, `lacy doctor`, `lacy update`, `lacy uninstall`, `lacy reinstall`, `lacy config`, `lacy version`, `lacy help`. Delegates to `npx lacy@latest` for rich UI when Node is available, falls back to bash
-- **Multi-shell architecture** — `lib/core/*.sh` (portable Bash 4+/ZSH shared logic), `lib/zsh/*.zsh` (ZLE widgets, `region_highlight`, `print -P`), `lib/bash/*.bash` (`bind -x`, `PROMPT_COMMAND`, `printf` ANSI). Old `lib/*.zsh` files are thin backward-compat wrappers
-- `lacy.plugin.bash` entry point — sets `LACY_SHELL_TYPE=bash`, `_LACY_ARR_OFFSET=0`, loads bash adapter modules
-- `tests/test_bash.bash` — 16 Bash-specific integration tests (detection, prompt, modes, command functions)
-- `tests/test_core.sh` — 81 cross-shell tests (runs under both ZSH and Bash 4+)
-- **Layer 1: Shell reserved word filtering** — words like `do`, `done`, `then`, `else`, `in`, `select`, `function` that pass `command -v` but are never standalone commands are now routed directly to the agent
-- **Layer 2: Post-execution natural language detection** — `lacy_shell_detect_natural_language()` analyzes failed command output against 17 error patterns and checks for NL signals
+- **Bash 4+ adapter**: Lacy Shell now works in Bash 4+ in addition to ZSH. Uses `bind -x` for Enter override, `PROMPT_COMMAND` for post-execution hooks, and `PS1` badge for mode display. Requires Bash 4+ (macOS: `brew install bash`); shows a clear error on Bash 3.2
+- **Standalone CLI** (`bin/lacy`): pure-bash CLI with zero dependencies. Commands: `lacy setup`, `lacy status`, `lacy doctor`, `lacy update`, `lacy uninstall`, `lacy reinstall`, `lacy config`, `lacy version`, `lacy help`. Delegates to `npx lacy@latest` for rich UI when Node is available, falls back to bash
+- **Multi-shell architecture**: `lib/core/*.sh` (portable Bash 4+/ZSH shared logic), `lib/zsh/*.zsh` (ZLE widgets, `region_highlight`, `print -P`), `lib/bash/*.bash` (`bind -x`, `PROMPT_COMMAND`, `printf` ANSI). Old `lib/*.zsh` files are thin backward-compat wrappers
+- `lacy.plugin.bash` entry point: sets `LACY_SHELL_TYPE=bash`, `_LACY_ARR_OFFSET=0`, loads bash adapter modules
+- `tests/test_bash.bash`: 16 Bash-specific integration tests (detection, prompt, modes, command functions)
+- `tests/test_core.sh`: 81 cross-shell tests (runs under both ZSH and Bash 4+)
+- **Layer 1: Shell reserved word filtering**: words like `do`, `done`, `then`, `else`, `in`, `select`, `function` that pass `command -v` but are never standalone commands are now routed directly to the agent
+- **Layer 2: Post-execution natural language detection**: `lacy_shell_detect_natural_language()` analyzes failed command output against 17 error patterns and checks for NL signals
 - `LACY_SHELL_RESERVED_WORDS`, `LACY_SHELL_ERROR_PATTERNS` constants
 - Expanded `LACY_NL_MARKERS` from 14 to ~108 common English words
-- `NATURAL_LANGUAGE_DETECTION.md` — shared spec for NL detection (synced with lash)
-- npm installer (`packages/lacy/index.mjs`) rewritten with `@clack/prompts` — interactive setup, tool selection, mode picker, doctor diagnostics
+- `NATURAL_LANGUAGE_DETECTION.md`: shared spec for NL detection (synced with lash)
+- npm installer (`packages/lacy/index.mjs`) rewritten with `@clack/prompts`: interactive setup, tool selection, mode picker, doctor diagnostics
 
 ### Changed
 
@@ -205,18 +240,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Tool invocation with special characters** — replaced `eval` with array-based `_lacy_run_tool_cmd()` so queries containing double quotes (e.g. `what does "map" do`) no longer break command parsing
-- **Ctrl+Space history pollution** (Bash) — the injected `_lacy_mode_toggle_` command is now removed from history immediately
-- **Config cache freshness check inverted** — `config.yaml -nt cache` was incorrectly using the stale cache; now correctly checks `! -nt` so config changes take effect
-- **Config cache write injection** — cache values are now written with `printf %q` instead of raw single-quote interpolation
-- **`bin/lacy setup_tool` crash on non-numeric input** — added regex validation before numeric comparison
-- **`bin/lacy reinstall` destroys user config** — config.yaml is now backed up and restored across reinstall
-- **`yaml_write` sed injection** — sed special characters (`\`, `|`, `&`) in values are now escaped
-- **`commandExists` shell injection** (Node installer) — command names are validated against `/^[a-zA-Z0-9._-]+$/` before `execSync`
-- **PROMPT_COMMAND not restored on cleanup** (Bash) — `lacy_shell_cleanup()` now restores `_LACY_ORIGINAL_PROMPT_COMMAND`
-- **Reroute candidate fires when disabled** — moved disabled/quitting guard before reroute check in both `execute.bash` and `execute.zsh`
-- **`python3` subprocess on every Ctrl+C** (macOS Bash) — replaced with `$(( $(date +%s) * 1000 ))` fallback for second-precision timestamps
-- **`(( PASS++ ))` in tests** — replaced with `PASS=$(( PASS + 1 ))` to avoid exit code 1 when counter is 0
+- **Tool invocation with special characters**: replaced `eval` with array-based `_lacy_run_tool_cmd()` so queries containing double quotes (e.g. `what does "map" do`) no longer break command parsing
+- **Ctrl+Space history pollution** (Bash): the injected `_lacy_mode_toggle_` command is now removed from history immediately
+- **Config cache freshness check inverted**: `config.yaml -nt cache` was incorrectly using the stale cache; now correctly checks `! -nt` so config changes take effect
+- **Config cache write injection**: cache values are now written with `printf %q` instead of raw single-quote interpolation
+- **`bin/lacy setup_tool` crash on non-numeric input**: added regex validation before numeric comparison
+- **`bin/lacy reinstall` destroys user config**: config.yaml is now backed up and restored across reinstall
+- **`yaml_write` sed injection**: sed special characters (`\`, `|`, `&`) in values are now escaped
+- **`commandExists` shell injection** (Node installer): command names are validated against `/^[a-zA-Z0-9._-]+$/` before `execSync`
+- **PROMPT_COMMAND not restored on cleanup** (Bash): `lacy_shell_cleanup()` now restores `_LACY_ORIGINAL_PROMPT_COMMAND`
+- **Reroute candidate fires when disabled**: moved disabled/quitting guard before reroute check in both `execute.bash` and `execute.zsh`
+- **`python3` subprocess on every Ctrl+C** (macOS Bash): replaced with `$(( $(date +%s) * 1000 ))` fallback for second-precision timestamps
+- **`(( PASS++ ))` in tests**: replaced with `PASS=$(( PASS + 1 ))` to avoid exit code 1 when counter is 0
 - Removed dead `lacy_shell_detect_mode()` function from `detection.sh`
 
 ---
@@ -225,15 +260,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Post-execution error fallback for smart command routing — when a valid command has 3+ bare words with natural language markers (e.g. `kill the process on localhost:3000`), shell executes first; if it fails, input is automatically re-routed to the agent
-- `lacy_shell_has_nl_markers()` — NL detection function that counts bare words (excluding flags, paths, numbers, variables) and checks for strong markers (articles, pronouns, question words, "please")
-- First-word syntax highlighting via ZSH `region_highlight` — the first word is highlighted green for shell commands and magenta for agent queries in real-time as you type
+- Post-execution error fallback for smart command routing: when a valid command has 3+ bare words with natural language markers (e.g. `kill the process on localhost:3000`), shell executes first; if it fails, input is automatically re-routed to the agent
+- `lacy_shell_has_nl_markers()`: NL detection function that counts bare words (excluding flags, paths, numbers, variables) and checks for strong markers (articles, pronouns, question words, "please")
+- First-word syntax highlighting via ZSH `region_highlight`: the first word is highlighted green for shell commands and magenta for agent queries in real-time as you type
 
 ### Changed
 
 - `lacy_shell_precmd()` now captures `$?` as its first operation to support exit code checking for reroute candidates
 - Exit codes >= 128 (signal-based: Ctrl+C, SIGKILL) are excluded from reroute triggering
-- Explicit `mode shell` never triggers rerouting — only auto mode
+- Explicit `mode shell` never triggers rerouting: only auto mode
 
 ---
 
@@ -242,14 +277,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Agent preheating to reduce per-query latency
-- Background server mode for lash and opencode — starts `lash serve` / `opencode serve` in background, routes queries via local REST API to eliminate cold-start
-- Claude session reuse — captures `session_id` from `--output-format json` and passes `--resume` on subsequent queries for conversation continuity
+- Background server mode for lash and opencode: starts `lash serve` / `opencode serve` in background, routes queries via local REST API to eliminate cold-start
+- Claude session reuse: captures `session_id` from `--output-format json` and passes `--resume` on subsequent queries for conversation continuity
 - New `preheat` config section with `eager` (start server on plugin load) and `server_port` (default 4096) options
 - Automatic server lifecycle management: lazy start on first query, health checks, crash recovery, cleanup on quit or tool switch
 
 ### Fixed
 
-- Fixed JSON output parsing in zsh — replaced `echo` with `printf '%s
+- Fixed JSON output parsing in zsh: replaced `echo` with `printf '%s
 '` to prevent zsh from interpreting escape sequences (`
 `, `\"`) in JSON strings
 
@@ -262,11 +297,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leading whitespace no longer misroutes input to agent (`  ls -la` now correctly executes in shell)
 - Spinner no longer permanently disables job control (`fg`/`bg` work after AI queries)
 - Spinner no longer leaves cursor hidden after Ctrl+C interrupts
-- `exit` no longer shadowed by alias — passes through to shell builtin in shell mode, quits lacy in auto/agent mode
+- `exit` no longer shadowed by alias: passes through to shell builtin in shell mode, quits lacy in auto/agent mode
 
 ### Changed
 
-- Centralized detection logic into single `lacy_shell_classify_input()` function — indicator and execution can no longer disagree
+- Centralized detection logic into single `lacy_shell_classify_input()` function: indicator and execution can no longer disagree
 - Added single-entry cache for `command -v` lookups to reduce input lag with large PATH
 
 ---
