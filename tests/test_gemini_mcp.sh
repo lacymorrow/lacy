@@ -23,6 +23,13 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEST_TMPDIR=$(mktemp -d)
 export LACY_SHELL_HOME="$TEST_TMPDIR"
 
+# query_agent checks that the tool is installed before running it; CI
+# runners have no gemini, so put a stub on PATH (the real call is mocked).
+mkdir -p "$TEST_TMPDIR/bin"
+printf '#!/bin/sh\nexit 0\n' > "$TEST_TMPDIR/bin/gemini"
+chmod +x "$TEST_TMPDIR/bin/gemini"
+export PATH="$TEST_TMPDIR/bin:$PATH"
+
 # Source core modules
 source "$REPO_DIR/lib/core/constants.sh"
 source "$REPO_DIR/lib/core/mcp.sh"

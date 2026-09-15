@@ -617,6 +617,15 @@ _saved_TERM_PROGRAM="${TERM_PROGRAM:-}"
 # Clean slate for detection tests
 unset TMUX STY TERM_PROGRAM 2>/dev/null
 
+# Detection requires the tmux and screen binaries; CI runners may lack them.
+_saved_PATH="$PATH"
+_stub_bin=$(mktemp -d "${TMPDIR:-/tmp}/lacy-test-stubs.XXXXXX")
+printf '#!/bin/sh\nexit 0\n' > "$_stub_bin/tmux"
+printf '#!/bin/sh\nexit 0\n' > "$_stub_bin/screen"
+chmod +x "$_stub_bin/tmux" "$_stub_bin/screen"
+PATH="$_stub_bin:$PATH"
+[[ -n "${ZSH_VERSION:-}" ]] && rehash
+
 # tmux detection: set TMUX, verify capture command
 TMUX="/tmp/tmux-test/default,12345,0"
 _lacy_ctx_detect_terminal
@@ -635,6 +644,10 @@ STY="12345.pts-0.host"
 _lacy_ctx_detect_terminal
 assert_eq "tmux beats screen" "tmux capture-pane -p" "$_LACY_CTX_TERMINAL_CAPTURE_CMD"
 unset TMUX STY
+
+PATH="$_saved_PATH"
+[[ -n "${ZSH_VERSION:-}" ]] && rehash
+command rm -rf "$_stub_bin"
 
 # No env vars set -> no capture (in test env without real terminals)
 _lacy_ctx_detect_terminal

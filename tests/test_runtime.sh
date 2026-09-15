@@ -45,6 +45,8 @@ mkdir -p "$HOME" "$LACY_SHELL_HOME" "$TEST_TMPDIR/bin" "$TEST_TMPDIR/work"
 export PATH="$TEST_TMPDIR/bin:/usr/bin:/bin"
 cd "$TEST_TMPDIR/work" || exit 1
 unset NO_COLOR TMUX STY TERM_PROGRAM 2>/dev/null
+# CI runners may set TERM=dumb, which lacy treats like NO_COLOR.
+export TERM=xterm-256color
 
 cleanup() { cd / && command rm -rf "$TEST_TMPDIR"; }
 trap cleanup EXIT

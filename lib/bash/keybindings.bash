@@ -22,10 +22,13 @@ _lacy_bash_save_binding() {
     local prefix="\"${key}\""
     local tab=$'\t'
 
-    # bind -X prints `"key" "command"`; bind -x takes `"key": command`
+    # bind -X prints `"key" "command"` in bash 5.3 and `"key": "command"` in
+    # 5.2 and earlier; bind -x takes `"key": command`
     while IFS= read -r line; do
-        if [[ "$line" == "$prefix \""* ]]; then
-            cmd="${line#"$prefix \""}"
+        if [[ "$line" == "$prefix \""* || "$line" == "$prefix: \""* ]]; then
+            cmd="${line#"$prefix"}"
+            cmd="${cmd#:}"
+            cmd="${cmd#' "'}"
             cmd="${cmd%\"}"
             cmd="${cmd//\\\"/\"}"
             # Our own binding from an earlier load is not the user's

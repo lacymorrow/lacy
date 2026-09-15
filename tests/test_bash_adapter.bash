@@ -37,6 +37,13 @@ fail() {
     FAIL=$(( FAIL + 1 ))
 }
 
+# bind -X line for KEY -> CMD with a PREFIX tag, in the bash 5.3 form
+# `"key" "cmd"` or the 5.2 form `"key": "cmd"`.
+has_bind() {
+    local file="$1" tag="$2" key="$3" cmd="$4"
+    grep -qxF "$tag \"$key\" \"$cmd\"" "$file" || grep -qxF "$tag \"$key\": \"$cmd\"" "$file"
+}
+
 assert_eq() {
     if [[ "$2" == "$3" ]]; then pass; else fail "$1" "expected [$2] got [$3]"; fi
 }
@@ -393,9 +400,9 @@ RC
         'quit' \
         'declare -p PROMPT_COMMAND | sed "s/^/PCDECL2 /"'
     OUT="$TMP_ROOT/c.out"
-    assert_true "vi-insert Enter bound" has_line "$OUT" 'VIX "\C-x\C-l" "lacy_shell_smart_accept_line_bash"'
-    assert_true "vi-command Enter bound" has_line "$OUT" 'VCX "\C-x\C-l" "lacy_shell_smart_accept_line_bash"'
-    assert_true "vi-insert Ctrl-Space bound" has_line "$OUT" 'VIX "\C-@" "_lacy_ctrl_space_toggle"'
+    assert_true "vi-insert Enter bound" has_bind "$OUT" VIX '\C-x\C-l' lacy_shell_smart_accept_line_bash
+    assert_true "vi-command Enter bound" has_bind "$OUT" VCX '\C-x\C-l' lacy_shell_smart_accept_line_bash
+    assert_true "vi-insert Ctrl-Space bound" has_bind "$OUT" VIX '\C-@' _lacy_ctrl_space_toggle
     assert_true "vi mode: PS2 loop runs" has_line "$OUT" "viter2"
     assert_true "vi mode: agent query routed" has_both "$OUT" "FAKE_AGENT:" "what is this in vi"
     assert_true "vi mode: badge present" has_both "$OUT" "P1> echo __MARK_VI_BADGE__" "AUTO"
