@@ -268,6 +268,17 @@ assert_eq "stop it please (alias, NL args) → agent" "agent" "$(lacy_shell_clas
 unalias stop lint cancel continue 2>/dev/null
 unset -f render deploy
 assert_eq "stop (no alias) → agent" "agent" "$(lacy_shell_classify_input 'stop')"
+
+# Contractions: a lone word with an unbalanced quote is speech, and the shell
+# would only open a continuation prompt for it
+assert_eq "what's → agent" "agent" "$(lacy_shell_classify_input "what's")"
+assert_eq "don't → agent" "agent" "$(lacy_shell_classify_input "don't")"
+assert_eq "let's → agent" "agent" "$(lacy_shell_classify_input "let's")"
+assert_eq "who's → agent" "agent" "$(lacy_shell_classify_input "who's")"
+assert_eq "unterminated double quote stays shell" "shell" "$(lacy_shell_classify_input '"hello')"
+assert_eq "whats (no quote) → shell" "shell" "$(lacy_shell_classify_input 'whats')"
+assert_eq "balanced quotes stay shell" "shell" "$(lacy_shell_classify_input "'ls'")"
+assert_eq "what's this → agent" "agent" "$(lacy_shell_classify_input "what's this")"
 assert_eq "deploy (no function) → agent" "agent" "$(lacy_shell_classify_input 'deploy')"
 # builtins and external commands keep the agent-word behaviour
 assert_eq "yes (external cmd) → agent" "agent" "$(lacy_shell_classify_input 'yes')"

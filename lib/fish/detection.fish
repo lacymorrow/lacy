@@ -248,7 +248,14 @@ function _lacy_classify_input --description "Classify input as shell/agent/neutr
     # Single unknown word: probably a typo, let the shell report it.
     # Several words with an unknown first word: natural language.
     if test -z "$rest"
-        echo shell
+        # One word with an odd apostrophe is speech, not a typo: what's,
+        # don't, let's. Same rule as lib/core/detection.sh.
+        set -l quotes (string replace -a -r -- "[^']" "" "$first_word_cmd")
+        if test (math (string length -- "$quotes") % 2) -eq 1
+            echo agent
+        else
+            echo shell
+        end
     else
         echo agent
     end

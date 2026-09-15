@@ -100,7 +100,10 @@ Examples:
 ### Remaining rules
 
 - First word is a valid command: shell.
-- Single word that is not a command: shell (a typo; let the shell report it).
+- Single word that is not a command: shell (a typo; let the shell report it), unless it holds an odd
+  number of apostrophes (`what's`, `don't`, `let's`). Those go to the agent: the shell would read the
+  apostrophe as an open quote and answer with a continuation prompt. A double quote is left alone,
+  since that is usually deliberate shell quoting.
 - Multiple words and the first is not a command: agent.
 
 ---

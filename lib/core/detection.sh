@@ -354,7 +354,17 @@ _lacy_classify_impl() {
     # Single word that's not a command = probably a typo, shell
     # Multiple words with non-command first word = natural language, agent
     if [[ -z "$_rest" ]]; then
-        _LACY_CLASSIFY_RESULT="shell"
+        # One word with an odd apostrophe is speech, not a typo: what's,
+        # don't, let's. The shell can only answer it with a continuation
+        # prompt, so send it to the agent. A double quote is left alone:
+        # that is usually deliberate shell quoting.
+        local _sq
+        _sq="${first_word_cmd//[^\']/}"
+        if (( ${#_sq} % 2 == 1 )); then
+            _LACY_CLASSIFY_RESULT="agent"
+        else
+            _LACY_CLASSIFY_RESULT="shell"
+        fi
     else
         _LACY_CLASSIFY_RESULT="agent"
     fi

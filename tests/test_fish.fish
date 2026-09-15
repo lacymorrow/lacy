@@ -381,6 +381,17 @@ open(out_file, "w").write(text)
 end
 
 # ============================================================================
+echo "--- contractions ---"
+# ============================================================================
+# Earlier sections leave a locked mode behind; probes need auto.
+set -g LACY_SHELL_MODE auto
+probe agent "what's"
+probe agent "don't"
+probe agent "let's"
+probe shell whats
+probe agent "what's this"
+
+# ============================================================================
 # Query log gate and no-tool message
 # ============================================================================
 echo "--- query log off by default, no-tool message lists every tool ---"

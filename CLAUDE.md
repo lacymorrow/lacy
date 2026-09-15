@@ -66,7 +66,9 @@ Canonical: `_lacy_classify_impl` in `lib/core/detection.sh`. Order:
    - valid command + 0 bare words, or exactly 1 bare word that is not an NL marker → shell (`which python`, `nice -n 10 make`)
 8. `VAR=value cmd`: skip assignments; quoted or `$(` RHS → shell; operator after assignment → shell; next word valid command → shell.
 9. First word valid command (`command -v`, cached) → shell. In auto mode, if `lacy_shell_has_nl_markers` is true the line is a reroute candidate (see below).
-10. Single word, not a command → shell (typo). Multiple words, first not a command → agent.
+10. Single word, not a command → shell (typo), except a word with an odd number of apostrophes
+    (`what's`, `don't`) → agent, since the shell would only open a continuation prompt.
+    Multiple words, first not a command → agent.
 
 Only the first line of a multi-line buffer is classified.
 
