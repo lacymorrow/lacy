@@ -25,6 +25,7 @@ fi
 
 say() { printf "%s\n" "$1"; }
 done_line() { printf "  %s✓%s %s\n" "$GREEN" "$NC" "$1"; }
+warn_line() { printf "  %s!%s %s\n" "$YELLOW" "$NC" "$1"; }
 
 # ----------------------------------------------------------------------------
 # Preheat server
@@ -102,13 +103,43 @@ _lacy_strip_rc_lines() {
     '
 }
 
+# The lines the installer writes, and the only ones we ever delete.
+RC_LINE_RE='lacy\.plugin\.(zsh|bash|fish)|\.lacy/bin|^# Lacy Shell$'
+
+# Does $1 parse, as the shell that reads $2 would read it? A missing shell
+# means we cannot tell, and an unknown answer must not block the uninstall.
+_lacy_rc_syntax_ok() {
+    local checker
+    case "$2" in
+        *.zshrc|*.zprofile|*.zshenv|*.zlogin) checker=zsh ;;
+        *fish*)                               checker=fish ;;
+        *)                                    checker=bash ;;
+    esac
+    command -v "$checker" >/dev/null 2>&1 || return 0
+    "$checker" -n "$1" >/dev/null 2>&1
+}
+
 remove_from_file() {
     local file="$1" tmp
     [[ -f "$file" ]] || return 0
-    grep -Eq 'lacy\.plugin\.(zsh|bash|fish)|\.lacy/bin|^# Lacy Shell$' "$file" 2>/dev/null || return 0
+    grep -Eq "$RC_LINE_RE" "$file" 2>/dev/null || return 0
 
     tmp=$(mktemp "${TMPDIR:-/tmp}/lacy-rc-XXXXXX")
     _lacy_strip_rc_lines < "$file" > "$tmp"
+
+    # Deleting our lines is not always safe: someone who wrapped the source
+    # line in their own guard is left holding an orphaned `fi`, and every new
+    # login shell dies on a syntax error. Only refuse when we are the cause,
+    # i.e. the file parsed before and would not parse after.
+    if _lacy_rc_syntax_ok "$file" "$file" && ! _lacy_rc_syntax_ok "$tmp" "$file"; then
+        command rm -f "$tmp"
+        warn_line "Left ~${file#"$HOME"} alone: removing our lines there would break its syntax."
+        say "    Remove these by hand, with whatever wraps them:"
+        grep -nE "$RC_LINE_RE" "$file" | sed 's/^/      /'
+        RC_NEEDS_MANUAL=1
+        return 0
+    fi
+
     # Write through the path (not mv) so a symlinked rc file stays a symlink.
     cat "$tmp" > "$file"
     command rm -f "$tmp"
@@ -126,6 +157,7 @@ RC_FILES=(
     "${HOME}/.config/fish/conf.d/lacy.fish"
 )
 
+RC_NEEDS_MANUAL=0
 has_rc_lines=0
 for rc in "${RC_FILES[@]}"; do
     if [[ -f "$rc" ]] && grep -Eq 'lacy\.plugin\.(zsh|bash|fish)|\.lacy/bin' "$rc" 2>/dev/null; then
@@ -176,9 +208,14 @@ if [[ $is_brew -eq 1 ]] && command -v brew >/dev/null 2>&1; then
     if brew uninstall lacymorrow/tap/lacy >/dev/null 2>&1; then
         done_line "Removed Homebrew formula"
     else
-        printf "  %s!%s Run: brew uninstall lacymorrow/tap/lacy\n" "$YELLOW" "$NC"
+        warn_line "Run: brew uninstall lacymorrow/tap/lacy"
     fi
 fi
 
 say ""
-say "Lacy Shell uninstalled. Open a new terminal to finish."
+if [[ $RC_NEEDS_MANUAL -eq 1 ]]; then
+    say "Lacy Shell uninstalled, except for the rc lines listed above."
+    say "They were left in place because deleting them would have broken the file."
+else
+    say "Lacy Shell uninstalled. Open a new terminal to finish."
+fi

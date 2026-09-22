@@ -40,6 +40,7 @@ check() {
 has() { [[ "$LAST_OUT" == *"$1"* ]]; }
 lacks() { [[ "$LAST_OUT" != *"$1"* ]]; }
 count_lines() { grep -Ec "$1" "$2" 2>/dev/null || true; }
+RC_PATTERN='lacy\.plugin\.(zsh|bash|fish)|\.lacy/bin|^# Lacy Shell$'
 
 # Harness git must not pick up the developer's hooks, signing, or rewrites.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
@@ -186,6 +187,48 @@ if [[ -n "$SERVER_PID" ]]; then
 else
     skip "preheat server stopped" "needs python3 and lsof"
 fi
+
+# ----------------------------------------------------------------------------
+echo "uninstall refuses to leave an rc file that will not parse"
+new_home guarded
+# A hand-guarded block: our source line wrapped in the user's own `if`.
+# Deleting only the lines we recognise strands the `fi`.
+cat > "$H/.bash_profile" <<EOF
+export KEEP_ME=1
+
+# Lacy Shell (requires Bash 4+)
+if [[ \${BASH_VERSINFO[0]} -ge 4 ]] && [[ -f "\$HOME/.lacy/lacy.plugin.bash" ]]; then
+    source "\$HOME/.lacy/lacy.plugin.bash"
+fi
+EOF
+cp "$H/.bash_profile" "$WORK/guarded.orig"
+mkdir -p "$H/.lacy"
+run "$SCRIPT_BASH" "$REPO_DIR/uninstall.sh"
+check "uninstall exits 0" [ "$LAST_RC" -eq 0 ]
+check ".bash_profile still parses" "$SCRIPT_BASH" -n "$H/.bash_profile"
+check ".bash_profile left byte-identical" cmp -s "$H/.bash_profile" "$WORK/guarded.orig"
+check "says which file it skipped" has ".bash_profile"
+check "prints the lines to remove by hand" has "Remove these by hand"
+check "outro admits the leftovers" has "except for the rc lines listed above"
+check "~/.lacy still removed" [ ! -e "$H/.lacy" ]
+
+# ----------------------------------------------------------------------------
+echo "uninstall still cleans an rc file it can safely edit"
+new_home plainrc
+cat > "$H/.bash_profile" <<EOF
+export KEEP_ME=1
+
+# Lacy Shell
+source "\$HOME/.lacy/lacy.plugin.bash"
+export PATH="\$HOME/.lacy/bin:\$PATH"
+EOF
+mkdir -p "$H/.lacy"
+run "$SCRIPT_BASH" "$REPO_DIR/uninstall.sh"
+check "uninstall exits 0" [ "$LAST_RC" -eq 0 ]
+check "our lines are gone" [ "$(count_lines "$RC_PATTERN" "$H/.bash_profile")" -eq 0 ]
+check "the user's line survives" grep -q '^export KEEP_ME=1$' "$H/.bash_profile"
+check ".bash_profile still parses" "$SCRIPT_BASH" -n "$H/.bash_profile"
+check "no manual-cleanup warning" lacks "Remove these by hand"
 
 # ----------------------------------------------------------------------------
 echo "failed clone changes nothing"
