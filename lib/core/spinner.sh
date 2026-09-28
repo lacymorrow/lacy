@@ -50,6 +50,8 @@ lacy_start_spinner() {
     {
         trap 'printf "\e[?25h" >&2' EXIT
         trap 'exit 0' TERM INT HUP
+        # `exit` in a zsh subshell runs zshexit hooks; none of them belong here
+        [[ "$LACY_SHELL_TYPE" == "zsh" ]] && zshexit_functions=()
 
         # Hide cursor
         printf '\e[?25l' >&2

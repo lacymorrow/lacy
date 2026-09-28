@@ -37,6 +37,11 @@ lacy_shell_init() {
 
 # Cleanup (quit and shell exit). Safe to run more than once.
 lacy_shell_cleanup() {
+    # zshexit hooks also fire when a subshell calls `exit` (the spinner does
+    # on SIGTERM). Cleanup there turns MONITOR back on, so its next fork takes
+    # its own process group and stops on SIGTTOU: the spinner never exits and
+    # is left behind as a stopped background job. Main shell only.
+    (( ZSH_SUBSHELL == 0 )) || return 0
     lacy_stop_spinner 2>/dev/null
     lacy_preheat_cleanup
     lacy_shell_cleanup_keybindings
