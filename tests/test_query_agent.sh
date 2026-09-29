@@ -123,6 +123,14 @@ exit 0
 EOF
 chmod +x "$TEST_TMPDIR/bin/oktool"
 
+# Exits 0 with nothing on stdout; the error goes to stderr (lash, opencode)
+cat > "$TEST_TMPDIR/bin/quiettool" <<'EOF'
+#!/bin/sh
+printf 'Error: free tier refused\n' >&2
+exit 0
+EOF
+chmod +x "$TEST_TMPDIR/bin/quiettool"
+
 # A command that leaves a marker file; used as the query for the unknown-tool test
 cat > "$TEST_TMPDIR/bin/lacy_test_marker_cmd" <<EOF
 #!/bin/sh
@@ -171,6 +179,45 @@ assert_eq "oktool: exit code 0" "0" "$rc"
 assert_contains "oktool: first line" "$output" "first"$'\n'"second"
 assert_not_contains "oktool: no exit frame" "$output" "exited with code"
 
+# --- exit 0 with no answer shows stderr instead of nothing -------------------
+echo "Generic path: exit 0, no answer"
+LACY_CUSTOM_TOOL_CMD="quiettool"
+lacy_shell_query_agent "hello" > "$OUT" 2>&1
+rc=$?
+output=$(plain < "$OUT")
+assert_eq "quiettool: reported as a failure" "1" "$rc"
+assert_contains "quiettool: says there was no answer" "$output" "custom finished without an answer"
+assert_contains "quiettool: shows the stderr line" "$output" "Error: free tier refused"
+
+# --- gemini with no login stops before running gemini ------------------------
+echo "Gemini: not signed in"
+cat > "$TEST_TMPDIR/bin/gemini" <<EOF
+#!/bin/sh
+: > "$TEST_TMPDIR/gemini_ran"
+EOF
+chmod +x "$TEST_TMPDIR/bin/gemini"
+# Empty HOME, no key, and a `security` stub that finds no keychain item:
+# clearly signed out on every OS
+printf '#!/bin/sh\nexit 44\n' > "$TEST_TMPDIR/bin/security"
+chmod +x "$TEST_TMPDIR/bin/security"
+mkdir -p "$TEST_TMPDIR/gemhome"
+LACY_ACTIVE_TOOL="gemini"
+HOME="$TEST_TMPDIR/gemhome" GEMINI_API_KEY="" GOOGLE_API_KEY="" \
+    lacy_shell_query_agent "hello" > "$OUT" 2>&1
+rc=$?
+output=$(plain < "$OUT")
+assert_eq "gemini signed out: returns 1" "1" "$rc"
+assert_contains "gemini signed out: message" "$output" "gemini is not signed in."
+assert_contains "gemini signed out: how to sign in" "$output" "Sign in once by running: gemini"
+if [[ -e "$TEST_TMPDIR/gemini_ran" ]]; then
+    echo "  FAIL: gemini signed out: gemini was started"
+    FAIL=$(( FAIL + 1 ))
+else
+    PASS=$(( PASS + 1 ))
+fi
+command rm -f "$TEST_TMPDIR/bin/security" "$TEST_TMPDIR/bin/gemini"
+LACY_ACTIVE_TOOL="custom"
+
 # --- (e) unknown tool never runs the query ----------------------------------
 echo "Tool validation"
 LACY_ACTIVE_TOOL="nosuchtool"
@@ -198,7 +245,7 @@ if command -v goose >/dev/null 2>&1; then
 else
     assert_eq "missing tool: returns 1" "1" "$rc"
     assert_contains "missing tool: message" "$output" "goose is set as your tool but is not installed."
-    assert_contains "missing tool: install hint" "$output" "brew install goose"
+    assert_contains "missing tool: install hint" "$output" "brew install block-goose-cli"
 fi
 
 # --- _lacy_run_tool_cmd refuses an empty command -----------------------------

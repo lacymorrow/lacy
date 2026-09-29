@@ -17,7 +17,7 @@ CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
 # Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
-TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose amp aider)
+TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose aider)
 
 # Colors (ANSI-C quoting so escape bytes are real, not literal)
 # A dumb terminal renders escapes as garbage: treat it like NO_COLOR.

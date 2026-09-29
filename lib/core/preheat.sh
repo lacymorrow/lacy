@@ -230,6 +230,13 @@ _lacy_preheat_server_query_into() {
     fi
 
     _LACY_SERVER_RESULT=$(_lacy_server_extract_text "$response")
+    # A failed model call still answers 200: no text, reason in .info.error
+    local _err_name
+    _err_name=$(_lacy_json_query "$response" '.info.error.name')
+    if [[ -z "${_LACY_SERVER_RESULT//[[:space:]]/}" && -n "$_err_name" && "$_err_name" != "null" ]]; then
+        _LACY_SERVER_RESULT="$response"
+        return "$LACY_SERVER_QUERY_HTTP_ERROR"
+    fi
     return "$LACY_SERVER_QUERY_OK"
 }
 
@@ -488,7 +495,7 @@ _lacy_save_last_session() {
         lash|opencode)   session_id="$LACY_PREHEAT_SERVER_SESSION_ID" ;;
         claude)          session_id="$LACY_PREHEAT_CLAUDE_SESSION_ID" ;;
         gemini)          session_id="$LACY_GEMINI_SESSION_ID" ;;
-        codex|hermes|copilot|goose|amp) session_id="default" ;;
+        codex|hermes|copilot|goose) session_id="default" ;;
     esac
 
     [[ -n "$session_id" && -n "$tool" ]] || return 0
@@ -581,7 +588,7 @@ lacy_session_resume() {
             LACY_GEMINI_SESSION_ID="$saved_id"
             echo "$saved_id" > "$LACY_GEMINI_SESSION_ID_FILE"
             ;;
-        codex|hermes|copilot|goose|amp)
+        codex|hermes|copilot|goose)
             ;;
     esac
 

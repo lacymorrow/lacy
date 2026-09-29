@@ -409,6 +409,10 @@ core_tools=$(tools_of "$(sed -n 's/^LACY_TOOL_LIST=(\(.*\))$/\1/p' "$REPO_DIR/li
 check "bin/lacy tool list matches LACY_TOOL_LIST" [ "$(tools_of "$(sed -n 's/^TOOL_LIST=(\(.*\))$/\1/p' "$REPO_DIR/bin/lacy")")" = "$core_tools" ]
 check "install.sh tool list matches LACY_TOOL_LIST" [ "$(tools_of "$(sed -n 's/^TOOL_LIST=(\(.*\))$/\1/p' "$REPO_DIR/install.sh")")" = "$core_tools" ]
 check "index.mjs tool list matches LACY_TOOL_LIST" [ "$(tools_of "$(sed -n 's/^const TOOL_LIST = \[\(.*\)\];$/\1/p' "$REPO_DIR/packages/lacy/index.mjs")")" = "$core_tools" ]
+# tool=command pairs: lacy_tool_install_cmd (mcp.sh) vs INSTALL_CMDS (index.mjs)
+core_installs=$(sed -n '/^lacy_tool_install_cmd()/,/^}/s/^ *\([a-z]*\)) *echo "\(.*\)" ;;$/\1=\2/p' "$REPO_DIR/lib/core/mcp.sh")
+mjs_installs=$(sed -n '/^const INSTALL_CMDS = {/,/^};/s/^ *\([a-z]*\): "\(.*\)",$/\1=\2/p' "$REPO_DIR/packages/lacy/index.mjs")
+check "index.mjs install commands match lacy_tool_install_cmd" [ -n "$core_installs" -a "$mjs_installs" = "$core_installs" ]
 
 OWNED=("$REPO_DIR/install.sh" "$REPO_DIR/uninstall.sh" "$REPO_DIR/bin/lacy" "$REPO_DIR/packages/lacy/index.mjs"
        "$REPO_DIR/packages/lacy/README.md" "$REPO_DIR/packages/lacy/package.json" "$REPO_DIR/packages/lacy/commands/info.sh")

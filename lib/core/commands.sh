@@ -195,6 +195,7 @@ lacy_shell_tool() {
                         local _hint
                         _hint=$(lacy_tool_install_cmd "$_name")
                         [[ -n "$_hint" ]] && echo "Install: $_hint"
+                        echo "Or run: lacy setup (installs it for you)"
                     fi
                     return 1
                 fi

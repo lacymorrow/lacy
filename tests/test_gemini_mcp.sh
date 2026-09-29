@@ -28,6 +28,8 @@ export LACY_SHELL_HOME="$TEST_TMPDIR"
 mkdir -p "$TEST_TMPDIR/bin"
 printf '#!/bin/sh\nexit 0\n' > "$TEST_TMPDIR/bin/gemini"
 chmod +x "$TEST_TMPDIR/bin/gemini"
+# Lacy checks for a gemini login before running it; the stub needs none
+export GEMINI_API_KEY=lacy-test
 export PATH="$TEST_TMPDIR/bin:$PATH"
 
 # Source core modules

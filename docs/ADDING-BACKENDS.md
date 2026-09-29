@@ -47,7 +47,7 @@ Add the command to the `switch` in `_lacy_tool_cmd`.
 
 ### 4. Sessions (`lib/core/preheat.sh`)
 
-Tools without their own session handling share the `default` session entry: add the tool to the `codex|hermes|copilot|goose|amp` cases in `_lacy_save_last_session()` and `lacy_session_resume()`.
+Tools without their own session handling share the `default` session entry: add the tool to the `codex|hermes|copilot|goose` cases in `_lacy_save_last_session()` and `lacy_session_resume()`.
 
 If the tool returns a session ID you can pass back (as claude and gemini do), follow the claude or gemini pattern: `*_restore_session`, `*_reset_session`, and wiring in `_lacy_get_current_tool()`, `_lacy_save_last_session()`, `lacy_session_new()`, `lacy_session_resume()` and `lacy_preheat_cleanup()`. If the prompt flag is not `-p`, check `_lacy_session_build_cmd()`.
 

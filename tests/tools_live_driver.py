@@ -11,7 +11,10 @@ import argparse, fcntl, os, pty, re, select, signal, struct, sys, termios, time
 QUERY = "@ reply with only the word pong in capital letters"
 AUTH_RE = re.compile(
     r"not logged in|log ?in|sign ?in|unauthori[sz]ed|authenticat|api[ _-]?key|"
-    r"credential|\b401\b|\b403\b|invalid.{0,20}token|token.{0,20}expired",
+    r"credential|\b401\b|\b403\b|invalid.{0,20}token|token.{0,20}expired|"
+    # OpenCode Zen's free models refuse lash/opencode `run` and `serve`: the
+    # tool has no provider it can use outside the OpenCode app
+    r"free tier can only be used from within",
     re.I,
 )
 

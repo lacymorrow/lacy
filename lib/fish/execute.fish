@@ -16,15 +16,13 @@ function _lacy_tool_cmd --description "Return the command template for a tool"
         case gemini
             echo "gemini -p"
         case codex
-            echo "codex exec resume --last"
+            echo "codex exec --skip-git-repo-check resume --last"
         case hermes
             echo "hermes chat -q"
         case copilot
             echo "copilot -p"
         case goose
             echo "goose run -t"
-        case amp
-            echo "amp -x"
         case aider
             echo "aider --no-auto-commits --message"
         case custom
@@ -53,14 +51,13 @@ end
 function _lacy_tool_install_cmd --argument-names tool
     switch $tool
         case lash;     echo "npm install -g lashcode"
-        case claude;   echo "brew install claude"
-        case opencode; echo "brew install opencode"
-        case gemini;   echo "brew install gemini"
+        case claude;   echo "npm install -g @anthropic-ai/claude-code"
+        case opencode; echo "npm install -g opencode-ai"
+        case gemini;   echo "npm install -g @google/gemini-cli"
         case codex;    echo "npm install -g @openai/codex"
         case hermes;   echo "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
-        case copilot;  echo "gh extension install github/gh-copilot"
-        case goose;    echo "brew install goose"
-        case amp;      echo "npm install -g @sourcegraph/amp"
+        case copilot;  echo "npm install -g @github/copilot"
+        case goose;    echo "brew install block-goose-cli"
         case aider;    echo "pipx install aider-chat"
     end
 end

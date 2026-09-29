@@ -49,7 +49,7 @@ $ git status              runs in shell
 ? fix the build error     AI answers
 ```
 
-Works with lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, or a custom command.
+Works with lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, or a custom command.
 
 ## Other install methods
 
