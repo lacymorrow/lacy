@@ -271,7 +271,7 @@ Startup mode (zsh, Bash, fish share it): `~/.lacy/current_mode` if valid, else `
 ## Key Commands (inside Lacy)
 
 - `mode shell|agent|auto|toggle` (short: `s a u t`). `mode` or `mode status` prints `lacy_shell_mode_status` (mode, `$`/`?` legend, how to switch). fish: `mode` prints the mode line and usage.
-- `tool` shows active and installed tools. `tool set <name>` (`lash claude opencode gemini codex hermes copilot goose amp aider custom auto`) persists `agent_tools.active` to config.yaml and prints `Saved to <file>` or `Not saved (<reason>). Applies to this shell only.` `tool set custom "cmd"` also writes `custom_command`. zsh/Bash only.
+- `tool` shows active and installed tools. `tool set <name>` (`lash claude opencode gemini codex hermes copilot goose amp aider custom auto`) persists `agent_tools.active` to config.yaml and prints `Saved to <file>` or `Not saved (<reason>). Applies to this shell only.` `tool set custom "cmd"` also writes `custom_command`. A tool (or custom command binary) not on PATH is refused: `<name> is not installed, so the tool was not changed.` plus `Install: <cmd>`, nothing persisted. The npm dashboard refuses the same way; `install.sh --tool` only warns (unattended installs may add the tool later). zsh/Bash only.
 - `ask "query"` sends straight to the agent.
 - `/new` `/reset` `/clear` start a new session; `/resume` resumes the last one. Intercepted in accept-line (zsh/Bash). `lacy new|reset|clear|resume` does the same in-shell.
 - `quit` leaves Lacy.
@@ -369,6 +369,7 @@ Telemetry (`lib/core/telemetry.sh`): zsh/Bash send one `first_load` event per in
 
 - Release: `bun run release` via shipx (`shipx.config.ts`, see RELEASING.md). No beta channel.
 - Tests: `script/test.sh [--shell bash|zsh|fish|all] [--skip NAME]...`. Each suite gets a throwaway HOME. Missing fish → SKIP; missing zsh or Bash 4+ → FAIL. `LACY_TEST_BASH` picks the Bash binary.
+- Live tool suite (`tests/test_tools_live.sh`, run by `script/test.sh` for zsh and bash): for every installed AI tool, a real interactive shell runs `tool set <tool>` and asks for PONG. Real tokens, the tools' logins from the real HOME (`LACY_REAL_HOME`); Lacy state, preheat port (via config.yaml), and browser (`open` stubbed) are sandboxed. Login: known CLI login first with provider keys stripped, else an env key, else SKIP `not signed in`. Driver: `tests/tools_live_driver.py` (python3 pty; a prompt hook after Lacy's marks query end). `--tool NAME` runs one tool. CI skips it (no tools, no secrets). `--skip test_tools_live.sh` to skip locally.
 - CI (`.github/workflows/ci.yml`): syntax check per shell (bash, zsh, fish 4) plus `script/sync-word-lists.sh --check`; shellcheck; test suites on ubuntu and macOS for bash and zsh; installer smoke on ubuntu and macOS (install, reinstall, doctor, uninstall in a sandboxed HOME); npm package (help, `npm pack --dry-run`, version sync across package.json, packages/lacy, lockfile, bin/lacy).
 
 ## Development Notes

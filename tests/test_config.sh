@@ -36,8 +36,16 @@ export HOME="$TEST_TMPDIR/fakehome"
 export LACY_SHELL_HOME="$TEST_TMPDIR/home"
 export LACY_SHELL_CONFIG_FILE="$LACY_SHELL_HOME/config.yaml"
 export LACY_SHELL_MODE_FILE="$LACY_SHELL_HOME/current_mode"
-mkdir -p "$HOME" "$LACY_SHELL_HOME" "$TEST_TMPDIR/work"
+mkdir -p "$HOME" "$LACY_SHELL_HOME" "$TEST_TMPDIR/work" "$TEST_TMPDIR/bin"
 cd "$TEST_TMPDIR/work" || exit 1
+
+# `tool set` refuses tools that are not installed. Stub the ones set below and
+# keep PATH to system dirs so goose (never stubbed) is missing on every machine.
+for _stub in gemini claude lash codex amp argdump tool; do
+    printf '#!/bin/sh\n' > "$TEST_TMPDIR/bin/$_stub"
+    chmod +x "$TEST_TMPDIR/bin/$_stub"
+done
+export PATH="$TEST_TMPDIR/bin:/usr/bin:/bin"
 
 cleanup() { cd / && command rm -rf "$TEST_TMPDIR"; }
 trap cleanup EXIT
@@ -417,6 +425,19 @@ assert_eq "set unknown: file untouched" "$before" "$(cat "$CFG")"
 lacy_shell_tool set custom "argdump 'unbalanced" > "$OUT" 2>&1
 assert_eq "set custom unbalanced: rc 1" "1" "$?"
 assert_eq "set custom unbalanced: file untouched" "$before" "$(cat "$CFG")"
+
+active_before="$LACY_ACTIVE_TOOL"
+lacy_shell_tool set goose > "$OUT" 2>&1
+assert_eq "set not installed: rc 1" "1" "$?"
+assert_contains "set not installed: message" "$(cat "$OUT")" "goose is not installed, so the tool was not changed."
+assert_contains "set not installed: install hint" "$(cat "$OUT")" "Install: brew install goose"
+assert_eq "set not installed: file untouched" "$before" "$(cat "$CFG")"
+assert_eq "set not installed: active tool unchanged" "$active_before" "$LACY_ACTIVE_TOOL"
+
+lacy_shell_tool set custom "nosuchbinary --flag" > "$OUT" 2>&1
+assert_eq "set custom not installed: rc 1" "1" "$?"
+assert_contains "set custom not installed: message" "$(cat "$OUT")" "'nosuchbinary' is not installed"
+assert_eq "set custom not installed: file untouched" "$before" "$(cat "$CFG")"
 
 # Symlinked config stays a symlink
 command rm -f "$CFG"
