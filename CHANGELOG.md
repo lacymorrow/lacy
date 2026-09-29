@@ -11,6 +11,8 @@ version you can install.
 
 ## [Unreleased]
 
+## [1.8.25] - 2026-09-29
+
 ### Fixed
 
 - Uninstall checks that the rc file it edited still parses. If removing the Lacy block would leave a file the shell cannot read, the write is skipped, the uninstall finishes, and the lines to delete by hand are printed. A dotfiles `.bashrc` was left broken this way on a real machine.
@@ -358,7 +360,8 @@ First tagged release. Work on Lacy started on 2025-08-11, and everything below l
 
 - The Python helper and the direct OpenAI and Anthropic API calls the first prototype used.
 
-[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.24...HEAD
+[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.25...HEAD
+[1.8.25]: https://github.com/lacymorrow/lacy/compare/v1.8.24...v1.8.25
 [1.8.24]: https://github.com/lacymorrow/lacy/compare/v1.8.21...v1.8.24
 [1.8.21]: https://github.com/lacymorrow/lacy/compare/v1.8.18...v1.8.21
 [1.8.18]: https://github.com/lacymorrow/lacy/compare/v1.8.16...v1.8.18
