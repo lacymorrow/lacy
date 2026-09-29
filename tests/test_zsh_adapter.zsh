@@ -215,6 +215,14 @@ _pause 80
 _run 9 '_state "EN=$LACY_SHELL_ENABLED BIND=$(bindkey -L "^@")"' 20
 assert_eq "typing lacy re-enters" 'EN=true BIND=bindkey "^@" lacy_shell_toggle_mode_widget' "$(_line 9)"
 
+# --- spinner stop must not run shell-exit cleanup in the spinner -------------
+# zshexit hooks fire when a subshell calls `exit`, which the spinner does on
+# SIGTERM. Cleanup there froze the spinner on a stopped child.
+echo "spinner stop"
+_session sp '' ''
+_run 1 ': >| "$LACY_PREHEAT_SERVER_SESSION_FILE"; lacy_start_spinner; _p=$LACY_SPINNER_PID; sleep 0.3; lacy_stop_spinner; kill -0 $_p 2>/dev/null && _s=alive || _s=gone; [[ -f $LACY_PREHEAT_SERVER_SESSION_FILE ]] && _f=kept || _f=deleted; _state "SPINNER=$_s SESSION=$_f"' 20
+assert_eq "stopping the spinner ends it and keeps the session file" "SPINNER=gone SESSION=kept" "$(_line 1)"
+
 # --- 3. exit routing ----------------------------------------------------------
 echo "exit routing"
 _session e1 '' 'lacy_shell_set_mode agent'
