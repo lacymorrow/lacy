@@ -140,9 +140,11 @@ jobs:
           done
 
       # The installer and word-list checks have their own jobs below/above.
+      # The live tool suite needs installed, signed-in AI tools; CI has no
+      # tools and no provider keys (add secrets + tool installs to enable it).
       - name: Run suites
         shell: bash
-        run: script/test.sh --shell ${{ matrix.shell }} --skip test_installer.sh --skip sync-word-lists.sh
+        run: script/test.sh --shell ${{ matrix.shell }} --skip test_installer.sh --skip sync-word-lists.sh --skip test_tools_live.sh
 
   installer-smoke:
     name: Installer smoke (${{ matrix.os }})

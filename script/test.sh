@@ -15,6 +15,11 @@
 # yet prints SKIP, as do fish suites when fish is not installed. Any failure,
 # or a required shell that cannot be found, makes the script exit 1.
 #
+# One exception: tests/test_tools_live.sh sends a real query through every
+# installed, signed-in AI tool, using the tools' logins in the real HOME
+# (LACY_REAL_HOME). Lacy's own state still stays in a sandbox. Skip it with
+# --skip test_tools_live.sh.
+#
 # Written for Bash 3.2+ so it runs under macOS /bin/bash.
 
 set -u
@@ -56,6 +61,7 @@ bash|bash4|tests/test_bash.bash|
 bash|bash4|tests/test_bash_adapter.bash|
 bash|bash4|script/sync-word-lists.sh|--check
 bash|sysbash|tests/test_installer.sh|
+bash|bash4|tests/test_tools_live.sh|--shell bash
 zsh|zsh|tests/test_core.sh|
 zsh|zsh|tests/test_query_agent.sh|
 zsh|zsh|tests/test_config.sh|
@@ -64,6 +70,7 @@ zsh|zsh|tests/test_gemini.sh|
 zsh|zsh|tests/test_gemini_mcp.sh|
 zsh|zsh|tests/test_preheat_server.zsh|
 zsh|zsh|tests/test_zsh_adapter.zsh|
+zsh|bash4|tests/test_tools_live.sh|--shell zsh
 fish|fish|tests/test_fish.fish|
 '
 
@@ -79,6 +86,9 @@ find_bash4() {
     done
     return 1
 }
+
+# The live tool suite needs the tools' real logins, which live in the real HOME
+export LACY_REAL_HOME="${LACY_REAL_HOME:-$HOME}"
 
 # Defaults that keep suites offline and quiet. Callers can override.
 export DO_NOT_TRACK="${DO_NOT_TRACK:-1}"
