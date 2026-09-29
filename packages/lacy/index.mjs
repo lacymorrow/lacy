@@ -726,6 +726,10 @@ async function dashboard() {
       } else if (selectedTool === "auto") {
         writeConfigValue("active", "");
         p.log.success(`Tool set to: ${pc.cyan("auto-detect")}`);
+      } else if (!detected.includes(selectedTool)) {
+        // Every query would fail; keep the current tool
+        p.log.error(`${selectedTool} is not installed, so the tool was not changed.`);
+        continue;
       } else {
         writeConfigValue("active", selectedTool);
         p.log.success(`Tool set to: ${pc.cyan(selectedTool)}`);

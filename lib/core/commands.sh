@@ -178,6 +178,27 @@ lacy_shell_tool() {
                 echo "Could not read that command (unbalanced quotes): $3"
                 return 1
             fi
+            # Refuse a tool that is not installed: every query would fail
+            if [[ "$_name" != "auto" ]]; then
+                local _bin=""
+                if [[ "$_name" == "custom" ]]; then
+                    for _bin in "${_LACY_CMD_ARGV[@]}"; do break; done
+                else
+                    _bin=$(lacy_tool_cmd "$_name")
+                    _bin="${_bin%% *}"
+                fi
+                if ! command -v "$_bin" >/dev/null 2>&1; then
+                    if [[ "$_name" == "custom" ]]; then
+                        echo "'$_bin' is not installed, so the tool was not changed."
+                    else
+                        echo "$_name is not installed, so the tool was not changed."
+                        local _hint
+                        _hint=$(lacy_tool_install_cmd "$_name")
+                        [[ -n "$_hint" ]] && echo "Install: $_hint"
+                    fi
+                    return 1
+                fi
+            fi
 
             lacy_preheat_cleanup
             case "$_name" in

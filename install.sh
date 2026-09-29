@@ -660,6 +660,11 @@ create_config() {
     local explicit="${1:-0}" active=""
     mkdir -p "$INSTALL_DIR"
     [[ "$SELECTED_TOOL" != "auto" ]] && active="$SELECTED_TOOL"
+    # Unattended installs may add the tool afterwards, so warn instead of failing
+    if [[ "$explicit" == "1" && -n "$active" && "$active" != "custom" ]] && \
+       ! command -v "$active" >/dev/null 2>&1; then
+        warn "${active} is not installed yet. Queries will fail until it is."
+    fi
 
     if [[ -f "$CONFIG_FILE" ]]; then
         if [[ "$explicit" == "1" ]]; then
