@@ -11,6 +11,12 @@ version you can install.
 
 ## [Unreleased]
 
+## [1.8.26] - 2026-09-29
+
+### Fixed
+
+- show tool errors instead of silence; gemini sign-in; drop amp (#78) (7906538)
+
 ## [1.8.25] - 2026-09-29
 
 ### Fixed
@@ -360,7 +366,8 @@ First tagged release. Work on Lacy started on 2025-08-11, and everything below l
 
 - The Python helper and the direct OpenAI and Anthropic API calls the first prototype used.
 
-[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.25...HEAD
+[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.26...HEAD
+[1.8.26]: https://github.com/lacymorrow/lacy/compare/v1.8.25...v1.8.26
 [1.8.25]: https://github.com/lacymorrow/lacy/compare/v1.8.24...v1.8.25
 [1.8.24]: https://github.com/lacymorrow/lacy/compare/v1.8.21...v1.8.24
 [1.8.21]: https://github.com/lacymorrow/lacy/compare/v1.8.18...v1.8.21

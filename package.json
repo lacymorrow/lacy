@@ -1,6 +1,6 @@
 {
   "name": "lacy",
-  "version": "1.8.25",
+  "version": "1.8.26",
   "private": true,
   "type": "module",
   "description": "Talk to your shell. Commands run, questions go to your AI coding tool.",
