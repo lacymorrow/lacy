@@ -170,11 +170,10 @@ From `lacy_tool_cmd()` in `lib/core/mcp.sh`. Order in `LACY_TOOL_LIST` is auto-d
 | claude   | `claude -p "query"`                         |
 | opencode | `opencode run -c "query"`                   |
 | gemini   | `gemini -p "query"`                         |
-| codex    | `codex exec resume --last "query"`          |
+| codex    | `codex exec --skip-git-repo-check resume --last "query"` |
 | hermes   | `hermes chat -q "query"`                    |
 | copilot  | `copilot -p "query"`                        |
 | goose    | `goose run -t "query"`                      |
-| amp      | `amp -x "query"`                            |
 | aider    | `aider --no-auto-commits --message "query"` |
 | custom   | `agent_tools.custom_command`                |
 
@@ -182,7 +181,7 @@ lash is an opencode fork by the same author (lash.lacy.sh). Tools handle their o
 
 Execution paths in `lacy_shell_query_agent()`: server (lash, opencode via background `serve`), claude (JSON + `--resume`), gemini (session), generic (everything else).
 
-Per-query output: no "Using X" line. Resume hint (`Resume: <cmd>`) only after a failure. No tool installed: one `No AI tool found` message listing an install line per tool, no prompt.
+Per-query output: no "Using X" line. A tool that exits 0 with no stdout gets the failure frame (`<tool> finished without an answer` + stderr tail); lash/opencode print errors only to stderr. A server reply that is 200 with no text and `.info.error` is shown as `Error from <tool>`. gemini: `_lacy_gemini_signed_in` checks for a login (API key env/.env, non-OAuth auth type, token file in ~/.gemini, macOS keychain `gemini-cli-oauth`) before running, since gemini's sign-in `[Y/n]` would be hidden behind the spinner. Resume hint (`Resume: <cmd>`) only after a failure. No tool installed: one `No AI tool found` message listing an install line per tool, no prompt.
 
 ## Architecture
 
@@ -271,7 +270,7 @@ Startup mode (zsh, Bash, fish share it): `~/.lacy/current_mode` if valid, else `
 ## Key Commands (inside Lacy)
 
 - `mode shell|agent|auto|toggle` (short: `s a u t`). `mode` or `mode status` prints `lacy_shell_mode_status` (mode, `$`/`?` legend, how to switch). fish: `mode` prints the mode line and usage.
-- `tool` shows active and installed tools. `tool set <name>` (`lash claude opencode gemini codex hermes copilot goose amp aider custom auto`) persists `agent_tools.active` to config.yaml and prints `Saved to <file>` or `Not saved (<reason>). Applies to this shell only.` `tool set custom "cmd"` also writes `custom_command`. A tool (or custom command binary) not on PATH is refused: `<name> is not installed, so the tool was not changed.` plus `Install: <cmd>`, nothing persisted. The npm dashboard refuses the same way; `install.sh --tool` only warns (unattended installs may add the tool later). zsh/Bash only.
+- `tool` shows active and installed tools. `tool set <name>` (`lash claude opencode gemini codex hermes copilot goose aider custom auto`) persists `agent_tools.active` to config.yaml and prints `Saved to <file>` or `Not saved (<reason>). Applies to this shell only.` `tool set custom "cmd"` also writes `custom_command`. A tool (or custom command binary) not on PATH is refused: `<name> is not installed, so the tool was not changed.` plus `Install: <cmd>` and `Or run: lacy setup (installs it for you)`, nothing persisted. The npm dashboard (`lacy setup`) offers to run the install command (clack confirm), then sets the tool only if the binary is on PATH afterwards; declined or failed leaves the tool unchanged. Install commands: `lacy_tool_install_cmd` (mcp.sh) = `INSTALL_CMDS` (index.mjs), checked by test_installer.sh; `install.sh --tool` only warns (unattended installs may add the tool later). zsh/Bash only.
 - `ask "query"` sends straight to the agent.
 - `/new` `/reset` `/clear` start a new session; `/resume` resumes the last one. Intercepted in accept-line (zsh/Bash). `lacy new|reset|clear|resume` does the same in-shell.
 - `quit` leaves Lacy.
@@ -337,7 +336,7 @@ LACY_NO_NODE=1 bin/lacy setup         # bash fallback
 ```yaml
 # Lacy Shell configuration
 agent_tools:
-  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, custom
   # Leave empty to auto-detect.
   active:
   # custom_command: "your-command --flags"

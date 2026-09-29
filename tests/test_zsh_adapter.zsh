@@ -220,8 +220,10 @@ assert_eq "typing lacy re-enters" 'EN=true BIND=bindkey "^@" lacy_shell_toggle_m
 # SIGTERM. Cleanup there froze the spinner on a stopped child.
 echo "spinner stop"
 _session sp '' ''
-_run 1 ': >| "$LACY_PREHEAT_SERVER_SESSION_FILE"; lacy_start_spinner; _p=$LACY_SPINNER_PID; sleep 0.3; lacy_stop_spinner; kill -0 $_p 2>/dev/null && _s=alive || _s=gone; [[ -f $LACY_PREHEAT_SERVER_SESSION_FILE ]] && _f=kept || _f=deleted; _state "SPINNER=$_s SESSION=$_f"' 20
-assert_eq "stopping the spinner ends it and keeps the session file" "SPINNER=gone SESSION=kept" "$(_line 1)"
+_run 1 ': >| "$LACY_PREHEAT_SERVER_SESSION_FILE"; lacy_start_spinner; _p=$LACY_SPINNER_PID; sleep 0.3; jobs >| "$T/jobs"; lacy_stop_spinner; kill -0 $_p 2>/dev/null && _s=alive || _s=gone; [[ -f $LACY_PREHEAT_SERVER_SESSION_FILE ]] && _f=kept || _f=deleted; _state "SPINNER=$_s SESSION=$_f JOBS=$(wc -l < "$T/jobs" | tr -d " ")"' 20
+# JOBS=0: the spinner is disowned, so zsh never prints "[N] done { trap ... }"
+# or "you have running jobs" for it
+assert_eq "stopping the spinner ends it and keeps the session file" "SPINNER=gone SESSION=kept JOBS=0" "$(_line 1)"
 
 # --- 3. exit routing ----------------------------------------------------------
 echo "exit routing"

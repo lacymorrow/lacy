@@ -188,6 +188,11 @@ def handle_client(conn):
                     status_code = 500
                     resp_body = json.dumps({"info": {"error": {"name": "ProviderError",
                         "data": {"message": "mock provider exploded"}}}})
+                elif "MOCK_ERR200" in qt:
+                    # A failed model call: 200, no parts, reason in info.error
+                    status_code = 200
+                    resp_body = json.dumps({"info": {"error": {"name": "APIError",
+                        "data": {"message": "free tier refused"}}}, "parts": []})
                 elif "MOCK_EMPTY" in qt:
                     status_code = 200
                     resp_body = json.dumps([{"role": "assistant", "parts": [{"type": "step-finish"}]}])
@@ -470,6 +475,17 @@ run_tests_for_tool() {
         pass "$tool: empty response is labelled"
     else
         fail "$tool: empty response is labelled" "got: $mcp_result"
+    fi
+
+    # 200 carrying a model error: shown like an HTTP error, not "(no text response)"
+    lacy_shell_query_agent "MOCK_ERR200 please" > "$_mcp_out" 2>/dev/null
+    mcp_rc=$?
+    mcp_result=$(sed "$_strip" "$_mcp_out")
+    assert_eq "$tool: 200 with error returns 1" "1" "$mcp_rc"
+    if [[ "$mcp_result" == *"Error from $tool"* && "$mcp_result" == *"free tier refused"* ]]; then
+        pass "$tool: 200 with error shows the reason"
+    else
+        fail "$tool: 200 with error shows the reason" "got: $mcp_result"
     fi
 
     # Gone session through the $(...) path: parent resets its copy

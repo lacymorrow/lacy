@@ -60,14 +60,13 @@ fi
 
 # Provider keys, per tool. Attempt 1 runs without any of ALL_KEYS.
 ALL_KEYS=(ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN OPENAI_API_KEY CODEX_API_KEY
-          GEMINI_API_KEY GOOGLE_API_KEY OPENROUTER_API_KEY AMP_API_KEY
+          GEMINI_API_KEY GOOGLE_API_KEY OPENROUTER_API_KEY
           GH_TOKEN GITHUB_TOKEN COPILOT_GITHUB_TOKEN)
 tool_keys() {
     case "$1" in
         claude)  echo "ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN" ;;
         codex)   echo "OPENAI_API_KEY CODEX_API_KEY" ;;
         gemini)  echo "GEMINI_API_KEY GOOGLE_API_KEY" ;;
-        amp)     echo "AMP_API_KEY" ;;
         copilot) echo "COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN" ;;
         *)       echo "ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY OPENROUTER_API_KEY" ;;
     esac
@@ -80,7 +79,7 @@ has_key() {
 
 # Where a tool keeps its CLI login. yes / no / unknown. Checked before running
 # because a tool with no login may block on an interactive sign-in instead of
-# failing (gemini asks [Y/n] to open a browser; amp starts a login flow).
+# failing (gemini asks [Y/n] to open a browser).
 cli_login() {
     local h="$REAL_HOME"
     case "$1" in
@@ -93,7 +92,6 @@ cli_login() {
             echo no ;;
         gemini) [[ -f "$h/.gemini/oauth_creds.json" ]] && echo yes || echo no ;;
         codex)  [[ -f "$h/.codex/auth.json" ]] && echo yes || echo no ;;
-        amp)    [[ -f "$h/.local/share/amp/secrets.json" ]] && echo yes || echo no ;;
         *)      echo unknown ;;
     esac
 }

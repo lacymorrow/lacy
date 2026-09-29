@@ -32,7 +32,7 @@ brew install lacymorrow/tap/lacy
 
 The installer fetches the latest release and asks at most one question. With one AI tool installed it asks nothing. It asks which to use if you have several, and offers to install [lash](https://lash.lacy.sh) if you have none. Open a new terminal when it's done.
 
-Lacy runs in zsh, Bash 4+ and fish on macOS, Linux and WSL. It works with lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, or a command you choose.
+Lacy runs in zsh, Bash 4+ and fish on macOS, Linux and WSL. It works with lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, or a command you choose.
 
 ## How it works
 

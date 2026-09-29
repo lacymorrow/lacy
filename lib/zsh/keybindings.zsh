@@ -282,9 +282,11 @@ _lacy_expand_or_accept() {
 # `{ ... } always { _lacy_query_interrupt_cleanup }` so an interrupted query
 # still stops the spinner and restores MONITOR and NOTIFY. After a query that
 # finished normally the spinner state is already clear and this does nothing.
-# The spinner is reaped with `wait` before MONITOR comes back on, otherwise
-# zsh prints a "[N] + terminated { trap ... }" job notice. wait is safe in an
-# always block; it would deadlock in a trap, which is one reason Lacy has none.
+# The spinner is disowned when it starts. Ctrl+C can still land between its
+# `&` and the disown, so it is also reaped with `wait` before MONITOR comes
+# back on, otherwise zsh prints "[N] + terminated { trap ... }". wait is a
+# no-op on a disowned PID, safe in an always block; it would deadlock in a
+# trap, which is one reason Lacy has none.
 _lacy_query_interrupt_cleanup() {
     if [[ -n "$LACY_SPINNER_PID" ]]; then
         kill "$LACY_SPINNER_PID" 2>/dev/null

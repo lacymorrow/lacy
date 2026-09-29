@@ -100,7 +100,7 @@ Recent commands come from Lacy's own list, not shell history, so earlier questio
 ```yaml
 # Lacy Shell configuration
 agent_tools:
-  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, custom
   # Leave empty to auto-detect.
   active:
   # custom_command: "your-command --flags"

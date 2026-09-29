@@ -24,7 +24,7 @@ _lacy_default_config_text() {
     cat <<'EOF'
 # Lacy Shell configuration
 agent_tools:
-  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, custom
   # Leave empty to auto-detect.
   active:
   # custom_command: "your-command --flags"

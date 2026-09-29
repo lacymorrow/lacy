@@ -204,7 +204,7 @@ for _t in "${LACY_TOOL_LIST[@]}"; do
     [[ "$_t" == "claude" || "$_t" == "gemini" || "$_t" == "codex" ]] && continue
     command -v "$_t" >/dev/null 2>&1 && _any_real=true
 done
-LACY_TOOL_LIST=(lash opencode hermes copilot goose amp aider)
+LACY_TOOL_LIST=(lash opencode hermes copilot goose aider)
 if [[ "$_any_real" == true ]]; then
     echo "  SKIP: a real agent CLI is on the base PATH"
 else
@@ -231,14 +231,14 @@ out=$(plain < "$OUT")
 assert_eq "success: rc 0" "0" "$rc"
 assert_contains "success: answer shown" "$out" "codex answer"
 assert_not_contains "success: no auto-detected line" "$out" "Using"
-assert_not_contains "success: no resume command" "$out" "codex exec resume"
+assert_not_contains "success: no resume command" "$out" "codex exec --skip-git-repo-check resume"
 assert_contains "success: last session saved silently" "$(cat "$LACY_LAST_SESSION_FILE" 2>/dev/null)" "codex"
 
 FAKE_EXIT=3 lacy_shell_query_agent "what is here" > "$OUT" 2>&1
 rc=$?
 out=$(plain < "$OUT")
 assert_eq "failure: rc 3" "3" "$rc"
-assert_contains "failure: resume hint shown" "$out" "Resume: codex exec resume --last"
+assert_contains "failure: resume hint shown" "$out" "Resume: codex exec --skip-git-repo-check resume --last"
 assert_contains "failure: doctor hint" "$out" "lacy doctor"
 LACY_TOOL_LIST=("${_saved_tool_list[@]}")
 
@@ -462,7 +462,8 @@ LACY_ACTIVE_TOOL="gemini"
 LACY_GEMINI_SESSION_ID="gem-1"
 echo "gem-1" > "$LACY_GEMINI_SESSION_ID_FILE"
 command rm -f "$AGENT_LOG"
-FAKE_EXIT=130 lacy_shell_query_agent "long question" > "$OUT" 2>&1
+# Lacy checks for a gemini login before running it; the fake needs none
+FAKE_EXIT=130 GEMINI_API_KEY=lacy-test lacy_shell_query_agent "long question" > "$OUT" 2>&1
 rc=$?
 assert_eq "gemini signal: rc 130" "130" "$rc"
 assert_eq "gemini signal: tool ran once" "1" "$(count_lines "$AGENT_LOG")"

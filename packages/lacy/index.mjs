@@ -39,7 +39,7 @@ const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 const STATE_FILES = ["config.yaml", "current_mode", "logs", ".last_session", ".server.pid"];
 
 // Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
-const TOOL_LIST = ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose", "amp", "aider"];
+const TOOL_LIST = ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose", "aider"];
 
 const TOOL_HINTS = {
   lash: "AI coding agent, lash.lacy.sh (recommended)",
@@ -50,8 +50,20 @@ const TOOL_HINTS = {
   hermes: "Hermes Agent by Nous Research",
   copilot: "GitHub Copilot CLI",
   goose: "Goose agent by Block",
-  amp: "Sourcegraph Amp CLI",
   aider: "Aider pair programming",
+};
+
+// Keep in sync with lacy_tool_install_cmd in lib/core/mcp.sh (tests check).
+const INSTALL_CMDS = {
+  lash: "npm install -g lashcode",
+  claude: "npm install -g @anthropic-ai/claude-code",
+  opencode: "npm install -g opencode-ai",
+  gemini: "npm install -g @google/gemini-cli",
+  codex: "npm install -g @openai/codex",
+  hermes: "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+  copilot: "npm install -g @github/copilot",
+  goose: "brew install block-goose-cli",
+  aider: "pipx install aider-chat",
 };
 
 const MODES = [
@@ -282,7 +294,7 @@ function defaultConfig(active = "", customCommand = "") {
     : '  # custom_command: "your-command --flags"';
   return `# Lacy Shell configuration
 agent_tools:
-  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, custom
   # Leave empty to auto-detect.
 ${activeLine}
 ${customLine}
@@ -726,11 +738,24 @@ async function dashboard() {
       } else if (selectedTool === "auto") {
         writeConfigValue("active", "");
         p.log.success(`Tool set to: ${pc.cyan("auto-detect")}`);
-      } else if (!detected.includes(selectedTool)) {
-        // Every query would fail; keep the current tool
-        p.log.error(`${selectedTool} is not installed, so the tool was not changed.`);
-        continue;
       } else {
+        // Every query would fail with a missing tool: offer to install it
+        if (!commandExists(selectedTool)) {
+          const cmd = INSTALL_CMDS[selectedTool];
+          const install = await p.confirm({
+            message: `${selectedTool} is not installed. Install it now? (${cmd})`,
+          });
+          if (p.isCancel(install) || !install) {
+            p.log.error(`${selectedTool} is not installed, so the tool was not changed.`);
+            continue;
+          }
+          const result = spawnSync("sh", ["-c", cmd], { stdio: "inherit" });
+          if (result.status !== 0 || !commandExists(selectedTool)) {
+            p.log.error(`Installing ${selectedTool} failed, so the tool was not changed. To try it yourself: ${cmd}`);
+            continue;
+          }
+          p.log.success(`${selectedTool} installed. If it asks you to sign in, run: ${selectedTool}`);
+        }
         writeConfigValue("active", selectedTool);
         p.log.success(`Tool set to: ${pc.cyan(selectedTool)}`);
       }

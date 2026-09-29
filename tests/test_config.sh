@@ -41,7 +41,7 @@ cd "$TEST_TMPDIR/work" || exit 1
 
 # `tool set` refuses tools that are not installed. Stub the ones set below and
 # keep PATH to system dirs so goose (never stubbed) is missing on every machine.
-for _stub in gemini claude lash codex amp argdump tool; do
+for _stub in gemini claude lash codex argdump tool; do
     printf '#!/bin/sh\n' > "$TEST_TMPDIR/bin/$_stub"
     chmod +x "$TEST_TMPDIR/bin/$_stub"
 done
@@ -308,7 +308,7 @@ assert_contains "missing: creation reported" "$(cat "$OUT")" "Created default co
 expected_template=$(cat <<'EOF'
 # Lacy Shell configuration
 agent_tools:
-  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, custom
   # Leave empty to auto-detect.
   active:
   # custom_command: "your-command --flags"
@@ -430,7 +430,7 @@ active_before="$LACY_ACTIVE_TOOL"
 lacy_shell_tool set goose > "$OUT" 2>&1
 assert_eq "set not installed: rc 1" "1" "$?"
 assert_contains "set not installed: message" "$(cat "$OUT")" "goose is not installed, so the tool was not changed."
-assert_contains "set not installed: install hint" "$(cat "$OUT")" "Install: brew install goose"
+assert_contains "set not installed: install hint" "$(cat "$OUT")" "Install: brew install block-goose-cli"
 assert_eq "set not installed: file untouched" "$before" "$(cat "$CFG")"
 assert_eq "set not installed: active tool unchanged" "$active_before" "$LACY_ACTIVE_TOOL"
 
@@ -467,9 +467,9 @@ assert_eq "append section: modes kept" "shell" "$LACY_CONFIG_DEFAULT_MODE"
 
 # Missing config: tool set creates the default one, then sets the value
 command rm -f "$CFG"
-lacy_shell_tool set amp > "$OUT" 2>&1
+lacy_shell_tool set claude > "$OUT" 2>&1
 load
-assert_eq "no config: created and set" "amp" "$LACY_ACTIVE_TOOL"
+assert_eq "no config: created and set" "claude" "$LACY_ACTIVE_TOOL"
 assert_contains "no config: template kept" "$(cat "$CFG")" "# Leave empty to auto-detect."
 
 # ============================================================================

@@ -52,7 +52,7 @@ else
 fi
 
 # Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
-TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose amp aider)
+TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose aider)
 
 # Never let git stop to ask for credentials (a bad URL on GitHub asks).
 export GIT_TERMINAL_PROMPT=0
@@ -638,7 +638,7 @@ write_default_config() {
     cat > "$CONFIG_FILE" <<EOF
 # Lacy Shell configuration
 agent_tools:
-  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, amp, aider, custom
+  # lash, claude, opencode, gemini, codex, hermes, copilot, goose, aider, custom
   # Leave empty to auto-detect.
 ${active_line}
 ${custom_line}

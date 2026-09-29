@@ -232,19 +232,38 @@ _lacy_gemini_query_exec() {
     fi
 }
 
+# With no login, gemini asks "[Y/n]" on the terminal to open a browser. Lacy
+# captures gemini's output, so that question would sit hidden behind the
+# spinner. Returns 1 only when there is clearly no login.
+_lacy_gemini_signed_in() {
+    [[ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}${GOOGLE_GENAI_USE_VERTEXAI:-}${GOOGLE_GENAI_USE_GCA:-}" ]] && return 0
+    local dir="$HOME/.gemini" f auth_type
+    for f in "$dir/.env" "./.gemini/.env" "./.env"; do
+        [[ -f "$f" ]] && grep -qE '^(export )?(GEMINI_API_KEY|GOOGLE_API_KEY)=' "$f" 2>/dev/null && return 0
+    done
+    # Only OAuth can be checked; any other auth type is left to gemini
+    auth_type=$(grep -oE '"selected(Type|AuthType)"[[:space:]]*:[[:space:]]*"[^"]*"' "$dir/settings.json" 2>/dev/null |
+        head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+    [[ -n "$auth_type" && "$auth_type" != "oauth-personal" ]] && return 0
+    # OAuth token: a file under ~/.gemini, or the macOS keychain
+    # (ls, not a glob: an unmatched glob is an error under zsh's NOMATCH)
+    ls "$dir" 2>/dev/null | grep -qiE '(oauth|credentials).*\.json$' && return 0
+    command -v security >/dev/null 2>&1 || return 0
+    security find-generic-password -s gemini-cli-oauth >/dev/null 2>&1 || return 1
+}
+
 # Install command for a supported tool (empty for unknown names)
 # Usage: hint=$(lacy_tool_install_cmd <tool_name>)
 lacy_tool_install_cmd() {
     case "$1" in
         lash)     echo "npm install -g lashcode" ;;
-        claude)   echo "brew install claude" ;;
-        opencode) echo "brew install opencode" ;;
-        gemini)   echo "brew install gemini" ;;
+        claude)   echo "npm install -g @anthropic-ai/claude-code" ;;
+        opencode) echo "npm install -g opencode-ai" ;;
+        gemini)   echo "npm install -g @google/gemini-cli" ;;
         codex)    echo "npm install -g @openai/codex" ;;
         hermes)   echo "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash" ;;
-        copilot)  echo "gh extension install github/gh-copilot" ;;
-        goose)    echo "brew install goose" ;;
-        amp)      echo "npm install -g @sourcegraph/amp" ;;
+        copilot)  echo "npm install -g @github/copilot" ;;
+        goose)    echo "brew install block-goose-cli" ;;
         aider)    echo "pipx install aider-chat" ;;
         *)        echo "" ;;
     esac
@@ -265,11 +284,10 @@ lacy_tool_cmd() {
         claude)   echo "claude -p" ;;
         opencode) echo "opencode run -c" ;;
         gemini)   echo "gemini -p" ;;
-        codex)    echo "codex exec resume --last" ;;
+        codex)    echo "codex exec --skip-git-repo-check resume --last" ;;
         hermes)   echo "hermes chat -q" ;;
         copilot)  echo "copilot -p" ;;
         goose)    echo "goose run -t" ;;
-        amp)      echo "amp -x" ;;
         aider)    echo "aider --no-auto-commits --message" ;;
         *)        echo "" ;;
     esac
@@ -298,11 +316,10 @@ lacy_resume_cmd() {
             [[ -n "$LACY_GEMINI_SESSION_ID" ]] && \
                 echo "gemini --resume $LACY_GEMINI_SESSION_ID"
             ;;
-        codex)    echo "codex exec resume --last" ;;
+        codex)    echo "codex exec --skip-git-repo-check resume --last" ;;
         hermes)   echo "hermes --continue" ;;
         copilot)  echo "copilot --resume" ;;
         goose)    echo "goose session resume" ;;
-        amp)      echo "amp --continue" ;;
     esac
 }
 
@@ -687,6 +704,14 @@ lacy_shell_query_agent() {
     # === Gemini session reuse ===
     if [[ "$tool" == "gemini" ]]; then
         echo ""
+        if ! _lacy_gemini_signed_in; then
+            lacy_print_color 196 "  gemini is not signed in."
+            lacy_print_color 238 "  Sign in once by running: gemini"
+            lacy_print_color 238 "  Or switch: tool set <name>"
+            echo ""
+            _LACY_QUERY_GUIDED=true
+            return 1
+        fi
         local json_output result_text
         lacy_start_spinner
         json_output=$(_lacy_gemini_query_exec "$query")
@@ -752,8 +777,13 @@ lacy_shell_query_agent() {
     exit_code="${_ps[$_LACY_ARR_OFFSET]}"
     lacy_stop_spinner
 
-    if [[ "$exit_code" -eq 0 ]]; then
+    if [[ "$exit_code" -eq 0 && -s "$_out_file" ]]; then
         _lacy_save_last_session
+    elif [[ "$exit_code" -eq 0 ]]; then
+        # Exit 0 with no answer: some tools (lash, opencode) report errors
+        # only on stderr and still exit 0. Show them instead of nothing.
+        _lacy_print_tool_failure "$tool" "$exit_code" "$_out_file" "$_err_file"
+        exit_code=1
     elif [[ "$exit_code" -ge "$LACY_SIGNAL_EXIT_THRESHOLD" ]]; then
         # Signal (Ctrl+C and friends): nothing to explain
         command rm -f "$_out_file" "$_err_file"
@@ -819,7 +849,11 @@ _lacy_print_tool_failure() {
         return 0
     fi
     echo ""
-    lacy_print_color 196 "  ${tool} exited with code ${code}"
+    if [[ "$code" -eq 0 ]]; then
+        lacy_print_color 196 "  ${tool} finished without an answer"
+    else
+        lacy_print_color 196 "  ${tool} exited with code ${code}"
+    fi
     if [[ -s "$out_file" || -s "$err_file" ]]; then
         local line
         # awk 1 prints every line with a newline, so a file whose last line

@@ -15,7 +15,7 @@ set -q _LACY_FISH_MAJOR; or set -g _LACY_FISH_MAJOR (string match -r -- '^\d+' $
 # Generated from lib/core/constants.sh. Do not edit by hand.
 set -g LACY_TOOL_LIST \
     'lash' 'claude' 'opencode' 'gemini' 'codex' 'hermes' 'copilot' 'goose' \
-    'amp' 'aider'
+    'aider'
 # END GENERATED TOOL LIST
 
 # Colors (256-color indices)

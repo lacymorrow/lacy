@@ -127,9 +127,12 @@ lacy_start_spinner() {
 
     LACY_SPINNER_PID=$!
 
-    # In Bash, disown the spinner so it won't print "[N] Done ..." with
-    # the entire subshell body when the job exits.
-    if [[ "$LACY_SHELL_TYPE" != "zsh" ]]; then
+    # Disown the spinner so the shell never prints "[N] done { trap ... }"
+    # with the subshell body, or "you have running jobs" on exit. zsh's
+    # disown takes a job spec, not a PID; %% is the job just started.
+    if [[ "$LACY_SHELL_TYPE" == "zsh" ]]; then
+        disown %% 2>/dev/null
+    else
         disown "$LACY_SPINNER_PID" 2>/dev/null
     fi
 }
