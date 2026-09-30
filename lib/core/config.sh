@@ -35,6 +35,7 @@ modes:
 # preheat:
 #   eager: false
 #   server_port: 4096
+#   claude_idle_minutes: 15  # keep claude running between questions; 0 turns it off
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
@@ -72,6 +73,7 @@ _lacy_config_var_for() {
         modes.default)              _LACY_CFG_VAR="LACY_CONFIG_DEFAULT_MODE" ;;
         preheat.eager)              _LACY_CFG_VAR="LACY_PREHEAT_EAGER" ;;
         preheat.server_port)        _LACY_CFG_VAR="LACY_PREHEAT_SERVER_PORT" ;;
+        preheat.claude_idle_minutes) _LACY_CFG_VAR="LACY_PREHEAT_CLAUDE_IDLE_MINUTES" ;;
         context.output)             _LACY_CFG_VAR="_LACY_CTX_OUTPUT_ENABLED" ;;
         context.output_lines)       _LACY_CFG_VAR="_LACY_CTX_OUTPUT_MAX_LINES" ;;
         spinner.style)              _LACY_CFG_VAR="LACY_SPINNER_STYLE" ;;
@@ -88,6 +90,7 @@ _lacy_config_reset_vars() {
     LACY_CONFIG_DEFAULT_MODE=""
     LACY_PREHEAT_EAGER="false"
     LACY_PREHEAT_SERVER_PORT="4096"
+    LACY_PREHEAT_CLAUDE_IDLE_MINUTES="15"
     _LACY_CTX_OUTPUT_ENABLED=true
     _LACY_CTX_OUTPUT_MAX_LINES=50
     LACY_SPINNER_STYLE="braille"
@@ -258,6 +261,7 @@ lacy_shell_load_config() {
     _lacy_config_bool "$LACY_LOG_QUERIES" LACY_LOG_QUERIES
     _lacy_config_bool "$_LACY_CTX_OUTPUT_ENABLED" _LACY_CTX_OUTPUT_ENABLED
     [[ "$LACY_PREHEAT_SERVER_PORT" == *[!0-9]* ]] && LACY_PREHEAT_SERVER_PORT="4096"
+    [[ -z "$LACY_PREHEAT_CLAUDE_IDLE_MINUTES" || "$LACY_PREHEAT_CLAUDE_IDLE_MINUTES" == *[!0-9]* ]] && LACY_PREHEAT_CLAUDE_IDLE_MINUTES="15"
     [[ "$_LACY_CTX_OUTPUT_MAX_LINES" == *[!0-9]* ]] && _LACY_CTX_OUTPUT_MAX_LINES=50
 
     case "$LACY_CONFIG_DEFAULT_MODE" in

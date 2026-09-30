@@ -111,6 +111,7 @@ modes:
 # preheat:
 #   eager: false
 #   server_port: 4096
+#   claude_idle_minutes: 15  # keep claude running between questions; 0 turns it off
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
@@ -121,8 +122,9 @@ modes:
 | `agent_tools.active`         | empty     | Tool to use. Empty means the first installed one, in the order listed above |
 | `agent_tools.custom_command` | empty     | Command for `active: custom`. The question is added as the last argument |
 | `modes.default`              | `auto`    | Startup mode when `~/.lacy/current_mode` does not exist    |
-| `preheat.eager`              | `false`   | Start the lash or opencode background server when the shell loads |
+| `preheat.eager`              | `false`   | Start the lash or opencode background server, or the kept claude, when the shell loads |
 | `preheat.server_port`        | `4096`    | Port for that server                                       |
+| `preheat.claude_idle_minutes` | `15`     | Keep claude running between questions for this long after the last one. `0` starts claude for every question |
 | `context.output`             | `true`    | Include visible terminal output with questions             |
 | `context.output_lines`       | `50`      | Maximum lines of terminal output                           |
 | `spinner.style`              | `braille` | `ascii` for terminals without Unicode                      |

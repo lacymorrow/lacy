@@ -340,6 +340,9 @@ printf 'x' > "$LACY_SHELL_HOME/.config_cache"
 lacy_shell_load_config > /dev/null 2>&1
 assert_true "config cache: stale .config_cache removed" test ! -e "$LACY_SHELL_HOME/.config_cache"
 
+# Per-question claude by default here; the keeper has its own section
+LACY_PREHEAT_CLAUDE_IDLE_MINUTES=0
+
 # ============================================================================
 echo "Control characters from screen capture produce valid JSON"
 # ============================================================================
@@ -519,6 +522,132 @@ EOF
     cp "$TEST_TMPDIR/claude.plain" "$TEST_TMPDIR/bin/claude"
 else
     echo "  SKIP: python3 not found (claude streaming)"
+fi
+
+# ============================================================================
+echo "Claude keeper (lib/core/claude_keeper.py)"
+# ============================================================================
+
+if command -v python3 >/dev/null 2>&1; then
+    cp "$TEST_TMPDIR/bin/claude" "$TEST_TMPDIR/claude.plain"
+    # Kept mode (--input-format): logs "start <args>" once, then answers each
+    # stream-json question with "Kept: <question>". FAKE_KEEPER=die exits at
+    # once; a question containing "slow" waits for the interrupt.
+    # Per-question mode: one streamed "Streamed answer".
+    cat > "$TEST_TMPDIR/bin/claude" <<'EOF'
+#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+log = open(os.environ["AGENT_LOG"], "a")
+def emit(o):
+    sys.stdout.write(json.dumps(o) + "\n"); sys.stdout.flush()
+def text(t):
+    emit({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": t}}})
+if "--input-format" not in args:
+    log.write(" ".join(args) + "\n"); log.close()
+    text("Streamed answer")
+    emit({"type": "result", "is_error": False, "result": "Streamed answer", "session_id": "s-once"})
+    sys.exit(0)
+log.write("start " + " ".join(args) + "\n"); log.flush()
+if os.environ.get("FAKE_KEEPER") == "die":
+    sys.stderr.write("keeper claude failed\n"); sys.exit(3)
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("type") != "user":
+        continue
+    # The question after Lacy's "[cwd: ...] " context prefix
+    q = msg["message"]["content"].strip().splitlines()[-1].split("] ")[-1]
+    log.write("q " + q + "\n"); log.flush()
+    emit({"type": "system", "subtype": "init", "cwd": os.getcwd()})
+    text("Kept: ")
+    if "slow" in q:
+        for ctl in sys.stdin:
+            if json.loads(ctl).get("request", {}).get("subtype") == "interrupt":
+                break
+        log.write("interrupted\n"); log.flush()
+        emit({"type": "result", "subtype": "error_during_execution", "is_error": True, "session_id": "s-keep"})
+        continue
+    text(q)
+    emit({"type": "result", "is_error": False, "result": "Kept: " + q, "session_id": "s-keep"})
+EOF
+    chmod +x "$TEST_TMPDIR/bin/claude"
+    _saved_dir="${LACY_SHELL_DIR:-}"
+    _saved_pwd="$PWD"
+    LACY_SHELL_DIR="$REPO_DIR"
+    LACY_ACTIVE_TOOL="claude"
+    LACY_PREHEAT_CLAUDE_IDLE_MINUTES=15
+    starts() { grep -c '^start' "$AGENT_LOG" 2>/dev/null || echo 0; }
+    running() { [[ -n "$(_lacy_claude_keeper_pid)" ]] && echo yes || echo no; }
+    mkdir -p "$TEST_TMPDIR/kdir1" "$TEST_TMPDIR/kdir2"
+    cd "$TEST_TMPDIR/kdir1" || exit 1
+
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    command rm -f "$AGENT_LOG"
+    lacy_shell_query_agent "first" > "$OUT" 2>&1
+    rc=$?
+    out=$(plain < "$OUT")
+    assert_eq "keeper: rc 0" "0" "$rc"
+    assert_eq "keeper: answer shown once" "1" "$(grep -c 'Kept: first' <<< "$out")"
+    assert_eq "keeper: claude started once" "1" "$(starts)"
+    assert_contains "keeper: stream-json in and out" "$(cat "$AGENT_LOG")" "--input-format stream-json --output-format stream-json"
+    assert_eq "keeper: session captured" "s-keep" "$LACY_PREHEAT_CLAUDE_SESSION_ID"
+    assert_eq "keeper: still running" "yes" "$(running)"
+    kpid=$(_lacy_claude_keeper_pid)
+
+    lacy_shell_query_agent "second" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    assert_contains "keeper: follow-up answered" "$out" "Kept: second"
+    assert_eq "keeper: follow-up reuses claude" "1" "$(starts)"
+    assert_eq "keeper: same process" "$kpid" "$(_lacy_claude_keeper_pid)"
+
+    # Ctrl+C mid-answer: the asker hangs up, claude's turn is interrupted,
+    # and the same claude answers the next question
+    printf 'slow' | python3 "$REPO_DIR/lib/core/claude_keeper.py" ask "$LACY_CLAUDE_KEEPER_SOCK" > /dev/null 2>&1 &
+    _ask=$!
+    for _i in 1 2 3 4 5 6 7 8 9 10; do grep -q '^q slow' "$AGENT_LOG" && break; sleep 0.2; done
+    kill "$_ask" 2>/dev/null
+    wait "$_ask" 2>/dev/null
+    for _i in 1 2 3 4 5 6 7 8 9 10; do grep -q '^interrupted' "$AGENT_LOG" && break; sleep 0.2; done
+    assert_contains "keeper interrupt: claude's turn stopped" "$(cat "$AGENT_LOG")" "interrupted"
+    lacy_shell_query_agent "after" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    assert_contains "keeper interrupt: next answer clean" "$out" "Kept: after"
+    assert_eq "keeper interrupt: same process" "$kpid" "$(_lacy_claude_keeper_pid)"
+
+    cd "$TEST_TMPDIR/kdir2" || exit 1
+    lacy_shell_query_agent "moved" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    assert_contains "keeper cd: answered" "$out" "Kept: moved"
+    assert_eq "keeper cd: claude restarted here" "2" "$(starts)"
+    assert_contains "keeper cd: conversation resumed" "$(grep '^start' "$AGENT_LOG" | tail -1)" "--resume s-keep"
+    assert_eq "keeper cd: old process gone" "gone" "$(kill -0 "$kpid" 2>/dev/null || echo gone)"
+
+    lacy_preheat_claude_reset_session
+    assert_eq "keeper new session: stopped" "no" "$(running)"
+    assert_eq "keeper new session: socket removed" "no" "$([[ -e "$LACY_CLAUDE_KEEPER_SOCK" ]] && echo yes || echo no)"
+
+    # claude cannot stay running: the question still gets its answer
+    command rm -f "$AGENT_LOG"
+    FAKE_KEEPER=die lacy_shell_query_agent "fallback" > "$OUT" 2>&1
+    rc=$?
+    out=$(plain < "$OUT")
+    assert_eq "keeper fails: rc 0" "0" "$rc"
+    assert_eq "keeper fails: per-question answer shown once" "1" "$(grep -c 'Streamed answer' <<< "$out")"
+    assert_not_contains "keeper fails: its error hidden" "$out" "keeper claude failed"
+
+    lacy_shell_query_agent "again" > /dev/null 2>&1
+    kpid=$(_lacy_claude_keeper_pid)
+    assert_eq "keeper restarts after failure" "yes" "$(running)"
+    lacy_preheat_cleanup
+    assert_eq "keeper shell exit: stopped" "gone" "$(kill -0 "$kpid" 2>/dev/null || echo gone)"
+
+    LACY_PREHEAT_CLAUDE_IDLE_MINUTES=0
+    cd "$_saved_pwd" || exit 1
+    LACY_SHELL_DIR="$_saved_dir"
+    cp "$TEST_TMPDIR/claude.plain" "$TEST_TMPDIR/bin/claude"
+else
+    echo "  SKIP: python3 not found (claude keeper)"
 fi
 
 LACY_ACTIVE_TOOL="gemini"

@@ -420,10 +420,22 @@ _lacy_claude_run() {
         result_file=$(mktemp 2>/dev/null) || result_file="${LACY_SHELL_HOME}/.claude_result_$$"
         cmd="${cmd/--output-format json/--output-format stream-json --include-partial-messages --verbose}"
         local -a _ps
-        (unset CLAUDECODE; _lacy_run_tool_cmd "$cmd" "$query" <"$stdin_src" 2>&1) |
-            python3 -u "$streamer" "$LACY_SPINNER_PID" "$result_file"
-        _ps=("${pipestatus[@]}" "${PIPESTATUS[@]}")
-        rc="${_ps[$_LACY_ARR_OFFSET]}"
+        rc=75
+        # The kept claude answers without a startup; 75 means it could not
+        # take this question, and nothing was printed.
+        if lacy_claude_keeper_ensure; then
+            printf '%s' "$query" |
+                python3 -u "$(_lacy_claude_keeper_script)" ask "$LACY_CLAUDE_KEEPER_SOCK" 2>&1 |
+                python3 -u "$streamer" "$LACY_SPINNER_PID" "$result_file"
+            _ps=("${pipestatus[@]}" "${PIPESTATUS[@]}")
+            rc="${_ps[$(( _LACY_ARR_OFFSET + 1 ))]}"
+        fi
+        if [[ "$rc" == 75 ]]; then
+            (unset CLAUDECODE; _lacy_run_tool_cmd "$cmd" "$query" <"$stdin_src" 2>&1) |
+                python3 -u "$streamer" "$LACY_SPINNER_PID" "$result_file"
+            _ps=("${pipestatus[@]}" "${PIPESTATUS[@]}")
+            rc="${_ps[$_LACY_ARR_OFFSET]}"
+        fi
         lacy_stop_spinner
         _LACY_CLAUDE_JSON=$(_lacy_claude_normalize_output "$(cat "$result_file" 2>/dev/null)")
         [[ -f "$result_file.printed" ]] && _LACY_CLAUDE_STREAMED=true

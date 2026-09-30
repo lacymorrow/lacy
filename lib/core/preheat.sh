@@ -2,7 +2,7 @@
 
 # Agent preheating for Lacy Shell
 # - Background server for lash/opencode (eliminates cold-start)
-# - Session reuse for claude (conversation continuity)
+# - claude kept running per shell (claude_keeper.py), sessions via --resume
 # Shared across Bash 4+ and ZSH
 
 # === State ===
@@ -439,6 +439,64 @@ lacy_preheat_claude_extract_result() {
 
 lacy_preheat_claude_reset_session() {
     _lacy_session_reset "$LACY_PREHEAT_SESSION_FILE" "LACY_PREHEAT_CLAUDE_SESSION_ID"
+    lacy_claude_keeper_stop
+}
+
+# ============================================================================
+# Claude Keeper (one claude process kept running per shell)
+# ============================================================================
+#
+# claude_keeper.py holds claude open between questions, so a question skips
+# claude's ~2s startup. The conversation lives in the process and in the
+# session ID above: a keeper that went idle, or one restarted after a cd,
+# comes back with --resume and remembers everything.
+
+LACY_CLAUDE_KEEPER_SOCK="$LACY_SHELL_HOME/.claude_keeper_$$.sock"
+
+_lacy_claude_keeper_script() {
+    local script="${LACY_SHELL_DIR:-}/lib/core/claude_keeper.py"
+    [[ -n "${LACY_SHELL_DIR:-}" && -f "$script" ]] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    echo "$script"
+}
+
+# The keeper's PID, verified against its command line. Empty when not running.
+_lacy_claude_keeper_pid() {
+    local pid
+    pid=$(cat "$LACY_CLAUDE_KEEPER_SOCK.pid" 2>/dev/null)
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    [[ "$(ps -o command= -p "$pid" 2>/dev/null)" == *claude_keeper.py* ]] || return 1
+    echo "$pid"
+}
+
+lacy_claude_keeper_stop() {
+    local pid tries=0
+    if pid=$(_lacy_claude_keeper_pid); then
+        kill "$pid" 2>/dev/null
+        # Wait for it, so a keeper started next never races its cleanup
+        while kill -0 "$pid" 2>/dev/null && (( tries++ < 30 )); do
+            command sleep 0.1
+        done
+    fi
+    command rm -f "$LACY_CLAUDE_KEEPER_SOCK" "$LACY_CLAUDE_KEEPER_SOCK.pid" \
+                  "$LACY_CLAUDE_KEEPER_SOCK.cwd" "$LACY_CLAUDE_KEEPER_SOCK.log"
+    return 0
+}
+
+# Make sure a keeper is running in this directory. Returns 1 when keeping
+# claude is off or cannot work here; the caller then runs claude per question.
+lacy_claude_keeper_ensure() {
+    local script idle
+    idle="${LACY_PREHEAT_CLAUDE_IDLE_MINUTES:-15}"
+    [[ "$idle" =~ ^[0-9]+$ ]] && (( idle > 0 )) || return 1
+    script=$(_lacy_claude_keeper_script) || return 1
+    if _lacy_claude_keeper_pid >/dev/null; then
+        [[ "$(cat "$LACY_CLAUDE_KEEPER_SOCK.cwd" 2>/dev/null)" == "$(pwd -P)" ]] && return 0
+        lacy_claude_keeper_stop
+    fi
+    python3 "$script" start "$LACY_CLAUDE_KEEPER_SOCK" "$$" "$(( idle * 60 ))" \
+        "$LACY_PREHEAT_CLAUDE_SESSION_ID" </dev/null >/dev/null 2>&1
 }
 
 # ============================================================================
@@ -611,7 +669,9 @@ lacy_preheat_init() {
     if [[ "$LACY_PREHEAT_EAGER" == "true" ]]; then
         local tool="${LACY_ACTIVE_TOOL}"
 
-        if [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
+        if [[ "$tool" == "claude" ]]; then
+            lacy_claude_keeper_ensure
+        elif [[ "$tool" == "lash" || "$tool" == "opencode" ]]; then
             _lacy_jobctl_off
             lacy_preheat_server_start "$tool" &
             disown 2>/dev/null
@@ -645,6 +705,7 @@ lacy_preheat_cleanup() {
                   "$LACY_PREHEAT_SESSION_FILE" \
                   "$LACY_GEMINI_SESSION_ID_FILE"
     LACY_PREHEAT_SERVER_SESSION_ID=""
+    lacy_claude_keeper_stop
 
     if [[ "$(_lacy_preheat_other_shells)" == "0" ]]; then
         lacy_preheat_server_stop
