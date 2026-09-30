@@ -1,6 +1,6 @@
 {
   "name": "lacy",
-  "version": "1.8.26",
+  "version": "1.8.27",
   "description": "Installer for lacy. Talk to your shell: commands run, questions go to your AI coding tool.",
   "type": "module",
   "bin": {

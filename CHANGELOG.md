@@ -11,6 +11,13 @@ version you can install.
 
 ## [Unreleased]
 
+## [1.8.27] - 2026-09-30
+
+### Added
+
+- keep claude running between questions (#80) (85fab74)
+- default to claude and stream its answers live (#79) (0a35630)
+
 ## [1.8.26] - 2026-09-29
 
 ### Fixed
@@ -366,7 +373,8 @@ First tagged release. Work on Lacy started on 2025-08-11, and everything below l
 
 - The Python helper and the direct OpenAI and Anthropic API calls the first prototype used.
 
-[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.26...HEAD
+[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.27...HEAD
+[1.8.27]: https://github.com/lacymorrow/lacy/compare/v1.8.26...v1.8.27
 [1.8.26]: https://github.com/lacymorrow/lacy/compare/v1.8.25...v1.8.26
 [1.8.25]: https://github.com/lacymorrow/lacy/compare/v1.8.24...v1.8.25
 [1.8.24]: https://github.com/lacymorrow/lacy/compare/v1.8.21...v1.8.24
