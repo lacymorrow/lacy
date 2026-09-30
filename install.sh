@@ -52,7 +52,7 @@ else
 fi
 
 # Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
-TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose aider)
+TOOL_LIST=(claude lash opencode gemini codex hermes copilot goose aider)
 
 # Never let git stop to ask for credentials (a bad URL on GitHub asks).
 export GIT_TERMINAL_PROMPT=0
@@ -339,21 +339,21 @@ check_prerequisites() {
 # AI tool selection
 # ============================================================================
 
-install_lash() {
-    info "Installing lash..."
+install_claude() {
+    info "Installing Claude Code..."
     if command -v npm >/dev/null 2>&1; then
-        npm install -g lashcode && return 0
+        npm install -g @anthropic-ai/claude-code && return 0
     elif command -v brew >/dev/null 2>&1; then
-        brew tap lacymorrow/tap && brew install lash && return 0
+        brew install --cask claude-code && return 0
     else
-        error "Could not install lash: npm or Homebrew is needed."
+        error "Could not install Claude Code: npm or Homebrew is needed."
         return 1
     fi
-    error "lash did not install. You can retry later with: npm install -g lashcode"
+    error "Claude Code did not install. You can retry later with: npm install -g @anthropic-ai/claude-code"
     return 1
 }
 
-# One tool installed: use it. None: offer lash. Several: ask which.
+# One tool installed: use it. None: offer Claude Code. Several: ask which.
 # Without a terminal nothing is asked and the default is used.
 choose_tool() {
     local found=() t reply i
@@ -388,18 +388,18 @@ choose_tool() {
     # Nothing installed
     if can_prompt; then
         warn "No AI CLI tool found. Lacy needs one to answer questions."
-        if ! ask reply "Install lash (lash.lacy.sh)? [Y/n]: "; then
+        if ! ask reply "Install Claude Code (claude)? [Y/n]: "; then
             reply="n"
         fi
-        if [[ ! "$reply" =~ ^[Nn] ]] && install_lash && command -v lash >/dev/null 2>&1; then
-            SELECTED_TOOL="lash"
-            ok "Using lash"
+        if [[ ! "$reply" =~ ^[Nn] ]] && install_claude && command -v claude >/dev/null 2>&1; then
+            SELECTED_TOOL="claude"
+            ok "Using claude. Sign in once by running: claude"
             return 0
         fi
     else
         warn "No AI CLI tool found."
     fi
-    printf "Install one later, for example: npm install -g lashcode\n"
+    printf "Install one later, for example: npm install -g @anthropic-ai/claude-code\n"
     return 0
 }
 

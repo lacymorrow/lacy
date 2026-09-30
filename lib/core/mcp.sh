@@ -404,6 +404,39 @@ _lacy_strip_leading_noise() {
     printf '%s' "$output"
 }
 
+# Run claude once. With python3 the answer streams to the terminal as it is
+# written (stream-json); without it, claude runs to the end and the caller
+# renders the result. Sets _LACY_CLAUDE_JSON (the normalized result object)
+# and _LACY_CLAUDE_STREAMED (true when answer text was already printed).
+# Returns claude's exit code.
+_lacy_claude_run() {
+    local query="$1" stdin_src="$2" cmd rc
+    local streamer="${LACY_SHELL_DIR:-}/lib/core/claude_stream.py"
+    cmd=$(lacy_preheat_claude_build_cmd)
+    _LACY_CLAUDE_STREAMED=false
+    lacy_start_spinner
+    if [[ -n "${LACY_SHELL_DIR:-}" && -f "$streamer" ]] && command -v python3 >/dev/null 2>&1; then
+        local result_file
+        result_file=$(mktemp 2>/dev/null) || result_file="${LACY_SHELL_HOME}/.claude_result_$$"
+        cmd="${cmd/--output-format json/--output-format stream-json --include-partial-messages --verbose}"
+        local -a _ps
+        (unset CLAUDECODE; _lacy_run_tool_cmd "$cmd" "$query" <"$stdin_src" 2>&1) |
+            python3 -u "$streamer" "$LACY_SPINNER_PID" "$result_file"
+        _ps=("${pipestatus[@]}" "${PIPESTATUS[@]}")
+        rc="${_ps[$_LACY_ARR_OFFSET]}"
+        lacy_stop_spinner
+        _LACY_CLAUDE_JSON=$(_lacy_claude_normalize_output "$(cat "$result_file" 2>/dev/null)")
+        [[ -f "$result_file.printed" ]] && _LACY_CLAUDE_STREAMED=true
+        command rm -f "$result_file" "$result_file.printed"
+    else
+        _LACY_CLAUDE_JSON=$(unset CLAUDECODE; _lacy_run_tool_cmd "$cmd" "$query" <"$stdin_src" 2>&1)
+        rc=$?
+        lacy_stop_spinner
+        _LACY_CLAUDE_JSON=$(_lacy_claude_normalize_output "$_LACY_CLAUDE_JSON")
+    fi
+    return "$rc"
+}
+
 # Normalize claude JSON output: handles startup noise, JSON arrays, and NDJSON.
 # Claude --output-format json wraps all events in a JSON array: [{init},{assistant},{result}]
 # This extracts the last element (the result object) so downstream parsing works.
@@ -476,7 +509,7 @@ _lacy_print_no_tool() {
     echo ""
     for t in "${LACY_TOOL_LIST[@]}"; do
         hint=$(lacy_tool_install_cmd "$t")
-        if [[ "$t" == "lash" ]]; then
+        if [[ "$t" == "claude" ]]; then
             printf -v row '    %-10s %s   (recommended)' "$t" "$hint"
             lacy_print_color 34 "$row"
         else
@@ -639,16 +672,13 @@ lacy_shell_query_agent() {
 
     # === Preheat: claude session reuse ===
     if [[ "$tool" == "claude" ]]; then
-        local claude_cmd json_output result_text
+        local json_output result_text
         # Claude may prompt on the terminal; without one (CI, tests) use /dev/null
         local _claude_stdin=/dev/null
         ( : </dev/tty ) 2>/dev/null && _claude_stdin=/dev/tty
-        claude_cmd=$(lacy_preheat_claude_build_cmd)
         echo ""
-        lacy_start_spinner
-        json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" <"$_claude_stdin" 2>&1)
+        _lacy_claude_run "$query" "$_claude_stdin"
         exit_code=$?
-        lacy_stop_spinner
 
         # Ctrl+C or another signal: stop. Keep the session and never re-run.
         if (( exit_code >= LACY_SIGNAL_EXIT_THRESHOLD )); then
@@ -659,19 +689,14 @@ lacy_shell_query_agent() {
         # A failed --resume (expired or missing session) gets one fresh retry
         if (( exit_code != 0 )) && [[ -n "$LACY_PREHEAT_CLAUDE_SESSION_ID" ]]; then
             lacy_preheat_claude_reset_session
-            claude_cmd=$(lacy_preheat_claude_build_cmd)
-            lacy_start_spinner
-            json_output=$(unset CLAUDECODE; _lacy_run_tool_cmd "$claude_cmd" "$query" <"$_claude_stdin" 2>&1)
+            _lacy_claude_run "$query" "$_claude_stdin"
             exit_code=$?
-            lacy_stop_spinner
             if (( exit_code >= LACY_SIGNAL_EXIT_THRESHOLD )); then
                 echo ""
                 return "$exit_code"
             fi
         fi
-
-        # Normalize: strip noise, extract last element from JSON array
-        json_output=$(_lacy_claude_normalize_output "$json_output")
+        json_output="$_LACY_CLAUDE_JSON"
 
         # Structured errors (e.g. invalid API key), even with exit code 0
         if lacy_format_tool_error "$json_output" "$tool"; then
@@ -682,12 +707,14 @@ lacy_shell_query_agent() {
         fi
 
         if (( exit_code == 0 )); then
-            result_text=$(lacy_preheat_claude_extract_result "$json_output")
-            while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
-            if [[ -n "$result_text" ]]; then
-                _lacy_render_markdown "$result_text"
-            else
-                printf '%s\n' "$json_output"
+            if [[ "$_LACY_CLAUDE_STREAMED" != true ]]; then
+                result_text=$(lacy_preheat_claude_extract_result "$json_output")
+                while [[ "$result_text" == $'\n'* ]]; do result_text="${result_text#$'\n'}"; done
+                if [[ -n "$result_text" ]]; then
+                    _lacy_render_markdown "$result_text"
+                else
+                    printf '%s\n' "$json_output"
+                fi
             fi
             lacy_preheat_claude_capture_session "$json_output"
             _lacy_save_last_session

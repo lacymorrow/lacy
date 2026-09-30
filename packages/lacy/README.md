@@ -11,7 +11,7 @@ npx lacy
 - Installs the latest Lacy Shell release into `~/.lacy` and adds it to your zsh, Bash or fish config
 - Uses your AI CLI tool without asking when exactly one is installed
 - Asks which one to use when several are installed
-- Offers to install lash when none is found
+- Offers to install Claude Code when none is found
 - Asks nothing when there is no terminal (CI, Docker)
 
 Run `npx lacy` again after installing to change the tool or mode, edit the config, update, reinstall, or uninstall. Without a terminal it updates to the latest release instead.

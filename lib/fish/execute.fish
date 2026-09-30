@@ -73,7 +73,7 @@ function _lacy_print_no_tool --description "Explain that no AI tool is installed
     printf '%s  Supported tools:%s\n\n' "$bold" "$off"
     for t in $LACY_TOOL_LIST
         set -l hint (_lacy_tool_install_cmd $t)
-        if test $t = lash
+        if test $t = claude
             set hint "$hint        (recommended)"
             printf '    %s%-12s%s %s\n' "$green" $t "$off" "$hint"
         else

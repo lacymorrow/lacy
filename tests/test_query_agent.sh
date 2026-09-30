@@ -227,7 +227,7 @@ rc=$?
 output=$(plain < "$OUT")
 assert_eq "unknown tool: returns 1" "1" "$rc"
 assert_contains "unknown tool: names the tool" "$output" "Unknown tool 'nosuchtool'"
-assert_contains "unknown tool: lists known tools" "$output" "lash, claude"
+assert_contains "unknown tool: lists known tools" "$output" "claude, lash"
 if [[ -e "$TEST_TMPDIR/marker_was_executed" ]]; then
     echo "  FAIL: unknown tool: query was executed as a command"
     FAIL=$(( FAIL + 1 ))
