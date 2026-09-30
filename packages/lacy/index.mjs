@@ -305,6 +305,7 @@ modes:
 # preheat:
 #   eager: false
 #   server_port: 4096
+#   claude_idle_minutes: 15  # keep claude running between questions; 0 turns it off
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)

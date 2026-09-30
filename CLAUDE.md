@@ -181,6 +181,8 @@ lash is an opencode fork by the same author (lash.lacy.sh). Tools handle their o
 
 Execution paths in `lacy_shell_query_agent()`: server (lash, opencode via background `serve`), claude (`--resume`; with python3 it runs `--output-format stream-json --include-partial-messages` through `lib/core/claude_stream.py`, which prints text as it arrives and hands the final `result` event back; without python3 it waits for `--output-format json`), gemini (session), generic (everything else).
 
+Claude keeper (`lib/core/claude_keeper.py`, `lacy_claude_keeper_*` in preheat.sh): one `claude -p --input-format stream-json --output-format stream-json` process per shell, behind unix socket `~/.lacy/.claude_keeper_<shell pid>.sock` (+ `.pid`, `.cwd`, `.log`), so a question skips claude's ~2s startup (measured: ~1.5s per answer vs ~3.4s). `_lacy_claude_run` sends the question with `claude_keeper.py ask` into `claude_stream.py`; exit 75 (keeper could not take it, nothing printed) falls back to the per-question `claude -p`. Started on the first claude question (or at shell load with `preheat.eager`). Restarted with `--resume <session>` when `pwd -P` differs from its directory (tools run in claude's cwd). Ctrl+C: the asker hangs up, the keeper sends claude an `interrupt` control_request, the process and conversation stay. Stops on: `preheat.claude_idle_minutes` (default 15, `0` = off) without a question, shell PID gone, claude exit, `/new` (reset_session), `tool set`, shell exit (`lacy_preheat_cleanup`). A stopping keeper removes its files only if `.pid` is still its own; `lacy_claude_keeper_stop` waits for it to exit. Socket bound relative to its dir (104-byte unix path cap). Idle claude ~240 MB RSS. Env changes after start are not seen by claude.
+
 Per-query output: no "Using X" line. A tool that exits 0 with no stdout gets the failure frame (`<tool> finished without an answer` + stderr tail); lash/opencode print errors only to stderr. A server reply that is 200 with no text and `.info.error` is shown as `Error from <tool>`. gemini: `_lacy_gemini_signed_in` checks for a login (API key env/.env, non-OAuth auth type, token file in ~/.gemini, macOS keychain `gemini-cli-oauth`) before running, since gemini's sign-in `[Y/n]` would be hidden behind the spinner. Resume hint (`Resume: <cmd>`) only after a failure. No tool installed: one `No AI tool found` message listing an install line per tool, no prompt.
 
 ## Architecture
@@ -347,18 +349,19 @@ modes:
 # preheat:
 #   eager: false
 #   server_port: 4096
+#   claude_idle_minutes: 15  # keep claude running between questions; 0 turns it off
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
 ```
 
-Keys read (`_lacy_config_var_for`): `agent_tools.active`, `agent_tools.custom_command`, `modes.default`, `preheat.eager`, `preheat.server_port`, `context.output`, `context.output_lines`, `spinner.style` (`braille` default, `ascii`), `logging.queries`. fish reads only `agent_tools.*` and `modes.default`. An `agent_tools.active` that is not in `LACY_TOOL_LIST` or `custom` prints a warning and falls back to auto-detect.
+Keys read (`_lacy_config_var_for`): `agent_tools.active`, `agent_tools.custom_command`, `modes.default`, `preheat.eager`, `preheat.server_port`, `preheat.claude_idle_minutes`, `context.output`, `context.output_lines`, `spinner.style` (`braille` default, `ascii`), `logging.queries`. fish reads only `agent_tools.*` and `modes.default`. An `agent_tools.active` that is not in `LACY_TOOL_LIST` or `custom` prints a warning and falls back to auto-detect.
 
 Parser: flat YAML subset. Only direct children of a top-level section. One matching outer quote pair removed. `#` starts a comment only at value start or after whitespace, never inside quotes. `null` / `~` = empty. Unknown keys ignored. Nothing executed. `lacy_config_set` rewrites in place keeping comments and order, writing through the path (symlinks stay).
 
 Query log (`logging.queries: true`): `~/.lacy/logs/queries.log`, one line `timestamp<TAB>tool<TAB>query` (raw query, no context), dir 0700, file 0600, trimmed to the last 1000 lines past 1 MB. Off by default.
 
-Preheat: lash/opencode keep a background `serve` on `preheat.server_port`; claude reuses sessions with `--resume`.
+Preheat: lash/opencode keep a background `serve` on `preheat.server_port`; claude stays running per shell (claude keeper) and reuses sessions with `--resume`.
 
 `NO_COLOR` (any non-empty value) removes all escape sequences in zsh, Bash, fish, installer, and uninstaller. `TERM=dumb` sets `NO_COLOR=1` (not exported) in constants.sh, config.fish, bin/lacy, install.sh, uninstall.sh.
 
