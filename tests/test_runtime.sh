@@ -458,6 +458,69 @@ echo "sess-123" > "$LACY_PREHEAT_SESSION_FILE"
 FAKE_EXIT=1 lacy_shell_query_agent "long question" > "$OUT" 2>&1
 assert_eq "claude plain failure: retried once without --resume" "2" "$(count_lines "$AGENT_LOG")"
 
+# ============================================================================
+echo "Claude streaming (stream-json through lib/core/claude_stream.py)"
+# ============================================================================
+
+if command -v python3 >/dev/null 2>&1; then
+    cp "$TEST_TMPDIR/bin/claude" "$TEST_TMPDIR/claude.plain"
+    # Emits stream-json events: two text chunks and a result, or an error
+    # result with no text when FAKE_STREAM=error
+    cat > "$TEST_TMPDIR/bin/claude" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$AGENT_LOG"
+printf '{"type":"system","subtype":"init"}\n'
+if [ "${FAKE_STREAM:-ok}" = error ]; then
+    printf '{"type":"result","subtype":"success","is_error":true,"result":"Invalid API key \\u00b7 Please run /login","session_id":"s-err"}\n'
+    exit 1
+fi
+printf '{"type":"stream_event","event":{"type":"message_start"}}\n'
+printf '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Streamed "}}}\n'
+printf '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"answer"}}}\n'
+printf '{"type":"result","subtype":"success","is_error":false,"result":"Streamed answer","session_id":"s-stream"}\n'
+exit "${FAKE_EXIT:-0}"
+EOF
+    chmod +x "$TEST_TMPDIR/bin/claude"
+    _saved_dir="${LACY_SHELL_DIR:-}"
+    LACY_SHELL_DIR="$REPO_DIR"
+    LACY_ACTIVE_TOOL="claude"
+
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    command rm -f "$AGENT_LOG"
+    lacy_shell_query_agent "question" > "$OUT" 2>&1
+    rc=$?
+    out=$(plain < "$OUT")
+    assert_eq "stream: rc 0" "0" "$rc"
+    assert_contains "stream: answer shown" "$out" "Streamed answer"
+    assert_eq "stream: answer shown once" "1" "$(grep -c 'Streamed answer' <<< "$out")"
+    assert_contains "stream: asks for stream-json" "$(cat "$AGENT_LOG")" "--output-format stream-json --include-partial-messages"
+    assert_eq "stream: session captured" "s-stream" "$LACY_PREHEAT_CLAUDE_SESSION_ID"
+
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    command rm -f "$AGENT_LOG"
+    FAKE_STREAM=error lacy_shell_query_agent "question" > "$OUT" 2>&1
+    rc=$?
+    out=$(plain < "$OUT")
+    assert_eq "stream error: rc 1" "1" "$rc"
+    assert_contains "stream error: message shown" "$out" "Invalid API key"
+
+    LACY_PREHEAT_CLAUDE_SESSION_ID="sess-123"
+    echo "sess-123" > "$LACY_PREHEAT_SESSION_FILE"
+    command rm -f "$AGENT_LOG"
+    FAKE_EXIT=130 lacy_shell_query_agent "question" > "$OUT" 2>&1
+    rc=$?
+    assert_eq "stream signal: rc 130" "130" "$rc"
+    assert_eq "stream signal: tool ran once" "1" "$(count_lines "$AGENT_LOG")"
+    assert_eq "stream signal: session kept" "sess-123" "$LACY_PREHEAT_CLAUDE_SESSION_ID"
+
+    LACY_SHELL_DIR="$_saved_dir"
+    cp "$TEST_TMPDIR/claude.plain" "$TEST_TMPDIR/bin/claude"
+else
+    echo "  SKIP: python3 not found (claude streaming)"
+fi
+
 LACY_ACTIVE_TOOL="gemini"
 LACY_GEMINI_SESSION_ID="gem-1"
 echo "gem-1" > "$LACY_GEMINI_SESSION_ID_FILE"

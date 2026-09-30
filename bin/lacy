@@ -17,7 +17,7 @@ CONFIG_FILE="${INSTALL_DIR}/config.yaml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
 # Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
-TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose aider)
+TOOL_LIST=(claude lash opencode gemini codex hermes copilot goose aider)
 
 # Colors (ANSI-C quoting so escape bytes are real, not literal)
 # A dumb terminal renders escapes as garbage: treat it like NO_COLOR.
@@ -420,11 +420,7 @@ cmd_doctor() {
             success "AI tool available (${active})"
         else
             fail_line "Configured AI tool is not installed: ${active}"
-            if [[ "$active" == "lash" ]]; then
-                fix_line "${CYAN}npm install -g lashcode${NC}, or pick another tool with ${CYAN}lacy setup${NC}"
-            else
-                fix_line "install ${active}, or pick another tool with ${CYAN}lacy setup${NC}"
-            fi
+            fix_line "${CYAN}lacy setup${NC} installs it, or picks another tool"
             issues=$((issues + 1))
         fi
     else
@@ -439,7 +435,7 @@ cmd_doctor() {
             success "AI tool available (auto-detect: ${found})"
         else
             fail_line "No AI CLI tool installed"
-            fix_line "${CYAN}npm install -g lashcode${NC} (lash.lacy.sh)"
+            fix_line "${CYAN}npm install -g @anthropic-ai/claude-code${NC} (Claude Code), or ${CYAN}lacy setup${NC}"
             issues=$((issues + 1))
         fi
     fi

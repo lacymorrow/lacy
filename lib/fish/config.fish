@@ -14,7 +14,7 @@ set -q _LACY_FISH_MAJOR; or set -g _LACY_FISH_MAJOR (string match -r -- '^\d+' $
 # BEGIN GENERATED TOOL LIST
 # Generated from lib/core/constants.sh. Do not edit by hand.
 set -g LACY_TOOL_LIST \
-    'lash' 'claude' 'opencode' 'gemini' 'codex' 'hermes' 'copilot' 'goose' \
+    'claude' 'lash' 'opencode' 'gemini' 'codex' 'hermes' 'copilot' 'goose' \
     'aider'
 # END GENERATED TOOL LIST
 

@@ -217,7 +217,7 @@ curl -fsSL https://lacy.sh/install | bash -s -- [options]
 | `--tool custom "CMD"`  | Use your own command                            |
 | `--bash`               | Skip the Node installer                         |
 
-The installer asks nothing when one AI tool is installed, asks which one to use when there are several, and offers to install lash when there are none. Without a terminal (CI, Docker) it asks nothing. It adds a `source` line and a `PATH` line to `~/.zshrc`, `~/.bashrc` (`~/.bash_profile` on macOS) or `~/.config/fish/conf.d/lacy.fish`.
+The installer asks nothing when one AI tool is installed, asks which one to use when there are several, and offers to install Claude Code when there are none. Without a terminal (CI, Docker) it asks nothing. It adds a `source` line and a `PATH` line to `~/.zshrc`, `~/.bashrc` (`~/.bash_profile` on macOS) or `~/.config/fish/conf.d/lacy.fish`.
 
 `npx lacy` does the same. Once Lacy is installed, `npx lacy` opens a settings menu, or updates without prompts when there is no terminal.
 

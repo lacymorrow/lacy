@@ -179,7 +179,7 @@ LACY_INDICATOR_CHAR="▌"
 LACY_SPINNER_TEXT='Thinking'
 
 # === Tool List (canonical order for detection and display) ===
-LACY_TOOL_LIST=(lash claude opencode gemini codex hermes copilot goose aider)
+LACY_TOOL_LIST=(claude lash opencode gemini codex hermes copilot goose aider)
 
 # === URLs ===
 LACY_DOCS_URL="https://lacy.sh/docs"

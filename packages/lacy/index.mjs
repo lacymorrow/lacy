@@ -39,11 +39,11 @@ const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 const STATE_FILES = ["config.yaml", "current_mode", "logs", ".last_session", ".server.pid"];
 
 // Keep in sync with LACY_TOOL_LIST in lib/core/constants.sh (tests check).
-const TOOL_LIST = ["lash", "claude", "opencode", "gemini", "codex", "hermes", "copilot", "goose", "aider"];
+const TOOL_LIST = ["claude", "lash", "opencode", "gemini", "codex", "hermes", "copilot", "goose", "aider"];
 
 const TOOL_HINTS = {
-  lash: "AI coding agent, lash.lacy.sh (recommended)",
-  claude: "Claude Code CLI",
+  lash: "AI coding agent, lash.lacy.sh",
+  claude: "Claude Code CLI (recommended)",
   opencode: "OpenCode CLI",
   gemini: "Google Gemini CLI",
   codex: "OpenAI Codex CLI",
@@ -527,27 +527,27 @@ function checkPrerequisites(shell) {
   return missing;
 }
 
-function installLash() {
+function installClaude() {
   const s = spinner();
-  s.start("Installing lash");
+  s.start("Installing Claude Code");
   try {
     if (commandExists("npm")) {
-      execSync("npm install -g lashcode", { stdio: "pipe" });
+      execSync(INSTALL_CMDS.claude, { stdio: "pipe" });
     } else if (commandExists("brew")) {
-      execSync("brew tap lacymorrow/tap && brew install lash", { stdio: "pipe" });
+      execSync("brew install --cask claude-code", { stdio: "pipe" });
     } else {
-      s.stop("Could not install lash: npm or Homebrew is needed");
+      s.stop("Could not install Claude Code: npm or Homebrew is needed");
       return false;
     }
   } catch {
-    s.stop("lash did not install");
+    s.stop("Claude Code did not install");
     return false;
   }
-  s.stop("lash installed");
-  return commandExists("lash");
+  s.stop("Claude Code installed. Sign in once by running: claude");
+  return commandExists("claude");
 }
 
-// One tool installed: use it. None: offer lash. Several: ask which.
+// One tool installed: use it. None: offer Claude Code. Several: ask which.
 // Without a terminal nothing is asked and the default is used.
 async function chooseTool() {
   const detected = detectTools();
@@ -568,18 +568,18 @@ async function chooseTool() {
   }
 
   if (!isInteractive()) {
-    p.log.warn("No AI CLI tool found. Install one later, for example: npm install -g lashcode");
+    p.log.warn(`No AI CLI tool found. Install one later, for example: ${INSTALL_CMDS.claude}`);
     return "";
   }
 
   p.log.warn("No AI CLI tool found. Lacy needs one to answer questions.");
   const yes = await p.confirm({
-    message: `Install ${pc.green("lash")} (lash.lacy.sh)?`,
+    message: `Install ${pc.green("Claude Code")} (claude)?`,
     initialValue: true,
   });
   if (p.isCancel(yes)) cancelled("Installation cancelled");
-  if (yes && installLash()) return "lash";
-  p.log.info("Install one later, for example: npm install -g lashcode");
+  if (yes && installClaude()) return "claude";
+  p.log.info(`Install one later, for example: ${INSTALL_CMDS.claude}`);
   return "";
 }
 

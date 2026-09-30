@@ -273,7 +273,7 @@ new_home notools
 TPATH="$WORK/sysbin:$WORK/tools-none"
 run "$SCRIPT_BASH" "$REPO_DIR/install.sh"
 check "no tools: exits 0" [ "$LAST_RC" -eq 0 ]
-check "no tools: no prompt" eval 'lacks "[Y/n]" && lacks "Install lash ("'
+check "no tools: no prompt" eval 'lacks "[Y/n]" && lacks "Install Claude Code ("'
 check "no tools: says so once" [ "$(printf '%s\n' "$LAST_OUT" | grep -c 'No AI CLI tool found')" -eq 1 ]
 check "no tools: active left empty" grep -qx '  active:' "$H/.lacy/config.yaml"
 

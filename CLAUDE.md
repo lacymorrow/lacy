@@ -162,12 +162,12 @@ Full rationale in the header of `lib/zsh/keybindings.zsh`. Tested with zsh-synta
 
 ## Supported AI CLI Tools
 
-From `lacy_tool_cmd()` in `lib/core/mcp.sh`. Order in `LACY_TOOL_LIST` is auto-detect order.
+From `lacy_tool_cmd()` in `lib/core/mcp.sh`. Order in `LACY_TOOL_LIST` is auto-detect order: claude first (the default and "recommended" tool; its answers stream live), then lash.
 
 | Tool     | Command                                     |
 | -------- | ------------------------------------------- |
-| lash     | `lash run -c "query"` (recommended)         |
-| claude   | `claude -p "query"`                         |
+| claude   | `claude -p "query"` (recommended, default)  |
+| lash     | `lash run -c "query"`                       |
 | opencode | `opencode run -c "query"`                   |
 | gemini   | `gemini -p "query"`                         |
 | codex    | `codex exec --skip-git-repo-check resume --last "query"` |
@@ -179,7 +179,7 @@ From `lacy_tool_cmd()` in `lib/core/mcp.sh`. Order in `LACY_TOOL_LIST` is auto-d
 
 lash is an opencode fork by the same author (lash.lacy.sh). Tools handle their own auth. No API keys, no direct API fallback.
 
-Execution paths in `lacy_shell_query_agent()`: server (lash, opencode via background `serve`), claude (JSON + `--resume`), gemini (session), generic (everything else).
+Execution paths in `lacy_shell_query_agent()`: server (lash, opencode via background `serve`), claude (`--resume`; with python3 it runs `--output-format stream-json --include-partial-messages` through `lib/core/claude_stream.py`, which prints text as it arrives and hands the final `result` event back; without python3 it waits for `--output-format json`), gemini (session), generic (everything else).
 
 Per-query output: no "Using X" line. A tool that exits 0 with no stdout gets the failure frame (`<tool> finished without an answer` + stderr tail); lash/opencode print errors only to stderr. A server reply that is 200 with no text and `.info.error` is shown as `Error from <tool>`. gemini: `_lacy_gemini_signed_in` checks for a login (API key env/.env, non-OAuth auth type, token file in ~/.gemini, macOS keychain `gemini-cli-oauth`) before running, since gemini's sign-in `[Y/n]` would be hidden behind the spinner. Resume hint (`Resume: <cmd>`) only after a failure. No tool installed: one `No AI tool found` message listing an install line per tool, no prompt.
 
@@ -319,7 +319,7 @@ LACY_NO_NODE=1 bin/lacy setup         # bash fallback
 
 `install.sh` (Bash 3.2+) and `packages/lacy/index.mjs` behave the same:
 
-- Tool question: one tool installed → none asked. None → one question (install lash? Y/n). Several → picker. No TTY → nothing asked. Skipped when config.yaml exists.
+- Tool question: one tool installed → none asked. None → one question (install Claude Code? Y/n). Several → picker. No TTY → nothing asked. Skipped when config.yaml exists.
 - Already installed on a TTY (curl): menu Update / Reinstall / Uninstall / Cancel. npx: settings dashboard. npx without TTY: `install.sh --update`.
 - Flags: `--update`, `--reinstall`, `--uninstall`, `--bash` (skip Node), `--shell zsh|bash|fish`, `--tool NAME|auto`, `--tool custom "CMD"`. `--beta` / `--channel` removed.
 - Env: `LACY_REPO_URL`, `LACY_REF`, `LACY_TARBALL_URL`, `LACY_NO_NODE`, `NO_COLOR`, `DO_NOT_TRACK`, `LACY_NO_TELEMETRY`.
