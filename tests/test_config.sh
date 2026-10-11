@@ -135,6 +135,29 @@ load
 assert_eq "quotes: outer pair stripped" "custom" "$LACY_ACTIVE_TOOL"
 assert_eq "quotes: inner quotes kept" "claude --system-prompt 'don''t panic' -p" "$LACY_CUSTOM_TOOL_CMD"
 
+cat > "$CFG" <<'EOF'
+agent_tools:
+  active: claude
+EOF
+load
+assert_eq "claude_model: default is haiku when unset" "haiku" "$LACY_CLAUDE_MODEL"
+
+cat > "$CFG" <<'EOF'
+agent_tools:
+  active: claude
+  claude_model: sonnet
+EOF
+load
+assert_eq "claude_model: override read" "sonnet" "$LACY_CLAUDE_MODEL"
+
+cat > "$CFG" <<'EOF'
+agent_tools:
+  active: claude
+  claude_model:
+EOF
+load
+assert_eq "claude_model: empty keeps the haiku default" "haiku" "$LACY_CLAUDE_MODEL"
+
 printf 'agent_tools:\n\tactive:\tcodex\n' > "$CFG"
 load
 assert_eq "tabs: tab indentation and separator" "codex" "$LACY_ACTIVE_TOOL"
@@ -312,6 +335,7 @@ agent_tools:
   # Leave empty to auto-detect.
   active:
   # custom_command: "your-command --flags"
+  # claude_model: haiku  # claude only; haiku is fast for short questions. Name sonnet, opus, or a model id for more.
 
 modes:
   default: auto  # shell, agent, or auto

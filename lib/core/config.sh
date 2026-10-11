@@ -28,6 +28,7 @@ agent_tools:
   # Leave empty to auto-detect.
   active:
   # custom_command: "your-command --flags"
+  # claude_model: haiku  # claude only; haiku is fast for short questions. Name sonnet, opus, or a model id for more.
 
 modes:
   default: auto  # shell, agent, or auto
@@ -70,6 +71,7 @@ _lacy_config_var_for() {
     case "$1" in
         agent_tools.active)         _LACY_CFG_VAR="LACY_ACTIVE_TOOL" ;;
         agent_tools.custom_command) _LACY_CFG_VAR="LACY_CUSTOM_TOOL_CMD" ;;
+        agent_tools.claude_model)   _LACY_CFG_VAR="LACY_CLAUDE_MODEL" ;;
         modes.default)              _LACY_CFG_VAR="LACY_CONFIG_DEFAULT_MODE" ;;
         preheat.eager)              _LACY_CFG_VAR="LACY_PREHEAT_EAGER" ;;
         preheat.server_port)        _LACY_CFG_VAR="LACY_PREHEAT_SERVER_PORT" ;;
@@ -87,6 +89,7 @@ _lacy_config_var_for() {
 _lacy_config_reset_vars() {
     LACY_ACTIVE_TOOL=""
     LACY_CUSTOM_TOOL_CMD=""
+    LACY_CLAUDE_MODEL="haiku"
     LACY_CONFIG_DEFAULT_MODE=""
     LACY_PREHEAT_EAGER="false"
     LACY_PREHEAT_SERVER_PORT="4096"

@@ -1,6 +1,6 @@
 """Keep one claude process running per shell so questions skip startup.
 
-  start <sock> <shell_pid> <idle_secs> [session_id]
+  start <sock> <shell_pid> <idle_secs> [session_id] [model]
       Start claude (stream-json in and out) in the current directory, behind
       a unix socket. Returns once the socket is listening; the keeper itself
       runs detached. It exits when the shell is gone, after idle_secs without
@@ -98,7 +98,7 @@ def ask(sock_path):
     return 1
 
 
-def start(sock_path, shell_pid, idle_secs, session_id):
+def start(sock_path, shell_pid, idle_secs, session_id, model):
     ready_r, ready_w = os.pipe()
     if os.fork():
         os.close(ready_w)
@@ -110,12 +110,12 @@ def start(sock_path, shell_pid, idle_secs, session_id):
     if os.fork():
         os._exit(0)
     try:
-        serve(sock_path, shell_pid, idle_secs, session_id, ready_w)
+        serve(sock_path, shell_pid, idle_secs, session_id, model, ready_w)
     finally:
         os._exit(0)
 
 
-def serve(sock_path, shell_pid, idle_secs, session_id, ready_w):
+def serve(sock_path, shell_pid, idle_secs, session_id, model, ready_w):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
     devnull = os.open(os.devnull, os.O_RDWR)
@@ -138,6 +138,8 @@ def serve(sock_path, shell_pid, idle_secs, session_id, ready_w):
     env.pop("CLAUDECODE", None)
     argv = ["claude", "-p", "--input-format", "stream-json",
             "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
+    if model:
+        argv += ["--model", model]
     if session_id:
         argv += ["--resume", session_id]
     log_path = sock_path + ".log"
@@ -299,7 +301,8 @@ def main():
         return ask(sys.argv[2])
     if len(sys.argv) >= 5 and sys.argv[1] == "start":
         session_id = sys.argv[5] if len(sys.argv) > 5 else ""
-        return start(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), session_id)
+        model = sys.argv[6] if len(sys.argv) > 6 else ""
+        return start(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), session_id, model)
     sys.stderr.write(__doc__)
     return 2
 
