@@ -388,6 +388,7 @@ _lacy_session_build_cmd() {
     local parts="${tool}"
     [[ -n "$session_id" ]] && parts+=" --resume ${session_id}"
     if [[ "$tool" == "claude" ]]; then
+        [[ -n "${LACY_CLAUDE_MODEL:-}" ]] && parts+=" --model ${LACY_CLAUDE_MODEL}"
         parts+=" --output-format json"
     fi
     parts+=" -p"
@@ -496,7 +497,7 @@ lacy_claude_keeper_ensure() {
         lacy_claude_keeper_stop
     fi
     python3 "$script" start "$LACY_CLAUDE_KEEPER_SOCK" "$$" "$(( idle * 60 ))" \
-        "$LACY_PREHEAT_CLAUDE_SESSION_ID" </dev/null >/dev/null 2>&1
+        "$LACY_PREHEAT_CLAUDE_SESSION_ID" "${LACY_CLAUDE_MODEL:-}" </dev/null >/dev/null 2>&1
 }
 
 # ============================================================================

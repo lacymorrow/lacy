@@ -298,6 +298,7 @@ agent_tools:
   # Leave empty to auto-detect.
 ${activeLine}
 ${customLine}
+  # claude_model: haiku  # claude only; haiku is fast for short questions. Name sonnet, opus, or a model id for more.
 
 modes:
   default: auto  # shell, agent, or auto

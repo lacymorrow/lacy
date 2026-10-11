@@ -525,6 +525,26 @@ else
 fi
 
 # ============================================================================
+echo "Claude model flag (agent_tools.claude_model)"
+# ============================================================================
+
+_saved_model="${LACY_CLAUDE_MODEL:-}"
+_saved_sess="$LACY_PREHEAT_CLAUDE_SESSION_ID"
+LACY_PREHEAT_CLAUDE_SESSION_ID=""
+: > "$LACY_PREHEAT_SESSION_FILE"
+
+LACY_CLAUDE_MODEL="haiku"
+assert_eq "model set: --model in build cmd" "claude --model haiku --output-format json -p" "$(lacy_preheat_claude_build_cmd)"
+LACY_CLAUDE_MODEL=""
+assert_eq "model empty: no --model (claude default)" "claude --output-format json -p" "$(lacy_preheat_claude_build_cmd)"
+LACY_CLAUDE_MODEL="sonnet"
+LACY_PREHEAT_CLAUDE_SESSION_ID="s-1"
+assert_eq "model with resume: order kept" "claude --resume s-1 --model sonnet --output-format json -p" "$(lacy_preheat_claude_build_cmd)"
+
+LACY_CLAUDE_MODEL="$_saved_model"
+LACY_PREHEAT_CLAUDE_SESSION_ID="$_saved_sess"
+
+# ============================================================================
 echo "Claude keeper (lib/core/claude_keeper.py)"
 # ============================================================================
 
@@ -576,6 +596,8 @@ EOF
     LACY_SHELL_DIR="$REPO_DIR"
     LACY_ACTIVE_TOOL="claude"
     LACY_PREHEAT_CLAUDE_IDLE_MINUTES=15
+    _saved_keeper_model="${LACY_CLAUDE_MODEL:-}"
+    LACY_CLAUDE_MODEL="haiku"
     starts() { grep -c '^start' "$AGENT_LOG" 2>/dev/null || echo 0; }
     running() { [[ -n "$(_lacy_claude_keeper_pid)" ]] && echo yes || echo no; }
     mkdir -p "$TEST_TMPDIR/kdir1" "$TEST_TMPDIR/kdir2"
@@ -591,6 +613,7 @@ EOF
     assert_eq "keeper: answer shown once" "1" "$(grep -c 'Kept: first' <<< "$out")"
     assert_eq "keeper: claude started once" "1" "$(starts)"
     assert_contains "keeper: stream-json in and out" "$(cat "$AGENT_LOG")" "--input-format stream-json --output-format stream-json"
+    assert_contains "keeper: model passed to claude" "$(cat "$AGENT_LOG")" "--model haiku"
     assert_eq "keeper: session captured" "s-keep" "$LACY_PREHEAT_CLAUDE_SESSION_ID"
     assert_eq "keeper: still running" "yes" "$(running)"
     kpid=$(_lacy_claude_keeper_pid)
@@ -643,6 +666,7 @@ EOF
     assert_eq "keeper shell exit: stopped" "gone" "$(kill -0 "$kpid" 2>/dev/null || echo gone)"
 
     LACY_PREHEAT_CLAUDE_IDLE_MINUTES=0
+    LACY_CLAUDE_MODEL="$_saved_keeper_model"
     cd "$_saved_pwd" || exit 1
     LACY_SHELL_DIR="$_saved_dir"
     cp "$TEST_TMPDIR/claude.plain" "$TEST_TMPDIR/bin/claude"
