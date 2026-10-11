@@ -1,0 +1,22 @@
+LAC-4254 — Error from lash/opencode (free tier dead-end)
+
+Prompt the user typed (AUTO mode):
+  can preview play gifs on mac?
+
+BEFORE
+  Error from lash
+
+  OpenCode's free tier can only be used from within OpenCode
+
+  Resume: lash --session ses_ed3577edcffexk541kfH7j7zaX
+  Check your setup: lacy doctor
+  Switch tools:     tool set <name>
+
+AFTER (rendered live from this branch, ANSI stripped)
+
+  Error from lash
+
+  lash's free tier only works inside the OpenCode app, so it can't answer here.
+
+  Check your setup: lacy doctor
+  Switch tools:     tool set claude
