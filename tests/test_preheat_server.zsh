@@ -193,6 +193,11 @@ def handle_client(conn):
                     status_code = 200
                     resp_body = json.dumps({"info": {"error": {"name": "APIError",
                         "data": {"message": "free tier refused"}}}, "parts": []})
+                elif "MOCK_FREETIER" in qt:
+                    # The OpenCode Zen free-tier refusal: tool is unusable here
+                    status_code = 500
+                    resp_body = json.dumps({"info": {"error": {"name": "ProviderError",
+                        "data": {"message": "OpenCode's free tier can only be used from within OpenCode"}}}})
                 elif "MOCK_EMPTY" in qt:
                     status_code = 200
                     resp_body = json.dumps([{"role": "assistant", "parts": [{"type": "step-finish"}]}])
@@ -486,6 +491,23 @@ run_tests_for_tool() {
         pass "$tool: 200 with error shows the reason"
     else
         fail "$tool: 200 with error shows the reason" "got: $mcp_result"
+    fi
+
+    # Free-tier refusal: plain reason, no misleading resume line, concrete switch.
+    # A session is live here, so without the fix a Resume line would print.
+    lacy_shell_query_agent "MOCK_FREETIER please" > "$_mcp_out" 2>/dev/null
+    mcp_rc=$?
+    mcp_result=$(sed "$_strip" "$_mcp_out")
+    assert_eq "$tool: free-tier refusal returns 1" "1" "$mcp_rc"
+    if [[ "$mcp_result" == *"free tier only works inside the OpenCode app"* ]]; then
+        pass "$tool: free-tier refusal is explained plainly"
+    else
+        fail "$tool: free-tier refusal is explained plainly" "got: $mcp_result"
+    fi
+    if [[ "$mcp_result" != *"Resume:"* ]]; then
+        pass "$tool: free-tier refusal drops the resume hint"
+    else
+        fail "$tool: free-tier refusal drops the resume hint" "got: $mcp_result"
     fi
 
     # Gone session through the $(...) path: parent resets its copy

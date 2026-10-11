@@ -332,13 +332,48 @@ _lacy_print_resume_hint() {
     return 0
 }
 
+# A tool error that means the tool can never answer from Lacy (bad entitlement,
+# free tier), not a transient failure. lash and opencode on the OpenCode Zen
+# free tier refuse `run` and `serve`: they have no provider outside the app.
+# Resuming the same session just reproduces it, so the way out is another tool.
+# Usage: _lacy_error_is_unusable "$message"
+_lacy_error_is_unusable() {
+    case "$1" in
+        *"free tier can only be used from within"*) return 0 ;;
+    esac
+    return 1
+}
+
+# An installed tool other than the one that just failed, preferring the
+# recommended default (claude, first in LACY_TOOL_LIST). Empty when nothing
+# else is on PATH. Usage: alt=$(_lacy_suggest_alternative_tool <failed_tool>)
+_lacy_suggest_alternative_tool() {
+    local failed="$1" t
+    for t in "${LACY_TOOL_LIST[@]}"; do
+        [[ "$t" == "$failed" ]] && continue
+        if command -v "$t" >/dev/null 2>&1; then
+            printf '%s' "$t"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Guidance after a failed query: the resume command when there is one, then
 # where to look next. Marks the failure as explained so callers stay quiet.
+# When the tool is unusable (set by _lacy_print_server_error) the resume hint
+# is dropped and the switch line names a concrete installed alternative.
 # Usage: _lacy_print_failure_hints <tool_name>
 _lacy_print_failure_hints() {
-    _lacy_print_resume_hint "$1"
+    [[ "${_LACY_ERROR_UNUSABLE:-false}" == "true" ]] || _lacy_print_resume_hint "$1"
     lacy_print_color 238 "  Check your setup: lacy doctor"
-    lacy_print_color 238 "  Switch tools:     tool set <name>"
+    local alt
+    alt=$(_lacy_suggest_alternative_tool "$1")
+    if [[ -n "$alt" ]]; then
+        lacy_print_color 238 "  Switch tools:     tool set ${alt}"
+    else
+        lacy_print_color 238 "  Switch tools:     tool set <name>"
+    fi
     _LACY_QUERY_GUIDED=true
 }
 
@@ -546,6 +581,7 @@ lacy_shell_query_agent() {
     # "exit_code=N" in zsh and clobbers pipestatus.
     local exit_code=0
     _LACY_QUERY_GUIDED=false
+    _LACY_ERROR_UNUSABLE=false
 
     # Auto-detect if not set
     if [[ -z "$tool" ]]; then
@@ -927,10 +963,14 @@ _lacy_print_server_error() {
     local tool="$1" body="$2"
     local msg
     msg=$(_lacy_server_error_message "$body")
+    _LACY_ERROR_UNUSABLE=false
     echo ""
     lacy_print_color 196 "  Error from ${tool}"
     echo ""
-    if [[ -n "$msg" ]]; then
+    if _lacy_error_is_unusable "$msg"; then
+        _LACY_ERROR_UNUSABLE=true
+        lacy_print_color 220 "  ${tool}'s free tier only works inside the OpenCode app, so it can't answer here."
+    elif [[ -n "$msg" ]]; then
         lacy_print_color 220 "  ${msg}"
     else
         lacy_print_color 220 "  The server returned an error (no details available)"
