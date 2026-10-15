@@ -6,6 +6,13 @@ Writes the final `result` event to argv[2] so the caller can read the session
 ID and errors; when claude printed no result event, the non-JSON output
 (startup noise, error text) is written there instead. Creates argv[2] +
 ".printed" when any answer text reached the terminal.
+
+Also writes every shell command claude ran to argv[2] + ".commands", one
+`ok<TAB>command` / `err<TAB>command` line each, in the order they ran, so the
+caller can show what touched the machine. Commands come from the stream's
+`tool_use` blocks, never from parsing claude's prose, and are flattened to a
+single line each. Written at the end alongside the result, so an interrupted
+turn leaves no list.
 """
 import json
 import os
@@ -20,6 +27,8 @@ printed = False
 at_line_start = True
 result = None
 other = []
+commands = []   # [id, command, failed] per Bash tool call, in stream order
+by_id = {}
 
 
 def stop_spinner():
@@ -31,6 +40,38 @@ def stop_spinner():
         time.sleep(0.05)  # let a frame in flight land before clearing it
     sys.stderr.write("\x1b[2K\r\x1b[?25h")
     sys.stderr.flush()
+
+
+def flatten(command):
+    """One command, one line: collapse newlines and runs of blank space so a
+    heredoc or a wrapped pipeline cannot break the list apart."""
+    return " ".join(str(command).split())
+
+
+def record_tool_use(event):
+    """Collect the shell commands from an assistant message. The assistant
+    event carries each tool_use block's full input, so the partial
+    input_json_delta fragments never have to be reassembled."""
+    for block in event.get("message", {}).get("content", []) or []:
+        if block.get("type") != "tool_use" or block.get("name") != "Bash":
+            continue
+        command = flatten(block.get("input", {}).get("command", ""))
+        if not command:
+            continue
+        entry = [block.get("id"), command, False]
+        commands.append(entry)
+        if entry[0] is not None:
+            by_id[entry[0]] = entry
+
+
+def record_tool_result(event):
+    """Mark the commands that failed, matched back by tool_use_id."""
+    for block in event.get("message", {}).get("content", []) or []:
+        if block.get("type") != "tool_result":
+            continue
+        entry = by_id.get(block.get("tool_use_id"))
+        if entry is not None and block.get("is_error"):
+            entry[2] = True
 
 
 def write(text):
@@ -58,6 +99,10 @@ for line in sys.stdin:
         delta = inner.get("delta", {})
         if delta.get("type") == "text_delta" and delta.get("text"):
             write(delta["text"])
+    elif kind == "assistant":
+        record_tool_use(event)
+    elif kind == "user":
+        record_tool_result(event)
     elif kind == "result":
         result = line
 
@@ -65,6 +110,10 @@ if printed and not at_line_start:
     sys.stdout.write("\n")
 with open(result_path, "w") as f:
     f.write(result if result is not None else "".join(other))
+if commands:
+    with open(result_path + ".commands", "w") as f:
+        for _id, command, failed in commands:
+            f.write("%s\t%s\n" % ("err" if failed else "ok", command))
 if printed:
     # Tells the caller not to print the answer a second time
     open(result_path + ".printed", "w").close()
