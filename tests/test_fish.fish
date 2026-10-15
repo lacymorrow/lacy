@@ -71,6 +71,16 @@ echo ""
 echo "--- Detection: auto mode ---"
 set -g LACY_SHELL_MODE auto
 
+# Rule 8 routes `VAR=value cmd` to the shell only when `cmd` resolves, so the
+# cargo probe needs a cargo on PATH. Stub it: otherwise the probe tests whether
+# the developer has Rust installed, not rule 8 (GH #85).
+set -g STUB_BIN $TMP_ROOT/stubbin
+mkdir -p $STUB_BIN
+printf '#!/bin/sh\nexit 0\n' > $STUB_BIN/cargo
+chmod +x $STUB_BIN/cargo
+set -g CLASSIFY_SAVED_PATH $PATH
+set -gx PATH $STUB_BIN $PATH
+
 for input in 'ls -la' 'git status' 'cd /home' 'npm install' 'pwd' 'help' \
         'RUST_LOG=debug cargo run' 'FOO=bar node index.js' 'FOO=bar BAZ=qux node index.js' \
         'CC=gcc make -j4' 'FOO=bar' 'asdfgh' '!rm /tmp/test' '  ls -la' \
@@ -144,6 +154,9 @@ probe agent 'ls -la'
 probe agent ''
 set -g LACY_SHELL_MODE auto
 probe neutral ''
+
+set -gx PATH $CLASSIFY_SAVED_PATH
+command rm -rf $STUB_BIN
 
 echo ""
 echo "--- Generated word lists ---"

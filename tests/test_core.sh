@@ -164,12 +164,26 @@ assert_eq "perfect lets move on → agent" "agent" "$(lacy_shell_classify_input 
 assert_eq "thanks for the help → agent" "agent" "$(lacy_shell_classify_input 'thanks for the help')"
 
 # Inline env var assignments → shell
+# Rule 8 routes `VAR=value cmd` to the shell only when `cmd` resolves, so the
+# cargo probe needs a cargo on PATH. Stub it: otherwise the assertion tests
+# whether the developer has Rust installed, not rule 8 (GH #85).
+_assign_saved_PATH="$PATH"
+_assign_stub_bin=$(mktemp -d "${TMPDIR:-/tmp}/lacy-test-assign.XXXXXX")
+printf '#!/bin/sh\nexit 0\n' > "$_assign_stub_bin/cargo"
+chmod +x "$_assign_stub_bin/cargo"
+PATH="$_assign_stub_bin:$PATH"
+[[ -n "${ZSH_VERSION:-}" ]] && rehash
+
 assert_eq "RUST_LOG=debug cargo run → shell" "shell" "$(lacy_shell_classify_input 'RUST_LOG=debug cargo run')"
 assert_eq "FOO=bar node index.js → shell" "shell" "$(lacy_shell_classify_input 'FOO=bar node index.js')"
 assert_eq "FOO=bar BAZ=qux node index.js → shell" "shell" "$(lacy_shell_classify_input 'FOO=bar BAZ=qux node index.js')"
 assert_eq "CC=gcc make -j4 → shell" "shell" "$(lacy_shell_classify_input 'CC=gcc make -j4')"
 assert_eq "FOO=bar (bare assignment, no cmd) → shell" "shell" "$(lacy_shell_classify_input 'FOO=bar')"
 assert_eq "FOO=bar nonexistent thing → agent" "agent" "$(lacy_shell_classify_input 'FOO=bar nonexistent_cmd thing')"
+
+PATH="$_assign_saved_PATH"
+[[ -n "${ZSH_VERSION:-}" ]] && rehash
+command rm -rf "$_assign_stub_bin"
 
 # Single word non-command → shell (typo)
 assert_eq "asdfgh → shell" "shell" "$(lacy_shell_classify_input 'asdfgh')"
