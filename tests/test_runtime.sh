@@ -518,6 +518,50 @@ EOF
     assert_eq "stream signal: tool ran once" "1" "$(count_lines "$AGENT_LOG")"
     assert_eq "stream signal: session kept" "sess-123" "$LACY_PREHEAT_CLAUDE_SESSION_ID"
 
+    # Ctrl+C reaches the streamer as SIGINT: it keeps the text already shown,
+    # leaves the caller's files behind, and says nothing about Python.
+    # The streamer runs in the foreground, where it inherits the suite's
+    # default SIGINT the way a terminal's foreground group would; a background
+    # watcher sends the signal once the first chunk is on screen.
+    _sig_out="$TEST_TMPDIR/stream_sigint.out"
+    _sig_res="$TEST_TMPDIR/stream_sigint.res"
+    _sig_fifo="$TEST_TMPDIR/stream_sigint.fifo"
+    _sig_pid="$TEST_TMPDIR/stream_sigint.pid"
+    command rm -f "$_sig_out" "$_sig_res" "$_sig_res.printed" "$_sig_fifo" "$_sig_pid"
+    mkfifo "$_sig_fifo"
+    # One chunk of answer, then nothing: claude is still thinking
+    {
+        printf '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"half an answer"}}}\n'
+        sleep 30
+    } > "$_sig_fifo" &
+    _feeder=$!
+    {
+        # Up to 10s for the chunk to land: CI runners start python slowly
+        _i=0
+        while [ "$_i" -lt 50 ]; do
+            if [ -s "$_sig_pid" ] && grep -q 'half an answer' "$_sig_out" 2>/dev/null; then
+                break
+            fi
+            _i=$((_i + 1))
+            sleep 0.2
+        done
+        kill -INT "$(cat "$_sig_pid" 2>/dev/null)" 2>/dev/null
+    } &
+    _killer=$!
+    sh -c 'echo $$ > "$1"; exec python3 -u "$2" 0 "$3"' _ \
+        "$_sig_pid" "$REPO_DIR/lib/core/claude_stream.py" "$_sig_res" \
+        < "$_sig_fifo" > "$_sig_out" 2>&1
+    rc=$?
+    kill "$_feeder" "$_killer" 2>/dev/null
+    wait "$_feeder" "$_killer" 2>/dev/null
+    command rm -f "$_sig_fifo" "$_sig_pid"
+    assert_eq "stream interrupt: rc 130" "130" "$rc"
+    assert_not_contains "stream interrupt: no traceback" "$(cat "$_sig_out")" "Traceback"
+    assert_not_contains "stream interrupt: no python noise" "$(cat "$_sig_out")" "KeyboardInterrupt"
+    assert_contains "stream interrupt: answer kept" "$(cat "$_sig_out")" "half an answer"
+    assert_eq "stream interrupt: result file written" "yes" "$([[ -f "$_sig_res" ]] && echo yes || echo no)"
+    assert_eq "stream interrupt: answer not printed twice" "yes" "$([[ -f "$_sig_res.printed" ]] && echo yes || echo no)"
+
     LACY_SHELL_DIR="$_saved_dir"
     cp "$TEST_TMPDIR/claude.plain" "$TEST_TMPDIR/bin/claude"
 else

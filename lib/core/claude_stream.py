@@ -6,6 +6,10 @@ Writes the final `result` event to argv[2] so the caller can read the session
 ID and errors; when claude printed no result event, the non-JSON output
 (startup noise, error text) is written there instead. Creates argv[2] +
 ".printed" when any answer text reached the terminal.
+
+Ctrl+C reaches this process too, since SIGINT goes to the whole foreground
+group. It stops where it is, keeps the text already on screen, and exits 130
+without a traceback.
 """
 import json
 import os
@@ -43,28 +47,41 @@ def write(text):
     at_line_start = text.endswith("\n")
 
 
-for line in sys.stdin:
-    try:
-        event = json.loads(line)
-    except ValueError:
-        other.append(line)
-        continue
-    kind = event.get("type")
-    if kind == "stream_event":
-        inner = event.get("event", {})
-        # A new assistant message after a tool call: keep it off the last line
-        if inner.get("type") == "message_start" and printed:
-            write("\n" if at_line_start else "\n\n")
-        delta = inner.get("delta", {})
-        if delta.get("type") == "text_delta" and delta.get("text"):
-            write(delta["text"])
-    elif kind == "result":
-        result = line
+interrupted = False
 
-if printed and not at_line_start:
-    sys.stdout.write("\n")
-with open(result_path, "w") as f:
-    f.write(result if result is not None else "".join(other))
-if printed:
-    # Tells the caller not to print the answer a second time
-    open(result_path + ".printed", "w").close()
+try:
+    for line in sys.stdin:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            other.append(line)
+            continue
+        kind = event.get("type")
+        if kind == "stream_event":
+            inner = event.get("event", {})
+            # A new assistant message after a tool call: keep it off the last line
+            if inner.get("type") == "message_start" and printed:
+                write("\n" if at_line_start else "\n\n")
+            delta = inner.get("delta", {})
+            if delta.get("type") == "text_delta" and delta.get("text"):
+                write(delta["text"])
+        elif kind == "result":
+            result = line
+except KeyboardInterrupt:
+    interrupted = True
+
+try:
+    if printed and not at_line_start:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    with open(result_path, "w") as f:
+        f.write(result if result is not None else "".join(other))
+    if printed:
+        # Tells the caller not to print the answer a second time
+        open(result_path + ".printed", "w").close()
+except KeyboardInterrupt:
+    # A second Ctrl+C while finishing up: still no traceback
+    interrupted = True
+
+if interrupted:
+    sys.exit(130)
