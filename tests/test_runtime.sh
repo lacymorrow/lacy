@@ -532,14 +532,17 @@ EOF
     # One chunk of answer, then nothing: claude is still thinking
     {
         printf '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"half an answer"}}}\n'
-        sleep 10
+        sleep 30
     } > "$_sig_fifo" &
     _feeder=$!
     {
-        for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        # Up to 10s for the chunk to land: CI runners start python slowly
+        _i=0
+        while [ "$_i" -lt 50 ]; do
             if [ -s "$_sig_pid" ] && grep -q 'half an answer' "$_sig_out" 2>/dev/null; then
                 break
             fi
+            _i=$((_i + 1))
             sleep 0.2
         done
         kill -INT "$(cat "$_sig_pid" 2>/dev/null)" 2>/dev/null
