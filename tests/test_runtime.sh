@@ -666,6 +666,38 @@ else
     echo "  SKIP: python3 not found (agent commands list)"
 fi
 
+# One line per command, cut to the terminal width, never wrapped. The
+# " (failed)" suffix lands after the command, so it has to come out of the
+# same budget: without that, every failed line is 9 columns too wide and
+# wraps, leaving a lone ")" on the next row (LAC-4685).
+_saved_show="${LACY_SHOW_COMMANDS:-summary}"
+_saved_columns="${COLUMNS:-80}"
+_saved_commands="${_LACY_CLAUDE_COMMANDS:-}"
+LACY_SHOW_COMMANDS="summary"
+_long_cmd="find . -name '*.sh' -type f | xargs grep -l TODO | sort | head -20 | uniq -c"
+_LACY_CLAUDE_COMMANDS="err	${_long_cmd}
+ok	${_long_cmd}"
+for _cols in 40 60 80 120; do
+    export COLUMNS="$_cols"
+    # The ellipsis is one column but three bytes, so flatten it before awk
+    # measures, and strip colour first.
+    _widest=$(_lacy_print_agent_commands | plain | sed 's/…/./g' |
+        awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
+    if (( _widest <= _cols )); then
+        assert_eq "commands truncation: fits ${_cols} cols" "fits" "fits"
+    else
+        assert_eq "commands truncation: fits ${_cols} cols" "fits" "${_widest} cols wide"
+    fi
+done
+# The failed line is still marked, not just shortened
+export COLUMNS=80
+out=$(_lacy_print_agent_commands | plain)
+assert_contains "commands truncation: failure still marked" "$out" "… (failed)"
+assert_eq "commands truncation: still one line per command" "3" "$(printf '%s\n' "$out" | grep -c .)"
+export COLUMNS="$_saved_columns"
+_LACY_CLAUDE_COMMANDS="$_saved_commands"
+LACY_SHOW_COMMANDS="$_saved_show"
+
 # ============================================================================
 echo "Claude model flag (agent_tools.claude_model)"
 # ============================================================================

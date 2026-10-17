@@ -449,14 +449,18 @@ _lacy_print_agent_commands() {
     [[ -z "$text" ]] && return 0
 
     # A long pipeline is cut to the terminal width, never wrapped: the block
-    # stays one line per command so it can be read at a glance.
-    local cols width
+    # stays one line per command so it can be read at a glance. The suffix a
+    # failed command gets is printed after the command, so it comes out of the
+    # same budget: otherwise a failed line runs past the edge and wraps.
+    local cols width failed_suffix failed_width
     cols=$(tput cols 2>/dev/null || echo 80)
     (( cols < 40 )) && cols=40
     width=$(( cols - 8 ))
+    failed_suffix=" (failed)"
+    failed_width=$(( width - ${#failed_suffix} ))
 
     # Not named "status": that is a read-only special variable in zsh
-    local shown=0 total=0 state command line
+    local shown=0 total=0 state command line line_width
     while IFS=$'\t' read -r state command; do
         [[ -z "$command" ]] && continue
         total=$(( total + 1 ))
@@ -465,9 +469,11 @@ _lacy_print_agent_commands() {
             lacy_print_color "$LACY_COLOR_NEUTRAL" "  ran:"
         fi
         line="$command"
-        (( ${#line} > width )) && line="${line:0:$(( width - 1 ))}…"
+        line_width=$width
+        [[ "$state" == "err" ]] && line_width=$failed_width
+        (( ${#line} > line_width )) && line="${line:0:$(( line_width - 1 ))}…"
         if [[ "$state" == "err" ]]; then
-            lacy_print_color 220 "    \$ ${line} (failed)"
+            lacy_print_color 220 "    \$ ${line}${failed_suffix}"
         else
             lacy_print_color "$LACY_COLOR_NEUTRAL" "    \$ ${line}"
         fi
