@@ -11,6 +11,18 @@ version you can install.
 
 ## [Unreleased]
 
+## [1.8.29] - 2026-10-18
+
+### Added
+
+- default claude to a quick model for short questions (LAC-4255) (#82) (165d405)
+
+### Fixed
+
+- stop the claude streamer quietly on Ctrl+C (LAC-4670) (#88) (98d9793)
+- **tests:** stub cargo so the suites stop asserting on the local toolchain (LAC-4508) (#86) (b6e32ac)
+- guide free-tier lash/opencode users to a working tool (LAC-4254) (#81) (25ddf04)
+
 ## [1.8.27] - 2026-09-30
 
 ### Added
@@ -373,7 +385,8 @@ First tagged release. Work on Lacy started on 2025-08-11, and everything below l
 
 - The Python helper and the direct OpenAI and Anthropic API calls the first prototype used.
 
-[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.27...HEAD
+[Unreleased]: https://github.com/lacymorrow/lacy/compare/v1.8.29...HEAD
+[1.8.29]: https://github.com/lacymorrow/lacy/compare/v1.8.28...v1.8.29
 [1.8.27]: https://github.com/lacymorrow/lacy/compare/v1.8.26...v1.8.27
 [1.8.26]: https://github.com/lacymorrow/lacy/compare/v1.8.25...v1.8.26
 [1.8.25]: https://github.com/lacymorrow/lacy/compare/v1.8.24...v1.8.25
