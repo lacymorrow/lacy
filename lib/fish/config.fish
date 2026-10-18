@@ -22,7 +22,7 @@ set -g LACY_TOOL_LIST \
 set -g LACY_COLOR_SHELL 34          # green
 set -g LACY_COLOR_AGENT 200         # magenta
 set -g LACY_COLOR_AUTO 75           # blue
-set -g LACY_COLOR_NEUTRAL 238       # dark gray
+set -g LACY_COLOR_NEUTRAL 244       # gray (#808080; readable on light and dark)
 
 # ============================================================================
 # Output helpers

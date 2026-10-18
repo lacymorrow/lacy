@@ -66,7 +66,7 @@ function _lacy_print_no_tool --description "Explain that no AI tool is installed
     set -l red (_lacy_sgr '38;5;196')
     set -l bold (_lacy_sgr 1)
     set -l green (_lacy_sgr '38;5;34')
-    set -l dim (_lacy_sgr '38;5;238')
+    set -l dim (_lacy_sgr "38;5;$LACY_COLOR_NEUTRAL")
     set -l blue (_lacy_sgr '38;5;75')
     set -l off (_lacy_sgr 0)
     printf '\n%s  No AI tool detected.%s Lacy needs an AI CLI to handle queries.\n\n' "$red" "$off"
@@ -179,7 +179,7 @@ function quit --description "Leave Lacy Shell; the shell keeps running"
 end
 
 function _lacy_quit --description "Turn Lacy Shell off in this session"
-    set -l dim (_lacy_sgr '38;5;238')
+    set -l dim (_lacy_sgr "38;5;$LACY_COLOR_NEUTRAL")
     set -l off (_lacy_sgr 0)
     printf '\n%sExiting Lacy Shell...%s\n\n' "$dim" "$off"
 
