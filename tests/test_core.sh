@@ -715,6 +715,46 @@ _LACY_CTX_TERMINAL_CAPTURE_CMD="$_saved_capture_cmd"
 _LACY_CTX_OUTPUT_ENABLED="$_saved_output_enabled"
 
 # ============================================================================
+# Palette legibility
+# ============================================================================
+# LAC-4795: the dim gray was 238 (#444444), which is 1.4:1 against a One Dark
+# background. Everything Lacy dims was drawn correctly and could not be read.
+# Guard the floor rather than the value, so the palette can still be tuned.
+
+echo ""
+echo "--- Colors: dim gray stays readable ---"
+
+# WCAG contrast of LACY_COLOR_NEUTRAL against a background, x100.
+# Indices 232-255 are the gray ramp: level = 8 + 10 * (index - 232).
+_contrast_x100() {
+    awk -v idx="$1" -v bg="$2" 'BEGIN {
+        lev = (idx >= 232 && idx <= 255) ? 8 + 10 * (idx - 232) : -1
+        if (lev < 0) { print -1; exit }
+        split(lev " " bg, v)
+        for (i = 1; i <= 2; i++) {
+            c = v[i] / 255
+            l[i] = (c <= 0.04045) ? c / 12.92 : exp(2.4 * log((c + 0.055) / 1.055))
+        }
+        hi = (l[1] > l[2]) ? l[1] : l[2]
+        lo = (l[1] > l[2]) ? l[2] : l[1]
+        printf "%d", ((hi + 0.05) / (lo + 0.05)) * 100
+    }'
+}
+
+assert_eq "dim gray is on the 256-colour gray ramp" "yes" \
+    "$( [[ "$LACY_COLOR_NEUTRAL" -ge 232 && "$LACY_COLOR_NEUTRAL" -le 255 ]] && echo yes || echo no )"
+
+# 3:1 is the WCAG floor for text that is deliberately de-emphasised. Checked
+# against the darkest and lightest backgrounds a terminal realistically uses.
+for _bg_name in "black:0" "one-dark:40" "white:255"; do
+    _bg_level="${_bg_name##*:}"
+    _cr=$(_contrast_x100 "$LACY_COLOR_NEUTRAL" "$_bg_level")
+    assert_eq "dim gray clears 3:1 on ${_bg_name%%:*} (got ${_cr}/100)" "yes" \
+        "$( [[ "$_cr" -ge 300 ]] && echo yes || echo no )"
+done
+unset _bg_name _bg_level _cr
+
+# ============================================================================
 # Results
 # ============================================================================
 

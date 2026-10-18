@@ -311,7 +311,37 @@ _session hint '' ''
 _type_dump 1 ''
 assert_contains "hint never shown again" 'POST=[]' "$(_line 1)"
 
-# --- 7. no prompt re-render per keystroke (starship-like PS1) ------------------
+# --- 7. ghost text is rendered, not just set ------------------------------------
+# LAC-4795: POSTDISPLAY and region_highlight were both correct while the ghost
+# text was invisible on screen, so asserting on POSTDISPLAY alone passes with
+# the bug live. These cases read the bytes ZLE actually wrote to the pty.
+echo "ghost text rendering"
+# Read the palette value rather than hardcoding it, so an intentional palette
+# change does not have to be made twice. The legibility floor is in test_core.sh.
+LACY_COLOR_NEUTRAL=$(sed -n 's/^LACY_COLOR_NEUTRAL=\([0-9]*\).*/\1/p' "$REPO/lib/core/constants.sh")
+mkdir -p "$T/reroute"
+: >| "$T/reroute/.hinted"   # disarm the first-run hint; this tests the reroute ghost
+_session reroute '' ''
+ZOUT=""
+# `false` is a real command, `the`/`my` are NL markers, and it exits 1, so
+# precmd arms the reroute suggestion on the next empty prompt.
+zpty -w -n lz $'false the my thing\r'
+_pause 150
+_type_dump 1 ''
+l1=$(_line 1)
+assert_contains "reroute suggestion armed" 'POST=[@ false the my thing]' "$l1"
+assert_contains "ghost text highlight tagged for lacy" \
+    "0 20 fg=${LACY_COLOR_NEUTRAL} memo=lacy" "$l1"
+assert_contains "ghost text drawn in the neutral colour" \
+    $'\e[38;5;'"${LACY_COLOR_NEUTRAL}"$'m@ false the my thing' "$ZOUT"
+
+# Right arrow accepts it, and accepting leaves nothing behind on screen
+zpty -w -n lz $'\e[C'
+_type_dump 2 ''
+assert_contains "right arrow accepts the ghost text" 'BUF=[@ false the my thing]' "$(_line 2)"
+assert_contains "accepting clears POSTDISPLAY" 'POST=[]' "$(_line 2)"
+
+# --- 8. no prompt re-render per keystroke (starship-like PS1) ------------------
 echo "prompt re-render"
 _session s1 '' 'setopt prompt_subst; _stub() { print -n x >> "$T/stub"; }; PS1='"'"'$(_stub)ZP> '"'"'; : >| "$T/stub"'
 _run 1 '_state settled'

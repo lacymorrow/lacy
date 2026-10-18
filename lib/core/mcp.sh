@@ -106,7 +106,7 @@ _lacy_render_markdown() {
 _lacy_render_markdown_basic() {
     local bold=$'\e[1m' nobold=$'\e[22m'
     local cyan=$'\e[36m' reset=$'\e[0m'
-    local dim=$'\e[38;5;238m'
+    local dim=$'\e[38;5;'"${LACY_COLOR_NEUTRAL}"'m'
     local cols; cols=$(tput cols 2>/dev/null || echo 80)
     local hr="${dim}$(printf '%*s' "$cols" | tr ' ' '─')${reset}"
 
@@ -328,7 +328,7 @@ lacy_resume_cmd() {
 _lacy_print_resume_hint() {
     local resume_cmd
     resume_cmd=$(lacy_resume_cmd "$1")
-    [[ -n "$resume_cmd" ]] && lacy_print_color 238 "  Resume: ${resume_cmd}"
+    [[ -n "$resume_cmd" ]] && lacy_print_color "$LACY_COLOR_NEUTRAL" "  Resume: ${resume_cmd}"
     return 0
 }
 
@@ -366,13 +366,13 @@ _lacy_suggest_alternative_tool() {
 # Usage: _lacy_print_failure_hints <tool_name>
 _lacy_print_failure_hints() {
     [[ "${_LACY_ERROR_UNUSABLE:-false}" == "true" ]] || _lacy_print_resume_hint "$1"
-    lacy_print_color 238 "  Check your setup: lacy doctor"
+    lacy_print_color "$LACY_COLOR_NEUTRAL" "  Check your setup: lacy doctor"
     local alt
     alt=$(_lacy_suggest_alternative_tool "$1")
     if [[ -n "$alt" ]]; then
-        lacy_print_color 238 "  Switch tools:     tool set ${alt}"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "  Switch tools:     tool set ${alt}"
     else
-        lacy_print_color 238 "  Switch tools:     tool set <name>"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "  Switch tools:     tool set <name>"
     fi
     _LACY_QUERY_GUIDED=true
 }
@@ -395,7 +395,7 @@ lacy_format_tool_error() {
 
     # We have an error: format it nicely
     local red=196
-    local dim=238
+    local dim="$LACY_COLOR_NEUTRAL"
     local yellow=220
 
     echo ""
@@ -561,7 +561,7 @@ _lacy_print_no_tool() {
             lacy_print_color 34 "$row"
         else
             printf -v row '    %-10s %s' "$t" "$hint"
-            lacy_print_color 238 "$row"
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "$row"
         fi
     done
     echo ""
@@ -605,7 +605,7 @@ lacy_shell_query_agent() {
         if [[ -z "${LACY_CUSTOM_TOOL_CMD//[[:space:]]/}" ]]; then
             echo ""
             lacy_print_color 196 "  The custom tool is selected but has no command."
-            lacy_print_color 238 "  Set one with: tool set custom \"your-command --flags\""
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  Set one with: tool set custom \"your-command --flags\""
             echo ""
             _LACY_QUERY_GUIDED=true
             return 1
@@ -616,7 +616,7 @@ lacy_shell_query_agent() {
         if [[ -z "$cmd" ]]; then
             echo ""
             lacy_print_color 196 "  Unknown tool '${tool}'. Known: $(_lacy_tool_list_joined)"
-            lacy_print_color 238 "  Pick one with: tool set <name>"
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  Pick one with: tool set <name>"
             echo ""
             _LACY_QUERY_GUIDED=true
             return 1
@@ -628,7 +628,7 @@ lacy_shell_query_agent() {
     if ! _lacy_split_cmd "$cmd"; then
         echo ""
         lacy_print_color 196 "  Could not read the custom command (unbalanced quotes): ${cmd}"
-        lacy_print_color 238 "  Fix it with: tool set custom \"your-command --flags\""
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "  Fix it with: tool set custom \"your-command --flags\""
         echo ""
         _LACY_QUERY_GUIDED=true
         return 1
@@ -642,9 +642,9 @@ lacy_shell_query_agent() {
             lacy_print_color 196 "  ${tool} is set as your tool but is not installed."
             local _install_hint
             _install_hint=$(lacy_tool_install_cmd "$tool")
-            [[ -n "$_install_hint" ]] && lacy_print_color 238 "  Install: ${_install_hint}"
+            [[ -n "$_install_hint" ]] && lacy_print_color "$LACY_COLOR_NEUTRAL" "  Install: ${_install_hint}"
         fi
-        lacy_print_color 238 "  Or switch: tool set <name>"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "  Or switch: tool set <name>"
         echo ""
         _LACY_QUERY_GUIDED=true
         return 1
@@ -678,7 +678,7 @@ lacy_shell_query_agent() {
                     if [[ -n "$server_result" ]]; then
                         _lacy_render_markdown "$server_result"
                     else
-                        lacy_print_color 238 "  (no text response)"
+                        lacy_print_color "$LACY_COLOR_NEUTRAL" "  (no text response)"
                     fi
                     _lacy_save_last_session
                     echo ""
@@ -686,7 +686,7 @@ lacy_shell_query_agent() {
                     ;;
                 "$LACY_SERVER_QUERY_TIMEOUT")
                     # The server has the prompt and is still working on it.
-                    lacy_print_color 238 "  still running: ${tool} --session ${LACY_PREHEAT_SERVER_SESSION_ID}"
+                    lacy_print_color "$LACY_COLOR_NEUTRAL" "  still running: ${tool} --session ${LACY_PREHEAT_SERVER_SESSION_ID}"
                     echo ""
                     return 0
                     ;;
@@ -781,8 +781,8 @@ lacy_shell_query_agent() {
         echo ""
         if ! _lacy_gemini_signed_in; then
             lacy_print_color 196 "  gemini is not signed in."
-            lacy_print_color 238 "  Sign in once by running: gemini"
-            lacy_print_color 238 "  Or switch: tool set <name>"
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  Sign in once by running: gemini"
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  Or switch: tool set <name>"
             echo ""
             _LACY_QUERY_GUIDED=true
             return 1
@@ -934,7 +934,7 @@ _lacy_print_tool_failure() {
         # awk 1 prints every line with a newline, so a file whose last line
         # has none (Bun's "Bun v1.x (macOS arm64)") does not glue to the next
         while IFS= read -r line || [[ -n "$line" ]]; do
-            lacy_print_color 238 "  ${line}"
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  ${line}"
         done < <(awk 1 "$out_file" "$err_file" 2>/dev/null | tail -n 10 | sed $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g')
     fi
     echo ""
