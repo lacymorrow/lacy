@@ -29,9 +29,9 @@ lacy_shell_execute_agent() {
     (( rc >= LACY_SIGNAL_EXIT_THRESHOLD )) && return 0
     if [[ "$_LACY_QUERY_GUIDED" != true ]]; then
         echo ""
-        lacy_print_color 238 "$LACY_MSG_RECOVERY_TOOL"
-        lacy_print_color 238 "$LACY_MSG_RECOVERY_ASK"
-        lacy_print_color 238 "$LACY_MSG_RECOVERY_DOCTOR"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_RECOVERY_TOOL"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_RECOVERY_ASK"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "$LACY_MSG_RECOVERY_DOCTOR"
         echo ""
     fi
     return 0
@@ -101,7 +101,7 @@ _lacy_tool_persist() {
     fi
 
     if [[ "$ok" == true ]]; then
-        lacy_print_color 238 "Saved to ${LACY_SHELL_CONFIG_FILE}"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "Saved to ${LACY_SHELL_CONFIG_FILE}"
     else
         lacy_print_color 196 "Not saved (${_LACY_CONFIG_SET_ERROR}). Applies to this shell only."
         return 1
@@ -139,7 +139,7 @@ lacy_shell_tool() {
                     lacy_print_color_n 34 "  ✓"
                     echo " $t"
                 else
-                    lacy_print_color_n 238 "  ○"
+                    lacy_print_color_n "$LACY_COLOR_NEUTRAL" "  ○"
                     echo " $t (not installed)"
                 fi
             done
@@ -147,7 +147,7 @@ lacy_shell_tool() {
                 lacy_print_color_n 34 "  ✓"
                 echo " custom ($LACY_CUSTOM_TOOL_CMD)"
             else
-                lacy_print_color_n 238 "  ○"
+                lacy_print_color_n "$LACY_COLOR_NEUTRAL" "  ○"
                 echo " custom (not configured)"
             fi
             echo ""
