@@ -439,6 +439,55 @@ _lacy_strip_leading_noise() {
     printf '%s' "$output"
 }
 
+# List the shell commands the agent ran, as collected by claude_stream.py.
+# Reads the "ok<TAB>command" / "err<TAB>command" lines in $_LACY_CLAUDE_COMMANDS
+# and prints one line each. Prints nothing when no command ran, so a plain
+# question keeps its plain answer. Off with display.commands: off.
+_lacy_print_agent_commands() {
+    [[ "${LACY_SHOW_COMMANDS:-summary}" == "off" ]] && return 0
+    local text="${_LACY_CLAUDE_COMMANDS:-}"
+    [[ -z "$text" ]] && return 0
+
+    # A long pipeline is cut to the terminal width, never wrapped: the block
+    # stays one line per command so it can be read at a glance. The suffix a
+    # failed command gets is printed after the command, so it comes out of the
+    # same budget: otherwise a failed line runs past the edge and wraps.
+    local cols width failed_suffix failed_width
+    cols=$(tput cols 2>/dev/null || echo 80)
+    (( cols < 40 )) && cols=40
+    width=$(( cols - 8 ))
+    failed_suffix=" (failed)"
+    failed_width=$(( width - ${#failed_suffix} ))
+
+    # Not named "status": that is a read-only special variable in zsh
+    local shown=0 total=0 state command line line_width
+    while IFS=$'\t' read -r state command; do
+        [[ -z "$command" ]] && continue
+        total=$(( total + 1 ))
+        (( shown >= LACY_SHOW_COMMANDS_MAX )) && continue
+        if (( shown == 0 )); then
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  ran:"
+        fi
+        line="$command"
+        line_width=$width
+        [[ "$state" == "err" ]] && line_width=$failed_width
+        (( ${#line} > line_width )) && line="${line:0:$(( line_width - 1 ))}…"
+        if [[ "$state" == "err" ]]; then
+            lacy_print_color 220 "    \$ ${line}${failed_suffix}"
+        else
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "    \$ ${line}"
+        fi
+        shown=$(( shown + 1 ))
+    done <<EOF
+$text
+EOF
+
+    if (( total > shown )); then
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "    … $(( total - shown )) more"
+    fi
+    return 0
+}
+
 # Run claude once. With python3 the answer streams to the terminal as it is
 # written (stream-json); without it, claude runs to the end and the caller
 # renders the result. Sets _LACY_CLAUDE_JSON (the normalized result object)
@@ -449,6 +498,7 @@ _lacy_claude_run() {
     local streamer="${LACY_SHELL_DIR:-}/lib/core/claude_stream.py"
     cmd=$(lacy_preheat_claude_build_cmd)
     _LACY_CLAUDE_STREAMED=false
+    _LACY_CLAUDE_COMMANDS=""
     lacy_start_spinner
     if [[ -n "${LACY_SHELL_DIR:-}" && -f "$streamer" ]] && command -v python3 >/dev/null 2>&1; then
         local result_file
@@ -474,7 +524,11 @@ _lacy_claude_run() {
         lacy_stop_spinner
         _LACY_CLAUDE_JSON=$(_lacy_claude_normalize_output "$(cat "$result_file" 2>/dev/null)")
         [[ -f "$result_file.printed" ]] && _LACY_CLAUDE_STREAMED=true
-        command rm -f "$result_file" "$result_file.printed"
+        # Read the command list out before the file goes: the caller prints it
+        # after the answer, and a retry starts its own list.
+        [[ -f "$result_file.commands" ]] &&
+            _LACY_CLAUDE_COMMANDS=$(cat "$result_file.commands" 2>/dev/null)
+        command rm -f "$result_file" "$result_file.printed" "$result_file.commands"
     else
         _LACY_CLAUDE_JSON=$(unset CLAUDECODE; _lacy_run_tool_cmd "$cmd" "$query" <"$stdin_src" 2>&1)
         rc=$?
@@ -748,6 +802,8 @@ lacy_shell_query_agent() {
 
         # Structured errors (e.g. invalid API key), even with exit code 0
         if lacy_format_tool_error "$json_output" "$tool"; then
+            # A command may have run before the error: say so before the hints
+            _lacy_print_agent_commands
             _lacy_print_failure_hints "$tool"
             echo ""
             (( exit_code == 0 )) && exit_code=1
@@ -764,6 +820,7 @@ lacy_shell_query_agent() {
                     printf '%s\n' "$json_output"
                 fi
             fi
+            _lacy_print_agent_commands
             lacy_preheat_claude_capture_session "$json_output"
             _lacy_save_last_session
             echo ""
@@ -771,6 +828,7 @@ lacy_shell_query_agent() {
         fi
 
         printf '%s\n' "$json_output"
+        _lacy_print_agent_commands
         _lacy_print_failure_hints "$tool"
         echo ""
         return "$exit_code"

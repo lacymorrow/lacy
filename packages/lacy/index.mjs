@@ -303,6 +303,9 @@ ${customLine}
 modes:
   default: auto  # shell, agent, or auto
 
+# display:
+#   commands: summary  # list the shell commands the agent ran (claude only). off hides them.
+
 # preheat:
 #   eager: false
 #   server_port: 4096
