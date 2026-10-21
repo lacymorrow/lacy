@@ -107,6 +107,10 @@ _lacy_render_markdown_basic() {
     local bold=$'\e[1m' nobold=$'\e[22m'
     local cyan=$'\e[36m' reset=$'\e[0m'
     local dim=$'\e[38;5;238m'
+    # NO_COLOR (and TERM=dumb, which sets it): plain text, same structure
+    if [[ -n "${NO_COLOR:-}" ]]; then
+        bold="" nobold="" cyan="" reset="" dim=""
+    fi
     local cols; cols=$(tput cols 2>/dev/null || echo 80)
     local hr="${dim}$(printf '%*s' "$cols" | tr ' ' '─')${reset}"
 
