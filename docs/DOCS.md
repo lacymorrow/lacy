@@ -108,6 +108,9 @@ agent_tools:
 modes:
   default: auto  # shell, agent, or auto
 
+# display:
+#   commands: summary  # list the shell commands the agent ran (claude only). off hides them.
+
 # preheat:
 #   eager: false
 #   server_port: 4096
@@ -128,6 +131,7 @@ modes:
 | `context.output`             | `true`    | Include visible terminal output with questions             |
 | `context.output_lines`       | `50`      | Maximum lines of terminal output                           |
 | `spinner.style`              | `braille` | `ascii` for terminals without Unicode                      |
+| `display.commands`           | `summary` | List the shell commands the agent ran under its answer (see below). `off` hides them |
 | `logging.queries`            | `false`   | Keep a log of your questions (see below)                   |
 
 `tool set <name>` in zsh or Bash writes `agent_tools.active` and prints `Saved to ~/.lacy/config.yaml`, or `Not saved (reason)` if the file cannot be written.
@@ -141,6 +145,24 @@ Lacy uses the AI tool's own login. It does not take API keys.
 ### Background server and sessions
 
 lash and opencode answer through a background `serve` process on `preheat.server_port`, which avoids a cold start on each question. claude and gemini continue the same conversation between questions. `/new` starts over and `/resume` picks up the last saved session, including one from another terminal. `lacy uninstall` stops the background server.
+
+### Commands the agent ran
+
+Lacy is a shell, and the agent runs commands on your machine. Each answer ends with the list of what ran:
+
+```
+  ran:
+    $ ls lib/core/*.sh | wc -l
+    $ which some-missing-tool (failed)
+```
+
+Anything that did not succeed is marked `(failed)`. A command that was blocked for permission is marked the same way, because it also did not succeed.
+
+The list works with claude. Lacy already reads claude's structured output stream, so it takes the commands straight from that stream instead of scraping the printed text. The other tools hand back plain prose with no record of what ran, so they list nothing.
+
+A long command is cut to the width of your terminal. Past ten commands the rest is counted instead of printed (`… 3 more`). A question that ran nothing prints nothing. If you stop an answer with Ctrl+C, there is no list.
+
+Set `display.commands: off` to hide it.
 
 ## Query log
 

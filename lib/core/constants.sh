@@ -34,6 +34,10 @@ LACY_COLOR_AUTO=75         # Blue - auto mode
 LACY_COLOR_NEUTRAL=238     # Dark gray - neutral/dim
 LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
+# Most commands an answer lists before it collapses into "… N more". The list
+# is there to be read at a glance, not to be a transcript.
+LACY_SHOW_COMMANDS_MAX=10
+
 # === Detection ===
 # (LACY_HARD_AGENT_INDICATORS removed: replaced by LACY_AGENT_WORDS below)
 
