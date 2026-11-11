@@ -347,6 +347,9 @@ modes:
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+
+# telemetry:
+#   enabled: false  # true shares anonymous counts: shell opened, feature names, error class. Never your queries.
 EOF
 )
 assert_eq "template: exact canonical text" "$expected_template" "$(cat "$CFG")"
@@ -521,6 +524,37 @@ assert_contains "mode: leads with the current mode" "$(printf '%s\n' "$out" | se
 assert_contains "mode: shows the shell glyph" "$out" '$  runs in the shell'
 assert_contains "mode: shows the agent glyph" "$out" '?  goes to the AI agent'
 assert_eq "mode status: same output as mode" "$out" "$(NO_COLOR=1 lacy_shell_mode status)"
+
+echo
+echo "Telemetry opt-in (Aptabase)"
+LACY_SHELL_HOME_SAVED="$LACY_SHELL_HOME"
+source "$REPO_DIR/lib/core/telemetry.sh" 2>/dev/null
+FAKEBIN=$(mktemp -d)
+CURL_LOG="$FAKEBIN/curl.log"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\n' "$CURL_LOG" > "$FAKEBIN/curl"
+chmod +x "$FAKEBIN/curl"
+_wait_curl() { local i; for i in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$CURL_LOG" ]] && return 0; sleep 0.2; done; return 1; }
+
+rm -f "$CFG"
+lacy_shell_load_config >/dev/null 2>&1
+assert_eq "telemetry: off by default" "false" "$LACY_TELEMETRY_ENABLED"
+PATH="$FAKEBIN:$PATH" _lacy_track_app_open
+sleep 0.5
+assert_eq "telemetry: off sends nothing" "no" "$([[ -s "$CURL_LOG" ]] && echo yes || echo no)"
+
+printf 'telemetry:\n  enabled: true\n' > "$CFG"
+lacy_shell_load_config >/dev/null 2>&1
+assert_eq "telemetry: config turns it on" "true" "$LACY_TELEMETRY_ENABLED"
+PATH="$FAKEBIN:$PATH" _lacy_track_feature 'agent query"; rm -rf /'
+_wait_curl
+assert_contains "telemetry: key sent" "$(cat "$CURL_LOG")" "App-Key: A-US-9570901449"
+assert_contains "telemetry: feature name sanitized" "$(cat "$CURL_LOG")" '"props":{"name":"agentqueryrm-rf"}'
+
+: > "$CURL_LOG"
+DO_NOT_TRACK=1 PATH="$FAKEBIN:$PATH" _lacy_track_app_open
+sleep 0.5
+assert_eq "telemetry: DO_NOT_TRACK wins over config" "no" "$([[ -s "$CURL_LOG" ]] && echo yes || echo no)"
+rm -rf "$FAKEBIN"
 
 echo "================================================================"
 echo "Results: $PASS passed, $FAIL failed"

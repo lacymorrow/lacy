@@ -40,6 +40,9 @@ modes:
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+
+# telemetry:
+#   enabled: false  # true shares anonymous counts: shell opened, feature names, error class. Never your queries.
 EOF
 }
 
@@ -80,6 +83,7 @@ _lacy_config_var_for() {
         context.output_lines)       _LACY_CFG_VAR="_LACY_CTX_OUTPUT_MAX_LINES" ;;
         spinner.style)              _LACY_CFG_VAR="LACY_SPINNER_STYLE" ;;
         logging.queries)            _LACY_CFG_VAR="LACY_LOG_QUERIES" ;;
+        telemetry.enabled)          _LACY_CFG_VAR="LACY_TELEMETRY_ENABLED" ;;
         *)                          _LACY_CFG_VAR="" ;;
     esac
 }
@@ -98,6 +102,7 @@ _lacy_config_reset_vars() {
     _LACY_CTX_OUTPUT_MAX_LINES=50
     LACY_SPINNER_STYLE="braille"
     LACY_LOG_QUERIES="false"
+    LACY_TELEMETRY_ENABLED="false"
 }
 
 # Normalize a YAML-ish boolean into "true" or "false"
@@ -262,6 +267,7 @@ lacy_shell_load_config() {
 
     _lacy_config_bool "$LACY_PREHEAT_EAGER" LACY_PREHEAT_EAGER
     _lacy_config_bool "$LACY_LOG_QUERIES" LACY_LOG_QUERIES
+    _lacy_config_bool "$LACY_TELEMETRY_ENABLED" LACY_TELEMETRY_ENABLED
     _lacy_config_bool "$_LACY_CTX_OUTPUT_ENABLED" _LACY_CTX_OUTPUT_ENABLED
     [[ "$LACY_PREHEAT_SERVER_PORT" == *[!0-9]* ]] && LACY_PREHEAT_SERVER_PORT="4096"
     [[ -z "$LACY_PREHEAT_CLAUDE_IDLE_MINUTES" || "$LACY_PREHEAT_CLAUDE_IDLE_MINUTES" == *[!0-9]* ]] && LACY_PREHEAT_CLAUDE_IDLE_MINUTES="15"

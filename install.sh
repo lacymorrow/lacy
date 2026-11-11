@@ -654,7 +654,30 @@ modes:
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+
+# telemetry:
+#   enabled: false  # true shares anonymous counts: shell opened, feature names, error class. Never your queries.
 EOF
+}
+
+# One question, once, on a fresh install: share anonymous usage counts?
+# Enter or anything but y keeps it off. Without a terminal nothing is asked.
+choose_telemetry() {
+    can_prompt || return 0
+    local reply=""
+    printf "${BOLD}Share anonymous usage counts?${NC}\n"
+    printf "  Lacy can count that a shell opened, which feature ran (by name) and the kind of error.\n"
+    printf "  Never your questions, commands or keys. Off unless you say yes.\n"
+    printf "  Change it any time with: lacy telemetry on|off\n"
+    ask reply "Share? [y/N]: " || reply=""
+    printf "\n"
+    if [[ "$reply" =~ ^[Yy] ]]; then
+        sed -i.bak -e 's/^# telemetry:$/telemetry:/' -e 's/^#   enabled: false/  enabled: true/' "$CONFIG_FILE"
+        command rm -f "${CONFIG_FILE}.bak"
+        ok "Telemetry on"
+    else
+        ok "Telemetry off"
+    fi
 }
 
 # EXPLICIT=1 when the tool came from --tool (overrides an existing config).
@@ -708,7 +731,10 @@ do_install() {
     [[ -z "$SELECTED_TOOL" && ! -f "$CONFIG_FILE" ]] && choose_tool
     install_release "$(resolve_ref)"
     configure_shell
+    local fresh=0
+    [[ -f "$CONFIG_FILE" ]] || fresh=1
     create_config "$explicit"
+    [[ "$fresh" == "1" ]] && choose_telemetry
     track_event "install" "curl"
     show_success "installed"
 }

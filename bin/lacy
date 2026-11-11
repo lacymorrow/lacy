@@ -481,6 +481,38 @@ cmd_config() {
     esac
 }
 
+cmd_telemetry() {
+    case "${1:-status}" in
+        on|off)
+            local want="true"
+            [[ "$1" == "off" ]] && want="false"
+            [[ -f "$CONFIG_FILE" ]] || die "No config file. Run: lacy install"
+            if ( LACY_SHELL_CONFIG_FILE="$CONFIG_FILE"; source "${INSTALL_DIR}/lib/core/config.sh" && lacy_config_set telemetry enabled "$want" ); then
+                if [[ "$want" == "true" ]]; then
+                    success "Telemetry on. New shells share anonymous counts: shell opened, feature names, error class. Never your queries."
+                else
+                    success "Telemetry off. New shells send nothing."
+                fi
+            else
+                die "Could not update $CONFIG_FILE"
+            fi
+            ;;
+        status|"")
+            local state="off"
+            if [[ -f "$CONFIG_FILE" ]] &&
+               awk '/^telemetry:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]+enabled:/{print}' "$CONFIG_FILE" | grep -Eq 'enabled:[[:space:]]*(true|yes|on)'; then
+                state="on"
+            fi
+            [[ "${DO_NOT_TRACK:-}" == "1" || "${LACY_NO_TELEMETRY:-}" == "1" ]] && state="off (DO_NOT_TRACK or LACY_NO_TELEMETRY is set)"
+            printf 'Telemetry: %s\n' "$state"
+            printf 'Off by default. Change with: lacy telemetry on|off\n'
+            ;;
+        *)
+            echo "Usage: lacy telemetry [on|off|status]"
+            ;;
+    esac
+}
+
 cmd_setup() {
     if ! is_installed; then
         die "Lacy Shell is not installed. Run: lacy install"
@@ -775,6 +807,7 @@ _lacy() {
         'info:Show a short introduction'
         'doctor:Check for common problems'
         'config:Show or edit configuration'
+        'telemetry:Turn anonymous usage counts on or off'
         'new:Forget the saved agent session'
         'resume:Show the saved agent session'
         'logs:Show recent agent query log'
@@ -869,6 +902,7 @@ ${BOLD}Commands:${NC}
   info           Show a short introduction
   doctor         Check for common problems
   config         Show config (config edit, config path)
+  telemetry      Anonymous usage counts, off by default (telemetry on|off)
   new            Forget the saved agent session
   resume         Show the saved agent session
   logs [N]       Show the last N agent queries (default: 50)
@@ -913,6 +947,7 @@ main() {
         info)       cmd_info ;;
         doctor)     cmd_doctor "$@" ;;
         config|c)   cmd_config "$@" ;;
+        telemetry)  cmd_telemetry "$@" ;;
         new|/new|reset|/reset|clear|/clear) cmd_new "$@" ;;
         resume|/resume)                     cmd_resume "$@" ;;
         logs)         cmd_logs "$@" ;;

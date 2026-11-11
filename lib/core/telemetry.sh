@@ -99,3 +99,61 @@ _lacy_track_first_load() {
 
     _lacy_track_event "first_load" "$method"
 }
+
+# ============================================================================
+# Aptabase app telemetry (LAC-7620). Opt-in, off by default.
+# ============================================================================
+# Five events and nothing else: app_open, feature_used(name), purchase_started,
+# purchase_completed, error(class). Lacy Shell has no purchases, so those two
+# are never sent. No queries, no paths, no keys, no identifiers beyond a random
+# per-shell session id. On only when `telemetry.enabled: true` in config.yaml
+# (`lacy telemetry on`), and DO_NOT_TRACK=1 / LACY_NO_TELEMETRY=1 still win.
+
+# Aptabase Cloud US app key for Lacy Shell. Ships in the plugin; not a secret.
+_LACY_APTABASE_KEY="${LACY_APTABASE_KEY:-A-US-9570901449}"
+_LACY_APTABASE_URL="${LACY_APTABASE_URL:-https://us.aptabase.com/api/v0/event}"
+_LACY_APTABASE_SESSION=""
+
+_lacy_telemetry_enabled() {
+    [[ "${DO_NOT_TRACK:-}" == "1" ]] && return 1
+    [[ "${LACY_NO_TELEMETRY:-}" == "1" ]] && return 1
+    [[ "${LACY_TELEMETRY_ENABLED:-false}" == "true" ]]
+}
+
+# Send one event. Usage: _lacy_apt_send <event> [prop_name prop_value]
+# Names and values are reduced to [A-Za-z0-9_.-], so free text cannot leave.
+_lacy_apt_send() {
+    _lacy_telemetry_enabled || return 0
+    command -v curl >/dev/null 2>&1 || return 0
+
+    local event="${1//[^A-Za-z0-9_.-]/}" pname="${2//[^A-Za-z0-9_.-]/}" pvalue="${3//[^A-Za-z0-9_.-]/}"
+    [[ -n "$event" ]] || return 0
+
+    if [[ -z "$_LACY_APTABASE_SESSION" ]]; then
+        _LACY_APTABASE_SESSION="$(date +%s)${RANDOM}${RANDOM}${RANDOM}"
+    fi
+
+    local version="" pkg_file="${LACY_SHELL_HOME}/package.json"
+    if [[ -f "$pkg_file" ]]; then
+        version=$(grep '"version"' "$pkg_file" 2>/dev/null | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"//' | sed 's/".*//')
+    fi
+    version="${version//[^A-Za-z0-9_.-]/}"
+
+    local props=""
+    [[ -n "$pname" && -n "$pvalue" ]] && props=",\"props\":{\"${pname}\":\"${pvalue}\"}"
+
+    local os_name
+    os_name="$(uname -s 2>/dev/null || echo unknown)"
+    os_name="${os_name//[^A-Za-z0-9_.-]/}"
+
+    (curl -sf --connect-timeout 3 --max-time 5 -X POST "$_LACY_APTABASE_URL" \
+        -H "Content-Type: application/json" \
+        -H "App-Key: ${_LACY_APTABASE_KEY}" \
+        -d "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"sessionId\":\"${_LACY_APTABASE_SESSION}\",\"eventName\":\"${event}\",\"systemProps\":{\"isDebug\":false,\"osName\":\"${os_name}\",\"appVersion\":\"${version:-unknown}\",\"sdkVersion\":\"lacy-sh@1\"}${props}}" \
+        >/dev/null 2>&1 &)
+}
+
+_lacy_track_app_open() { _lacy_apt_send app_open; }
+_lacy_track_feature() { _lacy_apt_send feature_used name "$1"; }
+# Pass a short class such as "tool_failure", never a message.
+_lacy_track_error() { _lacy_apt_send error class "$1"; }
