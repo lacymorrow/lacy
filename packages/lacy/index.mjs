@@ -588,6 +588,24 @@ async function chooseTool() {
   return "";
 }
 
+// One question, asked once on a fresh install. Enter keeps it off.
+async function askTelemetry() {
+  if (!isInteractive()) return false;
+  const yes = await p.confirm({
+    message: "Share anonymous usage counts? Lacy can count that a shell opened, which feature ran (by name) and the kind of error. Never your questions, commands or keys. Change it any time with: lacy telemetry on|off",
+    initialValue: false,
+  });
+  if (p.isCancel(yes)) cancelled("Installation cancelled");
+  return yes === true;
+}
+
+function enableTelemetry(text, on) {
+  if (!on) return text;
+  return text
+    .replace(/^# telemetry:$/m, "telemetry:")
+    .replace(/^#   enabled: false/m, "  enabled: true");
+}
+
 function appendLacyBlock(file, sourceLine, pathLine, content) {
   const needPath = !PATH_LINE_RE.test(content);
   appendFileSync(file, `\n# Lacy Shell\n${sourceLine}\n${needPath ? `${pathLine}\n` : ""}`);
@@ -659,7 +677,8 @@ async function install() {
   p.log.success(configureShell(shellConfig));
 
   if (!existsSync(CONFIG_FILE)) {
-    writeFileSync(CONFIG_FILE, defaultConfig(selectedTool || ""));
+    const share = await askTelemetry();
+    writeFileSync(CONFIG_FILE, enableTelemetry(defaultConfig(selectedTool || ""), share));
   }
 
   await trackEvent("install");
