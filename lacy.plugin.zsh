@@ -29,6 +29,7 @@ lacy_shell_init() {
     lacy_shell_init_detection_cache
 
     lacy_shell_load_config
+    _lacy_track_app_open
     lacy_shell_setup_keybindings
     lacy_preheat_init
     lacy_shell_setup_prompt

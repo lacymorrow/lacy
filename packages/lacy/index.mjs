@@ -310,6 +310,9 @@ modes:
 
 # logging:
 #   queries: false  # true writes ~/.lacy/logs/queries.log (owner-only)
+
+# telemetry:
+#   enabled: false  # true shares anonymous counts: shell opened, feature names, error class. Never your queries.
 `;
 }
 

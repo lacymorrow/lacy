@@ -656,6 +656,7 @@ lacy_shell_query_agent() {
 
     # Opt-in query log (logging.queries): the question as typed, nothing else
     _lacy_log_query "$tool" "$raw_query"
+    _lacy_track_feature "agent_query"
 
     # Prepend delta-based terminal context (cwd, git, exit code, recent commands).
     # Only includes what changed since the last query. Uses a result variable
@@ -919,6 +920,7 @@ _lacy_stream_tool_output() {
 # tool wrote (stdout then stderr, dimmed, escapes stripped), and a recovery hint.
 _lacy_print_tool_failure() {
     local tool="$1" code="$2" out_file="$3" err_file="$4"
+    _lacy_track_error "tool_failure"
     # A single JSON error line was already rendered by the stream; do not repeat it
     local first_line=""
     IFS= read -r first_line < "$out_file" 2>/dev/null
