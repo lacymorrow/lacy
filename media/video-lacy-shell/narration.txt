@@ -1,0 +1,17 @@
+[B01 0:05]
+This is my shell. I type ls, it runs. Nothing new.
+
+[B02 0:13]
+Now a question. Same prompt. Watch the mark flip from dollar to question mark as I type. That line went to my AI tool instead of the shell.
+
+[B03 0:10]
+No model made that call. It checks the first word against a list. ls is a command, what is not. So it's instant, and it never guesses.
+
+[B04 0:16]
+Here's the catch. make is a real command, so this runs in the shell, and fails. So it offers the same line to the agent. Right arrow, Enter.
+
+[B05 0:08]
+Works with claude, codex, opencode, gemini, whatever you've already got. Runs in zsh, bash or fish. One line to install.
+
+[B06 0:04]
+lacy dot sh.

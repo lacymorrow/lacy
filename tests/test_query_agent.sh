@@ -260,6 +260,24 @@ else
     PASS=$(( PASS + 1 ))
 fi
 
+# --- _lacy_render_markdown_basic honors NO_COLOR -----------------------------
+md_input=$'# Heading\n**bold** and `code`\n---'
+# constants.sh sets NO_COLOR when TERM=dumb, so pin it in both directions
+saved_no_color="${NO_COLOR:-}"
+
+unset NO_COLOR
+out=$(_lacy_render_markdown_basic "$md_input")
+assert_contains "markdown: colored output has escapes" "$out" $'\e['
+
+NO_COLOR=1
+out=$(_lacy_render_markdown_basic "$md_input")
+if [[ -n "$saved_no_color" ]]; then NO_COLOR="$saved_no_color"; else unset NO_COLOR; fi
+assert_not_contains "markdown: NO_COLOR has no escapes" "$out" $'\e['
+assert_contains "markdown: NO_COLOR keeps heading text" "$out" "Heading"
+assert_contains "markdown: NO_COLOR keeps bold text" "$out" "bold and code"
+# The rule line still prints, just without the dim/reset wrapper
+assert_eq "markdown: NO_COLOR keeps all three lines" "3" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')"
+
 echo "================================================================"
 echo "Results: $PASS passed, $FAIL failed"
 if [[ $FAIL -gt 0 ]]; then
