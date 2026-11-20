@@ -670,15 +670,21 @@ fi
 # " (failed)" suffix lands after the command, so it has to come out of the
 # same budget: without that, every failed line is 9 columns too wide and
 # wraps, leaving a lone ")" on the next row (LAC-4685).
+#
+# COLUMNS is set but NOT exported here, which is what a real shell looks like,
+# and tput is shimmed to the 80 it answers with inside $(...). Reading the
+# width with `tput cols 2>/dev/null` then renders every line at 80 and these
+# assertions fail: that is the whole of LAC-8752.
 _saved_show="${LACY_SHOW_COMMANDS:-summary}"
 _saved_columns="${COLUMNS:-80}"
 _saved_commands="${_LACY_CLAUDE_COMMANDS:-}"
 LACY_SHOW_COMMANDS="summary"
+tput() { [[ "${1:-}" == "cols" ]] && printf '80\n'; return 0; }
 _long_cmd="find . -name '*.sh' -type f | xargs grep -l TODO | sort | head -20 | uniq -c"
 _LACY_CLAUDE_COMMANDS="err	${_long_cmd}
 ok	${_long_cmd}"
 for _cols in 40 60 80 120; do
-    export COLUMNS="$_cols"
+    COLUMNS="$_cols"
     # The ellipsis is one column but three bytes, so flatten it before awk
     # measures, and strip colour first.
     _widest=$(_lacy_print_agent_commands | plain | sed 's/…/./g' |
@@ -690,11 +696,38 @@ for _cols in 40 60 80 120; do
     fi
 done
 # The failed line is still marked, not just shortened
-export COLUMNS=80
+COLUMNS=80
 out=$(_lacy_print_agent_commands | plain)
 assert_contains "commands truncation: failure still marked" "$out" "… (failed)"
 assert_eq "commands truncation: still one line per command" "3" "$(printf '%s\n' "$out" | grep -c .)"
-export COLUMNS="$_saved_columns"
+
+# The width itself: the shell's own COLUMNS wins over tput.
+COLUMNS=60
+assert_eq "term cols: shell COLUMNS used, not tput" "60" "$(lacy_term_cols)"
+COLUMNS=120
+assert_eq "term cols: a wide COLUMNS is not clamped to tput's 80" "120" "$(lacy_term_cols)"
+
+# A COLUMNS the shell never set, or set to something unusable, falls through
+# to the terminal, or to 80 when there is no terminal to ask. Only bash gets
+# there: zsh keeps COLUMNS an integer and refuses every one of these values,
+# leaving the real width in place.
+if [[ -n "${BASH_VERSION:-}" ]]; then
+    if _tty_cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2) && [[ "$_tty_cols" == [1-9]* ]]; then
+        _expect_no_columns="$_tty_cols"
+    else
+        _expect_no_columns="80"
+    fi
+    for _bad in "" "0" "not-a-number"; do
+        COLUMNS="$_bad"
+        assert_eq "term cols: COLUMNS='${_bad}' falls back to the terminal" \
+            "$_expect_no_columns" "$(lacy_term_cols)"
+    done
+else
+    echo "  SKIP: zsh COLUMNS cannot hold an invalid value (term cols fallback)"
+fi
+
+unset -f tput
+COLUMNS="$_saved_columns"
 _LACY_CLAUDE_COMMANDS="$_saved_commands"
 LACY_SHOW_COMMANDS="$_saved_show"
 

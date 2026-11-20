@@ -385,6 +385,7 @@ Telemetry (`lib/core/telemetry.sh`): zsh/Bash send one `first_load` event per in
 - Repo (`lib/`) and install dir (`~/.lacy/lib/`) are separate copies. Changes must be applied to both (or symlink `~/.lacy` to the repo).
 - Colors (256): shell 34, agent 200, auto 75, neutral 238.
 - Output helpers: `lacy_print_color` / `lacy_print_color_n` (honor `NO_COLOR`, print text as-is). Bash adapter: `_lacy_bash_print_color`. fish: `_lacy_sgr`.
+- Terminal width: `lacy_term_cols` (constants.sh). Reads `$COLUMNS`, then `stty size </dev/tty`, then 80. Never `tput cols` inside `$(...)`: stdout is a pipe, ncurses reads the size from stderr, and `2>/dev/null` hides that, so it answers 80 on every terminal.
 - Use `command rm` for internal cleanup (users alias `rm`).
 - Installer uses `printf`, not `echo -e`.
 - Never touch the real `~/.lacy` or rc files in tests: `HOME=$(mktemp -d) LACY_NO_NODE=1 DO_NOT_TRACK=1`.

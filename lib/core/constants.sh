@@ -253,6 +253,23 @@ lacy_print_color_n() {
     fi
 }
 
+# Terminal width in columns, for output that has to fit the screen.
+#
+# $COLUMNS is the width the shell itself tracks and the only source that is
+# right here. `tput cols` is not: inside $(...) stdout is a pipe, ncurses then
+# reads the window size from stderr, and `2>/dev/null` hides that too, so it
+# falls back to terminfo's 80 on every terminal (LAC-8752). stty is asked
+# against the terminal directly, for a shell that keeps no COLUMNS.
+# Usage: cols=$(lacy_term_cols)
+lacy_term_cols() {
+    local cols="${COLUMNS:-}"
+    if [[ ! "$cols" =~ ^[1-9][0-9]*$ ]]; then
+        cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
+    fi
+    [[ "$cols" =~ ^[1-9][0-9]*$ ]] || cols=80
+    printf '%s\n' "$cols"
+}
+
 # Check if a value is in a list (portable array membership)
 # Usage: _lacy_in_list "value" "item1" "item2" ...
 _lacy_in_list() {

@@ -107,7 +107,7 @@ _lacy_render_markdown_basic() {
     local bold=$'\e[1m' nobold=$'\e[22m'
     local cyan=$'\e[36m' reset=$'\e[0m'
     local dim=$'\e[38;5;238m'
-    local cols; cols=$(tput cols 2>/dev/null || echo 80)
+    local cols; cols=$(lacy_term_cols)
     local hr="${dim}$(printf '%*s' "$cols" | tr ' ' '─')${reset}"
 
     printf '%s\n' "$1" | sed -E \
@@ -453,7 +453,7 @@ _lacy_print_agent_commands() {
     # failed command gets is printed after the command, so it comes out of the
     # same budget: otherwise a failed line runs past the edge and wraps.
     local cols width failed_suffix failed_width
-    cols=$(tput cols 2>/dev/null || echo 80)
+    cols=$(lacy_term_cols)
     (( cols < 40 )) && cols=40
     width=$(( cols - 8 ))
     failed_suffix=" (failed)"
