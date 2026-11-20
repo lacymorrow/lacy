@@ -252,7 +252,7 @@ Nushell adapter removed. No `lib/*.zsh` wrappers, no `lib/commands/`.
 
 ### fish (`lib/fish/`)
 
-- Requires fish 3.1+. fish 4 is tested in CI; fish 3 code paths (`\r` key names, no `history append`) are untested.
+- Requires fish 3.1+. fish 4 is tested in CI; fish 3 code paths (`\r` key names, Ctrl+Space via `string unescape -- '\c@'`, no `history append`) are untested. Never write a literal `\c@` token: fish 4.2+ rejects it at parse time, even in a branch that never runs.
 - Commands: `mode [shell|agent|auto|toggle]`, `ask`, `quit`. Ctrl+Space cycles modes. No `tool`, `/new`, `/resume`, terminal context, preheat, reroute, or ghost text.
 - Enter (`bind -M default|insert enter|ctrl-j`, via wrapped `fish_user_key_bindings`): an agent line is rewritten to ` ask '<query>'` and executed as a normal command (Ctrl+C reaches the tool, `$status` set). On fish 4 the typed text is added with `history append` and the rewrite is deleted from history on `fish_postexec`.
 - Pager and history search keep Enter's normal meaning.

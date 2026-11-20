@@ -7,6 +7,9 @@ function _lacy_setup_bindings --description "Register Lacy keybindings"
     # `default` is the emacs map and vi normal mode; `insert` is vi insert.
     # Enter typed while a command is still running arrives as ctrl-j (the
     # terminal maps CR to NL), so ctrl-j is routed too.
+    # fish 3 spells Ctrl+Space as \c@. fish 4.2+ rejects that token at parse
+    # time, even in a branch that never runs, so it stays inside a string.
+    set -l ctrl_space (string unescape -- '\c@')
     for m in default insert
         if test "$_LACY_FISH_MAJOR" -ge 4
             bind -M $m enter _lacy_accept_line
@@ -15,17 +18,18 @@ function _lacy_setup_bindings --description "Register Lacy keybindings"
         else
             bind -M $m \r _lacy_accept_line
             bind -M $m \n _lacy_accept_line
-            bind -M $m \c@ _lacy_toggle_mode
+            bind -M $m $ctrl_space _lacy_toggle_mode
         end
     end
 end
 
 function _lacy_remove_bindings --description "Remove Lacy keybindings"
+    set -l ctrl_space (string unescape -- '\c@')
     for m in default insert
         if test "$_LACY_FISH_MAJOR" -ge 4
             bind -M $m -e enter ctrl-j ctrl-space 2>/dev/null
         else
-            bind -M $m -e \r \n \c@ 2>/dev/null
+            bind -M $m -e \r \n $ctrl_space 2>/dev/null
         end
     end
     if set -q _LACY_FISH_KEYS_WRAPPED
