@@ -585,7 +585,7 @@ lacy_session_new() {
         if ! lacy_preheat_server_is_healthy; then
             echo ""
             lacy_print_color 34 "  Session cleared"
-            lacy_print_color 238 "  Your next question starts a new ${tool} session."
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  Your next question starts a new ${tool} session."
             echo ""
             return 0
         fi
@@ -596,7 +596,7 @@ lacy_session_new() {
         if [[ "$created" != true ]]; then
             echo ""
             lacy_print_color 196 "  Could not open a new ${tool} session."
-            lacy_print_color 238 "  The old session is cleared. Your next question will try again."
+            lacy_print_color "$LACY_COLOR_NEUTRAL" "  The old session is cleared. Your next question will try again."
             echo ""
             return 1
         fi
@@ -617,7 +617,7 @@ lacy_session_resume() {
 
     if [[ -z "$saved_tool" || -z "$saved_id" ]]; then
         echo ""
-        lacy_print_color 238 "  No previous session to resume"
+        lacy_print_color "$LACY_COLOR_NEUTRAL" "  No previous session to resume"
         echo ""
         return 1
     fi
@@ -653,7 +653,7 @@ lacy_session_resume() {
 
     echo ""
     lacy_print_color 34 "  Resumed $saved_tool session"
-    lacy_print_color 238 "  $saved_id"
+    lacy_print_color "$LACY_COLOR_NEUTRAL" "  $saved_id"
     echo ""
 }
 

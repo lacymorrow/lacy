@@ -31,7 +31,12 @@ LACY_SHELL_DEFER_QUIT=false
 LACY_COLOR_SHELL=34        # Green - shell commands
 LACY_COLOR_AGENT=200       # Magenta - agent queries
 LACY_COLOR_AUTO=75         # Blue - auto mode
-LACY_COLOR_NEUTRAL=238     # Dark gray - neutral/dim
+# Every dim thing Lacy draws uses this one gray: ghost text, hint lines, the
+# neutral indicator, table rows, the quit line. 244 is #808080, the only point
+# on the 256-colour gray ramp that clears 3:1 against both a light and a dark
+# terminal (3.5:1 on One Dark, 5.3:1 on black, 4.0:1 on white). It used to be
+# 238 (#444444), which is 1.4:1 on One Dark: drawn, but not readable.
+LACY_COLOR_NEUTRAL=244     # Gray - neutral/dim
 LACY_COLOR_SHIMMER=(255 219 213 200 141)  # Spinner shimmer gradient
 
 # === Detection ===
