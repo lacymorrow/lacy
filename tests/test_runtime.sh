@@ -569,6 +569,169 @@ else
 fi
 
 # ============================================================================
+echo "Agent commands list (display.commands)"
+# ============================================================================
+
+if command -v python3 >/dev/null 2>&1; then
+    cp "$TEST_TMPDIR/bin/claude" "$TEST_TMPDIR/claude.plain"
+    # Two Bash calls (the second fails and spans two lines) plus a Read call,
+    # which is not a shell command and must not be listed. FAKE_MANY=1 emits
+    # 12 Bash calls instead, to exercise the cap.
+    cat > "$TEST_TMPDIR/bin/claude" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$AGENT_LOG"
+printf '{"type":"system","subtype":"init"}\n'
+if [ "${FAKE_MANY:-0}" = 1 ]; then
+    i=1
+    while [ "$i" -le 12 ]; do
+        printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t%s","name":"Bash","input":{"command":"echo %s"}}]}}\n' "$i" "$i"
+        i=$(( i + 1 ))
+    done
+else
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git status","description":"check the tree"}}]}}\n'
+    printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":false}]}}\n'
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"npm test \\n  --watch=false"}}]}}\n'
+    printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","is_error":true}]}}\n'
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"/tmp/not-a-command"}}]}}\n'
+fi
+printf '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Done"}}}\n'
+printf '{"type":"result","subtype":"success","is_error":false,"result":"Done","session_id":"s-cmd"}\n'
+exit 0
+EOF
+    chmod +x "$TEST_TMPDIR/bin/claude"
+    _saved_dir="${LACY_SHELL_DIR:-}"
+    LACY_SHELL_DIR="$REPO_DIR"
+    LACY_ACTIVE_TOOL="claude"
+    _saved_show="${LACY_SHOW_COMMANDS:-summary}"
+    LACY_SHOW_COMMANDS="summary"
+
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    command rm -f "$AGENT_LOG"
+    lacy_shell_query_agent "tidy the repo" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    assert_contains "commands: block shown" "$out" "ran:"
+    assert_contains "commands: first command listed" "$out" "\$ git status"
+    assert_contains "commands: failure marked" "$out" "(failed)"
+    assert_contains "commands: multi-line flattened to one line" "$out" "\$ npm test --watch=false (failed)"
+    assert_eq "commands: answer still shown once" "1" "$(grep -c 'Done' <<< "$out")"
+    # Read is not a shell command, so it is not in the list
+    if grep -q 'not-a-command' <<< "$out"; then
+        assert_eq "commands: non-Bash tools not listed" "absent" "present"
+    else
+        assert_eq "commands: non-Bash tools not listed" "absent" "absent"
+    fi
+    # The description claude wrote for the command is not printed, the command is
+    if grep -q 'check the tree' <<< "$out"; then
+        assert_eq "commands: tool description not printed" "absent" "present"
+    else
+        assert_eq "commands: tool description not printed" "absent" "absent"
+    fi
+
+    # display.commands: off keeps the answer and drops the list
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    LACY_SHOW_COMMANDS="off" lacy_shell_query_agent "tidy the repo" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    assert_contains "commands off: answer still shown" "$out" "Done"
+    if grep -q 'git status' <<< "$out"; then
+        assert_eq "commands off: list hidden" "absent" "present"
+    else
+        assert_eq "commands off: list hidden" "absent" "absent"
+    fi
+
+    # Past the cap the list collapses instead of becoming a transcript
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    FAKE_MANY=1 lacy_shell_query_agent "run a lot" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    assert_eq "commands cap: lists ${LACY_SHOW_COMMANDS_MAX}" "$LACY_SHOW_COMMANDS_MAX" "$(grep -c '^    \$ echo' <<< "$out")"
+    assert_contains "commands cap: remainder counted" "$out" "2 more"
+
+    # A question that ran nothing stays a plain answer
+    LACY_PREHEAT_CLAUDE_SESSION_ID=""
+    : > "$LACY_PREHEAT_SESSION_FILE"
+    cp "$TEST_TMPDIR/claude.plain" "$TEST_TMPDIR/bin/claude"
+    lacy_shell_query_agent "just a question" > "$OUT" 2>&1
+    out=$(plain < "$OUT")
+    if grep -q 'ran:' <<< "$out"; then
+        assert_eq "commands: no block when nothing ran" "absent" "present"
+    else
+        assert_eq "commands: no block when nothing ran" "absent" "absent"
+    fi
+
+    LACY_SHOW_COMMANDS="$_saved_show"
+    LACY_SHELL_DIR="$_saved_dir"
+else
+    echo "  SKIP: python3 not found (agent commands list)"
+fi
+
+# One line per command, cut to the terminal width, never wrapped. The
+# " (failed)" suffix lands after the command, so it has to come out of the
+# same budget: without that, every failed line is 9 columns too wide and
+# wraps, leaving a lone ")" on the next row (LAC-4685).
+#
+# COLUMNS is set but NOT exported here, which is what a real shell looks like,
+# and tput is shimmed to the 80 it answers with inside $(...). Reading the
+# width with `tput cols 2>/dev/null` then renders every line at 80 and these
+# assertions fail: that is the whole of LAC-8752.
+_saved_show="${LACY_SHOW_COMMANDS:-summary}"
+_saved_columns="${COLUMNS:-80}"
+_saved_commands="${_LACY_CLAUDE_COMMANDS:-}"
+LACY_SHOW_COMMANDS="summary"
+tput() { [[ "${1:-}" == "cols" ]] && printf '80\n'; return 0; }
+_long_cmd="find . -name '*.sh' -type f | xargs grep -l TODO | sort | head -20 | uniq -c"
+_LACY_CLAUDE_COMMANDS="err	${_long_cmd}
+ok	${_long_cmd}"
+for _cols in 40 60 80 120; do
+    COLUMNS="$_cols"
+    # The ellipsis is one column but three bytes, so flatten it before awk
+    # measures, and strip colour first.
+    _widest=$(_lacy_print_agent_commands | plain | sed 's/…/./g' |
+        awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')
+    if (( _widest <= _cols )); then
+        assert_eq "commands truncation: fits ${_cols} cols" "fits" "fits"
+    else
+        assert_eq "commands truncation: fits ${_cols} cols" "fits" "${_widest} cols wide"
+    fi
+done
+# The failed line is still marked, not just shortened
+COLUMNS=80
+out=$(_lacy_print_agent_commands | plain)
+assert_contains "commands truncation: failure still marked" "$out" "… (failed)"
+assert_eq "commands truncation: still one line per command" "3" "$(printf '%s\n' "$out" | grep -c .)"
+
+# The width itself: the shell's own COLUMNS wins over tput.
+COLUMNS=60
+assert_eq "term cols: shell COLUMNS used, not tput" "60" "$(lacy_term_cols)"
+COLUMNS=120
+assert_eq "term cols: a wide COLUMNS is not clamped to tput's 80" "120" "$(lacy_term_cols)"
+
+# A COLUMNS the shell never set, or set to something unusable, falls through
+# to the terminal, or to 80 when there is no terminal to ask. Only bash gets
+# there: zsh keeps COLUMNS an integer and refuses every one of these values,
+# leaving the real width in place.
+if [[ -n "${BASH_VERSION:-}" ]]; then
+    if _tty_cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2) && [[ "$_tty_cols" == [1-9]* ]]; then
+        _expect_no_columns="$_tty_cols"
+    else
+        _expect_no_columns="80"
+    fi
+    for _bad in "" "0" "not-a-number"; do
+        COLUMNS="$_bad"
+        assert_eq "term cols: COLUMNS='${_bad}' falls back to the terminal" \
+            "$_expect_no_columns" "$(lacy_term_cols)"
+    done
+else
+    echo "  SKIP: zsh COLUMNS cannot hold an invalid value (term cols fallback)"
+fi
+
+unset -f tput
+COLUMNS="$_saved_columns"
+_LACY_CLAUDE_COMMANDS="$_saved_commands"
+LACY_SHOW_COMMANDS="$_saved_show"
+
+# ============================================================================
 echo "Claude model flag (agent_tools.claude_model)"
 # ============================================================================
 

@@ -33,6 +33,9 @@ agent_tools:
 modes:
   default: auto  # shell, agent, or auto
 
+# display:
+#   commands: summary  # list the shell commands the agent ran (claude only). off hides them.
+
 # preheat:
 #   eager: false
 #   server_port: 4096
@@ -79,6 +82,7 @@ _lacy_config_var_for() {
         context.output)             _LACY_CFG_VAR="_LACY_CTX_OUTPUT_ENABLED" ;;
         context.output_lines)       _LACY_CFG_VAR="_LACY_CTX_OUTPUT_MAX_LINES" ;;
         spinner.style)              _LACY_CFG_VAR="LACY_SPINNER_STYLE" ;;
+        display.commands)           _LACY_CFG_VAR="LACY_SHOW_COMMANDS" ;;
         logging.queries)            _LACY_CFG_VAR="LACY_LOG_QUERIES" ;;
         *)                          _LACY_CFG_VAR="" ;;
     esac
@@ -97,6 +101,7 @@ _lacy_config_reset_vars() {
     _LACY_CTX_OUTPUT_ENABLED=true
     _LACY_CTX_OUTPUT_MAX_LINES=50
     LACY_SPINNER_STYLE="braille"
+    LACY_SHOW_COMMANDS="summary"
     LACY_LOG_QUERIES="false"
 }
 

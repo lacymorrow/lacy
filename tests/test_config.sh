@@ -255,6 +255,20 @@ assert_eq "quoted 'null' is a string, not a boolean true" "false" "$LACY_LOG_QUE
 assert_eq "spinner.style read" "ascii" "$LACY_SPINNER_STYLE"
 
 cat > "$CFG" <<'EOF'
+display:
+  commands: off
+EOF
+load
+assert_eq "display.commands read" "off" "$LACY_SHOW_COMMANDS"
+
+cat > "$CFG" <<'EOF'
+modes:
+  default: auto
+EOF
+load
+assert_eq "display.commands defaults to summary" "summary" "$LACY_SHOW_COMMANDS"
+
+cat > "$CFG" <<'EOF'
 preheat:
   eager: yes
   server_port: 80a
@@ -339,6 +353,9 @@ agent_tools:
 
 modes:
   default: auto  # shell, agent, or auto
+
+# display:
+#   commands: summary  # list the shell commands the agent ran (claude only). off hides them.
 
 # preheat:
 #   eager: false
