@@ -82,7 +82,7 @@ Screen first, silent, following the beats. Then voice over it, two or three take
 
 X: "I got tired of alt-tabbing between my terminal and claude. So my shell sends commands to the shell and questions to the AI tool, from one prompt. It decides by the first word, no model involved, so it's instant. curl -fsSL https://lacy.sh/install | bash"
 
-LinkedIn: same, plus "zsh, bash and fish. Works with claude, codex, opencode, gemini, or any command you point it at. MIT."
+LinkedIn: same, plus "zsh, bash and fish. Works with claude, codex, opencode, gemini, or any command you point it at. Open source, FSL-1.1-MIT."
 
 ## Demo test
 
