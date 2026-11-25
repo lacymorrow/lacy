@@ -102,4 +102,4 @@ Start with `lacy doctor`. It checks the install, your shell config and the AI to
 
 ## License
 
-[FSL-1.1-MIT](LICENSE). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
+[FSL-1.1-MIT](LICENSE). Each release becomes MIT two years after it ships. To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
