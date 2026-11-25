@@ -368,6 +368,8 @@ Preheat: lash/opencode keep a background `serve` on `preheat.server_port`; claud
 
 Telemetry (`lib/core/telemetry.sh`): zsh/Bash send one `first_load` event per install (flag `~/.lacy/.telemetry_sent`). install.sh sends `install` / `update` / `uninstall`; index.mjs sends `install` / `uninstall`. POST to `https://analytics.lacy.sh/api/send` (Umami) with install method, OS, arch, shell, version. Disabled by `DO_NOT_TRACK=1` or `LACY_NO_TELEMETRY=1` (exact value `1`). fish sends nothing.
 
+Aptabase usage counts (`lib/core/telemetry.sh`, LAC-7620): opt-in, off by default (`telemetry.enabled` in config.yaml, `lacy telemetry on|off|status`). Cloud US key `A-US-9570901449`. Events: `app_open` (plugin init), `feature_used` name `agent_query`, `error` class `tool_failure`. All names and values are reduced to `[A-Za-z0-9_.-]`. `DO_NOT_TRACK=1` / `LACY_NO_TELEMETRY=1` win over config. No purchases exist, so `purchase_*` are never sent.
+
 ## Release and CI
 
 - Release: `bun run release` via shipx (`shipx.config.ts`, see RELEASING.md). No beta channel.

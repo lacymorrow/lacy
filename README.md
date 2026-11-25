@@ -67,7 +67,7 @@ Questions asked from zsh or Bash carry what changed since your last one: directo
 
 Fish supports `mode`, `ask`, `quit` and `Ctrl+Space`.
 
-Outside the shell, the `lacy` command handles setup and maintenance: `lacy doctor`, `lacy update`, `lacy setup`, `lacy logs`. Run `lacy help` for the full list.
+Outside the shell, the `lacy` command handles setup and maintenance: `lacy doctor`, `lacy update`, `lacy setup`, `lacy logs`, `lacy telemetry`. Run `lacy help` for the full list.
 
 ## Configuration
 
@@ -83,7 +83,15 @@ modes:
 
 The full reference, including the query log, spinner style, terminal context, environment variables and `NO_COLOR`, is in [docs/DOCS.md](docs/DOCS.md).
 
-Lacy sends anonymous events on install, update, uninstall and first load (install method, OS, architecture, shell, version). Set `DO_NOT_TRACK=1` to turn them off.
+Lacy sends anonymous events on install, update and uninstall (install method, OS, architecture, shell, version). Set `DO_NOT_TRACK=1` to turn them off.
+
+Usage counts are separate and **off by default**. The installer asks once whether to share them; Enter keeps them off. When on, Lacy counts that a shell opened, which feature ran (by name, such as `agent_query`) and the kind of error. Never your questions, commands, paths or keys. Change it any time:
+
+```bash
+lacy telemetry status   # Telemetry: off
+lacy telemetry on
+lacy telemetry off
+```
 
 ## Uninstall
 

@@ -172,6 +172,10 @@ export DO_NOT_TRACK=1
 export LACY_NO_TELEMETRY=1
 ```
 
+### Usage counts in the shell (opt-in)
+
+Separate from the install events above, and **off by default**. Turn it on with `lacy telemetry on` (or `telemetry.enabled: true` in `config.yaml`), off with `lacy telemetry off`. When on, each shell sends to Aptabase (`us.aptabase.com`) only these events: `app_open` (a shell loaded Lacy), `feature_used` with the name `agent_query`, and `error` with the class `tool_failure`. Never your questions, commands, paths or keys, and no identifier beyond a random per-shell session id. `DO_NOT_TRACK=1` and `LACY_NO_TELEMETRY=1` still turn it off.
+
 ## Color
 
 Set `NO_COLOR` to any value and Lacy prints no color codes: the prompt badge, indicator, messages, installer and uninstaller all use plain text. The `$` and `?` marks still show the routing. `TERM=dumb` has the same effect.
