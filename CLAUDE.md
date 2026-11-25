@@ -32,7 +32,7 @@ curl and npx install the newest `vX.Y.Z` release tag (falls back to `main` only 
 - Live indicator drawn in `PREDISPLAY` (between prompt and buffer), updated on `zle-line-pre-redraw`:
   - `$` green (34) = shell
   - `?` magenta (200) = agent
-  - `▌` gray (238) = neutral (auto mode, nothing decided yet). `|` when the locale is not UTF-8.
+  - `▌` gray (244) = neutral (auto mode, nothing decided yet). `|` when the locale is not UTF-8.
   - Lacy writes `PREDISPLAY` only when empty or still holding its own last value.
 - First-word highlight (green/magenta bold) via `region_highlight`, zsh 5.9+ only (`memo=` needs 5.9). Older zsh: glyph only, no highlights. `NO_COLOR`: no highlights.
 - Mode badge `SHELL` / `AGENT` / `AUTO` appended to the user's `RPS1`, removed on `quit`.
@@ -378,7 +378,10 @@ Telemetry (`lib/core/telemetry.sh`): zsh/Bash send one `first_load` event per in
 ## Development Notes
 
 - Repo (`lib/`) and install dir (`~/.lacy/lib/`) are separate copies. Changes must be applied to both (or symlink `~/.lacy` to the repo).
-- Colors (256): shell 34, agent 200, auto 75, neutral 238.
+- Colors (256): shell 34, agent 200, auto 75, neutral 244. `LACY_COLOR_NEUTRAL` is the only
+  dim gray: ghost text, hint lines, the neutral glyph, table rows, the quit line. Never hardcode
+  it. 244 (#808080) is the floor that stays readable on a light and a dark terminal; `tests/test_core.sh`
+  asserts 3:1 contrast, so a darker value fails CI.
 - Output helpers: `lacy_print_color` / `lacy_print_color_n` (honor `NO_COLOR`, print text as-is). Bash adapter: `_lacy_bash_print_color`. fish: `_lacy_sgr`.
 - Use `command rm` for internal cleanup (users alias `rm`).
 - Installer uses `printf`, not `echo -e`.
